@@ -34,3 +34,14 @@ cli/knowledge_studio.egg-info/
 # GitHub Pages
 docs/_site/
 docs/.jekyll-cache/
+
+# Wiki content (local only — do not push to remote)
+wiki/**/*.md
+!wiki/**/.gitkeep
+
+# Drafts content (local only — do not push to remote)
+drafts/*.md
+!drafts/.gitkeep
+
+# Snapshots
+.oks/snapshots/

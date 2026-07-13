@@ -1,15 +1,15 @@
 # 画像索引
 
 > **用途**：L0 profile 层（对所有 goal 始终可见）。
-> **Updated**: 2026-05-29
+> **Updated**: 2026-07-13
 
 ## 目录结构
 
 | 文件 | 用途 | 更新频率 | 加载方式 | Token 预算 |
 |------|------|----------|----------|------------|
 | `team.md` | 团队画像（技术栈、成员） | 每月 | 仅 frontmatter | ~200 |
-| `users/<id>.md` | 个人偏好 | 每季度 | 按需加载 | ~100 |
-| `projects/<name>.md` | 项目 onboarding profile（竞赛项目、常用仓库） | 每次贡献前 | 按需加载 | ~200 |
+| `users/<id>/profile.md` | 个人偏好 | 每季度 | 按需加载 | ~100 |
+| `projects/<name>.md` | 项目 onboarding profile | 每次贡献前 | 按需加载 | ~200 |
 
 ## Frontmatter 字段规范
 
@@ -22,7 +22,7 @@
 - `source` 通常是 `setup` 或 `session/<name>`
 - profiles 不允许包含 PII / 敏感数据（见下方反模式）
 
-参考现有 user profile 作样板：`users/itxaiohanglover.md` / `users/mrjlv1.md` / `users/claude.md`
+参考现有 user profile 作样板：`users/itxaiohanglover/profile.md`
 
 ## Distill 规则
 
@@ -32,7 +32,7 @@
 - **How**: Update via PR
 - **Source confidence**: 0.9 (user provided in /setup)
 
-### users/<staff-id>.md
+### users/<staff-id>/profile.md
 
 **When to write** (via `/summary` or `/distill summary`):
 
@@ -68,7 +68,7 @@
 
 At goal start:
 1. Always read: `team.md` frontmatter (~200 tokens)
-2. If user identified: Read `users/<id>.md` frontmatter
+2. If user identified: Read `users/<id>/profile.md` frontmatter
 3. Need details: Grep full file
 
 ## 反模式
