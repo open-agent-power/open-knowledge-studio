@@ -1,28 +1,28 @@
-# Start Here
+# 快速开始
 
-Open Knowledge Studio is easiest to understand through one loop:
+Open Knowledge Studio 最容易理解的方式是一个循环：
 
-* save something that matters
-* find it again
-* let Claude Code use it
+* 保存一条有价值的东西
+* 再找到它
+* 让 Claude Code 用它
 
-This page is the shortest path to that loop. If you have not installed yet, run `./setup.sh` first; everything below assumes the CLI is ready.
+本页是这个循环的最短路径。如果还没安装，先运行 `./setup.sh`。
 
-## What Studio Is
+## Studio 是什么
 
-At its simplest, Studio does three things:
+简单来说，Studio 做三件事：
 
-* it stores your decisions, insights, sources, and conversations
-* it makes them searchable and reusable later
-* it lets Claude Code work from the same memory instead of starting cold
+* 存储你的决策、洞察、来源和对话
+* 让它们可搜索、可复用
+* 让 Claude Code 从同样的记忆开始工作，而不是每次从零开始
 
-You do not need to understand the whole system before it becomes useful.
+你不需要理解整个系统就能开始用。
 
-## The First Loop
+## 第一个循环
 
-### Step 1: Save One Real Memory
+### Step 1: 保存一条真实知识
 
-Write one real thing you want to keep: a decision you made, an insight from work, a pattern you repeat. Drop it into `raw/` as a markdown file, or use the CLI:
+写一条你想保留的真实内容：一个决策、一个工作洞察、一个你反复使用的模式。放进 `raw/` 目录：
 
 ```bash
 cat > raw/misc/my-first-note.md << 'EOF'
@@ -33,104 +33,104 @@ and integrates with Rich for terminal formatting.
 EOF
 ```
 
-### Step 2: Ingest It Into a Draft
+### Step 2: 蒸馏为草稿
 
-Use the `/ingest` skill in Claude Code, or run:
-
-```bash
-oks distill --dry-run  # preview what would be distilled
-```
-
-The system scans `raw/`, identifies patterns, and writes candidate wiki pages to `drafts/`.
-
-### Step 3: Promote to Wiki
-
-Review the draft and promote it:
+用 Claude Code 的 `/ingest` 技能，或运行 CLI：
 
 ```bash
-oks drafts list           # see candidates
-oks drafts promote <slug> # promote to wiki/
+oks distill --dry-run  # 预览蒸馏结果（不写入）
 ```
 
-Or use the `/promote` skill in Claude Code for interactive review.
+系统扫描 `raw/`，按 A/B/C 分级，将 A 级材料写入 `drafts/`。
 
-### Step 4: Confirm Search Can Find It
+### Step 3: 提升到 wiki
+
+审查草稿并提升：
+
+```bash
+oks drafts list           # 查看候选
+oks drafts promote <slug> # 提升到 wiki/
+```
+
+或在 Claude Code 中用 `/promote` 技能交互式审查。
+
+### Step 4: 确认搜索能找到它
 
 ```bash
 oks search "CLI framework decision"
 ```
 
-If the answer reflects what you just saved, you already have a working loop.
+如果搜索结果反映了你刚保存的内容，循环就跑通了。
 
-### Step 5: Connect Claude Code
+### Step 5: 连接 Claude Code
 
-Claude Code skills are pre-configured in `.claude/skills/`. The key ones:
+Claude Code 技能预配置在 `.claude/skills/`。核心技能：
 
-| Skill | When to use |
-|-------|-------------|
-| `/query <question>` | Ask a question — Studio recalls relevant wiki/ pages and injects them |
-| `/ingest` | Triage new raw/ materials into drafts |
-| `/promote` | Review drafts and promote to wiki |
-| `/status` | See knowledge base overview |
+| 技能 | 使用场景 |
+|------|----------|
+| `/query <问题>` | 提问 — Studio 召回相关 wiki 页面并注入上下文 |
+| `/ingest` | 将新 raw/ 材料分诊为 drafts |
+| `/promote` | 审查 drafts 并提升到 wiki |
+| `/status` | 查看知识库概览 |
 
-Try it:
+试一下：
 
 ```
 /query What did we decide about CLI frameworks?
 ```
 
-Claude Code will recall the wiki page you just promoted and answer with citations.
+Claude Code 会召回你刚提升的 wiki 页面，并带引用回答。
 
-## Definition of Done
+## 验收标准
 
-You should be able to answer yes to all of these:
+以下每一条你都应该能回答"是"：
 
-* I saved one raw material in `raw/`
-* I ingested it into a draft in `drafts/`
-* I promoted the draft to `wiki/`
-* I searched for it with `oks search` and got it back
-* In Claude Code, `/query` recalled my knowledge
+* 我在 `raw/` 保存了一条原始材料
+* 我把它蒸馏为 `drafts/` 中的草稿
+* 我把草稿提升到了 `wiki/`
+* 我用 `oks search` 搜索到了它
+* 在 Claude Code 中，`/query` 召回了我的知识
 
-If any answer is no, see [Verification](#verification) below.
+如果任何一条是"否"，查看下面的验证步骤。
 
-## Verification
+## 验证
 
-### Search works
+### 搜索是否工作
 
 ```bash
 oks search "your topic"
 ```
 
-Should return results from `wiki/` with relevance scores.
+应该返回 `wiki/` 中的结果，带相关性分数。
 
-### Recall works
+### 召回是否工作
 
 ```bash
 oks recall "your topic"
 ```
 
-Should return both episodic results (from `raw/`) and knowledge results (from `wiki/`).
+应该同时返回 episodic 结果（来自 `raw/`）和 knowledge 结果（来自 `wiki/`）。
 
-### Claude Code integration works
+### Claude Code 集成是否工作
 
-In a Claude Code session:
+在 Claude Code 会话中：
 
 ```
 /query What do I know about <topic>?
 ```
 
-Should inject relevant wiki/ pages into the context and answer with source labels like `[verified]` or `[inferred]`.
+应该将相关 wiki 页面注入上下文，并带来源标签如 `[verified]` 或 `[inferred]` 回答。
 
-## Do Less on Day One
+## 第一天少做
 
-Save one memory. Ingest one draft. Promote one wiki page. Run one search. Stop.
+保存一条记忆。蒸馏一个草稿。提升一个 wiki 页面。跑一次搜索。停。
 
-The point on day one is to prove the loop, not to wire every domain at once.
+第一天的目标是验证循环跑通，不是配置所有域。
 
-## Next Steps
+## 下一步
 
-* [Memories](memories.md) — Wiki page anatomy, types, creation, and search
-* [Raw Materials](raw-materials.md) — Raw intake, A/B/C grading, distillation workflow, and import paths
-* [Architecture](architecture.md) — Five-bucket structure and memory lifecycle
-* [Recall Engine](recall-engine.md) — 6-factor scoring algorithm
-* [Dreaming Cycle](dreaming-cycle.md) — Knowledge evolution pipeline
+* [Memories](memories.md) — wiki 页面结构、类型和搜索
+* [Raw Materials](raw-materials.md) — 原始材料、蒸馏工作流和导入格式
+* [架构设计](architecture.md) — 五桶结构和记忆生命周期
+* [召回引擎](recall-engine.md) — 6 因子评分算法
+* [Dreaming 循环](dreaming-cycle.md) — 知识演化管线

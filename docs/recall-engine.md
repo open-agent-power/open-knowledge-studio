@@ -1,18 +1,18 @@
-# 6-Factor Recall Engine
+# 6-Factor Recall Engine（六因子召回引擎）
 
-Scores wiki pages using six factors to find the most relevant knowledge. The engine combines semantic search, keyword matching, and graph connections — all in one unified scoring pass.
+使用六个因子对 wiki 页面评分，找到最相关的知识。引擎将语义搜索、关键词匹配和图谱关联融合在一次统一的评分过程中。
 
-## Three Search Modes in One
+## 三种搜索模式合一
 
-| Mode | What it does | Which factors |
-|------|-------------|--------------|
-| **Semantic** | Finds by meaning, not just exact words | Token overlap |
-| **Keyword** | Exact match for specific terms | Substring match |
-| **Graph** | Finds through topic connections and type weighting | Topic trace + type boost + review penalty |
+| 模式 | 做什么 | 哪些因子 |
+|------|--------|----------|
+| **Semantic（语义）** | 按含义查找，不只是精确匹配 | Token overlap |
+| **Keyword（关键词）** | 精确匹配特定术语 | Substring match |
+| **Graph（图谱）** | 通过主题关联和类型加权查找 | Topic trace + type boost + review penalty |
 
-All three modes run automatically on every query. The 6-factor engine combines them with a memory curve multiplier to produce the final relevance score.
+三种模式在每次查询时自动运行。6 因子引擎将它们与记忆曲线乘数结合，生成最终相关性评分。
 
-## Scoring Formula
+## 评分公式
 
 ```
 total = (token_overlap×0.3 + substring_bonus + topic_trace_bonus)
@@ -20,100 +20,100 @@ total = (token_overlap×0.3 + substring_bonus + topic_trace_bonus)
         × memory_curve
 ```
 
-## The Six Factors
+## 六个因子
 
-### 1. Token Overlap (×0.3)
+### 1. Token Overlap（×0.3）
 
-jieba tokenization splits both the query and the page content into tokens. The overlap ratio measures how many query tokens appear in the page.
+jieba 分词将查询和页面内容拆分为 token。重叠率衡量查询 token 中有多少出现在页面中。
 
 ```
 overlap = len(query_tokens ∩ page_tokens) / len(query_tokens) × 0.3
 ```
 
-This is the **semantic** layer — it finds pages about "architectural approaches" when you search for "design patterns", because the token overlap catches shared concepts.
+这是**语义层** — 搜索"design patterns"时能找到关于"architectural approaches"的页面，因为 token 重叠捕捉到了共享概念。
 
-### 2. Substring Match (+1.0 / +0.5)
+### 2. Substring Match（+1.0 / +0.5）
 
-Direct string matching for the **keyword** layer:
+直接字符串匹配，属于**关键词层**：
 
-- Title contains the query string: **+1.0**
-- Body contains the query string: **+0.5**
+- 标题包含查询字符串：**+1.0**
+- 正文包含查询字符串：**+0.5**
 
-Both can apply — a page with the query in both title and body gets +1.5.
+两者可叠加 — 标题和正文都包含查询的页面获得 +1.5。
 
-### 3. Topic Trace (+2.0)
+### 3. Topic Trace（+2.0）
 
-If the page was created from a specific conversation topic, and you're querying with the same `topic_id`, the page gets a **+2.0** bonus. This is the **graph** connection — it links a memory back to the conversation that produced it.
+如果页面是从特定对话主题创建的，而你用同一个 `topic_id` 查询，页面获得 **+2.0** 加成。这是**图谱关联** — 将 memory 关联回产生它的对话。
 
 ```python
 if page.get("trace_id") == topic_id:
     relevance += 2.0
 ```
 
-### 4. Type Boost (×1.5 / ×0.8 / ×0.6)
+### 4. Type Boost（×1.5 / ×0.8 / ×0.6）
 
-Different knowledge types have different recall priority. This is a **multiplier** on the base relevance, not an additive bonus:
+不同知识类型有不同的召回优先级。这是一个**乘法因子**，不是加法：
 
-| Type | Boost | Rationale |
-|------|-------|-----------|
-| `anti-pattern` | ×1.5 | Mistakes are the most valuable to recall — find them before you repeat them |
-| `strategy` | ×0.8 | Strategies are useful but less urgent than mistakes |
-| `concept` | ×0.6 | Concepts are background knowledge — lowest priority |
+| 类型 | Boost | 原因 |
+|------|-------|------|
+| `anti-pattern` | ×1.5 | 错误最值得召回 — 在重蹈覆辙之前发现它们 |
+| `strategy` | ×0.8 | 策略有用但不如错误紧迫 |
+| `concept` | ×0.6 | 概念是背景知识 — 优先级最低 |
 
-### 5. Review Penalty (+2.0 / +1.0)
+### 5. Review Penalty（+2.0 / +1.0）
 
-Pages from failed decisions or negative outcomes get a boost, because you want to recall what went wrong:
+来自失败决策或负面结果的页面获得加成，因为你需要回忆出了什么问题：
 
-- `decision_correct = false`: **+2.0**
-- `outcome = failure`: **+1.0**
+- `decision_correct = false`：**+2.0**
+- `outcome = failure`：**+1.0**
 
-This seems counterintuitive — why boost "bad" knowledge? Because the most valuable knowledge is often "we tried X and it didn't work." Recalling failures prevents repeating them.
+这看似反直觉 — 为什么加成"坏"知识？因为最有价值的知识往往是"我们试了 X 但没用"。回忆失败可以防止重蹈覆辙。
 
-### 6. Memory Curve (×0.5)
+### 6. Memory Curve（×0.5）
 
-The memory curve applies a time-decay multiplier based on the page's age, access count, and importance:
+记忆曲线应用基于页面年龄、访问次数和重要性的时间衰减乘数：
 
 ```
 curve = importance × e^(-λ × days_old) + 0.5 × ln(1 + access_count) + pin_bonus
 ```
 
-- Active pages get ×1.2 multiplier
-- Archived/dropped pages get 0.0 (excluded from recall)
-- Well-used pages (high access_count) resist decay
-- Pinned pages get +0.5 bonus
+- Active 页面获得 ×1.2 乘数
+- Archived/dropped 页面为 0.0（从召回中排除）
+- 高频访问的页面抵抗衰减
+- Pinned 页面获得 +0.5 加成
 
-See [Decay System](decay-system.md) for the full curve formula.
+详见 [Decay System](decay-system.md)。
 
-## Two-Path Recall
+## 双路召回
 
-| Path | Source | Scoring |
-|------|--------|---------|
-| **Episodic** | `raw/` + `profiles/` | Keyword + freshness (`0.95^days_old`) |
-| **Knowledge** | `wiki/` | 6-factor relevance + memory curve |
-| **Combined** | Both | `{"episodic": [...], "knowledge": [...]}` |
+| 路径 | 来源 | 评分 |
+|------|------|------|
+| **Episodic** | `raw/` + `profiles/` | 关键词 + 新鲜度（`0.95^days_old`） |
+| **Knowledge** | `wiki/` | 6 因子相关性 + 记忆曲线 |
+| **合并** | 两者 | `{"episodic": [...], "knowledge": [...]}` |
 
 ```bash
-# Episodic only (raw materials)
+# 仅 Episodic（raw materials）
 oks search "authentication" --source raw
 
-# Knowledge only (wiki pages)
+# 仅 Knowledge（wiki 页面）
 oks search "authentication" --source wiki
 
-# Both paths (default)
+# 双路（默认）
 oks recall "authentication" --limit 5
 ```
 
-## Implementation
+## 实现
 
-Source: `cli/knowledge_studio/recall.py`
+源码：`cli/knowledge_studio/recall.py`
 
-Key functions:
-- `recall_episodic(query)` — searches raw/ by keyword + freshness
-- `recall_knowledge(query, topic_id)` — scores all wiki/ pages via 6 factors
-- `recall(query, topic_id)` — combines both paths
+核心函数：
+- `recall_episodic(query)` — 按关键词 + 新鲜度搜索 raw/
+- `recall_knowledge(query, topic_id)` — 通过 6 因子评分所有 wiki/ 页面
+- `recall(query, topic_id)` — 合并双路
 
-## Next Steps
+## 下一步
 
-* **[Memories](memories.md)**: Memory anatomy, types, and creation paths
-* **[Decay System](decay-system.md)**: Memory curve formula and tier classification
-* **[Architecture](architecture.md)**: Five-bucket structure
+* **[Memories](memories.md)**：Memory 结构、类型和创建路径
+* **[Decay System](decay-system.md)**：记忆曲线公式和 tier 分级
+* **[Architecture](architecture.md)**：五桶结构

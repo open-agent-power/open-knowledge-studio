@@ -1,67 +1,67 @@
-# Dreaming Cycle
+# Dreaming Cycle（做梦循环）
 
-Knowledge evolves through **human-reviewed draft proposals** — the system never auto-promotes raw content to wiki.
+知识通过**人工审查的 draft 提案**演化 — 系统绝不自动将 raw 内容提升到 wiki。
 
-This process is the platform's **Dreaming** — periodic memory consolidation that distills raw experiences into structured wiki knowledge, like sleep consolidation in human memory.
+这个过程是平台的 **Dreaming** — 周期性记忆固化，将原始经验蒸馏为结构化 wiki 知识，类似人类睡眠中的记忆巩固。
 
-## Dream Cycle
+## Dream 循环
 
 ```
 Collect → AI Dream → Write Drafts → Human Review → Promote → Decay → Evolve → Commit
 ```
 
-### 1. Collect
+### 1. Collect（收集）
 
-Traces, conversations, articles, and papers accumulate in `raw/`. This is the raw material layer — human-collected, LLM-readable but LLM does not write here.
+Trace、对话、文章和论文在 `raw/` 中积累。这是原始材料层 — 人类收集，LLM 可读但 LLM 不写入。
 
-### 2. AI Dream
+### 2. AI Dream（AI 做梦）
 
-Claude Code `/ingest` skill scans `raw/`, identifies patterns, and generates candidate wiki pages. The AI evaluates each material:
+Claude Code `/ingest` 技能扫描 `raw/`，识别模式，生成候选 wiki 页面。AI 评估每个材料：
 
-- **A-grade** — high-quality, promotes to draft
-- **B-grade** — potentially useful, held in raw for future cycles
-- **C-grade** — low quality, skipped
+- **A 级** — 高质量，提升为 draft
+- **B 级** — 可能有用，保留在 raw 等下一轮
+- **C 级** — 低质量，跳过
 
-Quality gates filter out:
-- Content < 50 chars
-- Generic titles ("Untitled", "Note")
+质量门过滤掉：
+- 内容 < 50 字符
+- 通用标题（"Untitled"、"Note"）
 - Importance < 0.3
-- Duplicates (by content fingerprint)
+- 重复（按内容指纹）
 
-### 3. Write Drafts
+### 3. Write Drafts（写草稿）
 
-A-grade candidates are written to `drafts/{slug}.md` with draft frontmatter. Each draft is a proposed wiki page with:
-- Proposed title, type, area, tags
-- Source attribution (which raw material it came from)
-- Initial importance score
+A 级候选写入 `drafts/{slug}.md`，带 draft frontmatter。每个 draft 是一个提案 wiki 页面，包含：
+- 提议的标题、类型、域、标签
+- 来源归属（来自哪个 raw material）
+- 初始重要性评分
 
-### 4. Human Review
+### 4. Human Review（人工审查）
 
-`/promote` skill provides interactive review:
+`/promote` 技能提供交互式审查：
 
-- **Accept** — promote to `wiki/{domain}/{type}/`
-- **Revise** — edit the draft and re-review
-- **Reject** — discard the draft
+- **Accept（接受）** — 提升到 `wiki/{domain}/{type}/`
+- **Revise（修改）** — 编辑 draft 后重新审查
+- **Reject（拒绝）** — 丢弃 draft
 
-**Core invariant**: Never auto-promote raw to wiki without human review (CONSTITUTION.md A3).
+**核心不变量**：绝不未经人工审查将 raw 提升到 wiki（CONSTITUTION.md A3）。
 
-### 5. Promote
+### 5. Promote（提升）
 
 ```bash
-oks drafts list           # see all candidates
-oks drafts promote <slug> # promote to wiki
-oks drafts reject <slug>  # discard
+oks drafts list           # 查看所有候选
+oks drafts promote <slug> # 提升到 wiki
+oks drafts reject <slug>  # 丢弃
 ```
 
-When promoting, the draft's frontmatter is finalized and the page moves to `wiki/{domain}/{type}/{slug}.md`.
+提升时，draft 的 frontmatter 被最终确定，页面移动到 `wiki/{domain}/{type}/{slug}.md`。
 
-### 6. Apply Decay
+### 6. Apply Decay（应用衰减）
 
-`oks distill` re-scores all wiki pages. Pages below the archive threshold get `status: dropped`. Pages not accessed in a long time fade according to their type-specific decay rate.
+`oks distill` 重新评分所有 wiki 页面。低于归档阈值的页面标记为 `status: dropped`。长时间未访问的页面按其类型特定衰减率衰减。
 
-### 7. Evolve — Crystals
+### 7. Evolve — Crystal（演化 — 晶体合成）
 
-When 3+ wiki pages share the same primary tag and all have score > 0.5, the system synthesizes them into a **Crystal** — a reference article that merges insights from multiple memories.
+当 3+ 个 wiki 页面共享同一主标签且 score > 0.5 时，系统将它们合成为一篇 **Crystal** — 合并多条 memory 洞见的参考文章。
 
 ```
 evolve_knowledge():
@@ -70,63 +70,63 @@ evolve_knowledge():
   3+ pages with same tag → merged draft proposal
 ```
 
-The Crystal:
-- Cites all source pages
-- Merges overlapping insights
-- Gets its own wiki page with `type: concept`
-- Updates when related information is saved later
+Crystal 的特点：
+- 引用所有来源页面
+- 合并重叠的洞见
+- 作为独立的 wiki 页面，`type: concept`
+- 后续保存相关信息时自动更新
 
-This is how scattered memories become organized reference knowledge.
+这就是零散 memory 如何变为有组织的参考知识。
 
-### 8. Working Memory — Daily Briefing
+### 8. Working Memory — 每日简报
 
-Each day, Studio can generate a briefing from recent and important memories. This working memory provides Claude Code with context about what you're working on before you say a word.
+每天，Studio 可以从近期和高重要性的 memories 中生成一份简报。这份工作记忆为 Claude Code 提供关于你当前工作的上下文 — 在你说任何话之前。
 
-The briefing draws from:
-- Recently created or updated wiki pages
-- High-importance memories (importance ≥ 0.7)
-- Recently accessed raw materials
-- Active project profiles
+简报来源：
+- 近期创建或更新的 wiki 页面
+- 高重要性 memory（importance ≥ 0.7）
+- 近期访问的 raw materials
+- Active 项目画像
 
-### 9. Git Commit
+### 9. Git Commit（提交）
 
-`oks sync` commits all changes — new wiki pages, updated drafts, decayed scores, Crystal articles.
+`oks sync` 提交所有变更 — 新 wiki 页面、更新的 drafts、衰减后的评分、Crystal 文章。
 
 ```bash
 oks sync           # commit + push
-oks sync --pull    # pull first, then commit + push
+oks sync --pull    # 先 pull，再 commit + push
 ```
 
-## Full Cycle Command
+## 完整循环命令
 
 ```bash
-# Run the complete dream cycle (decay + evolve)
+# 运行完整 dream 循环（衰减 + 演化）
 oks distill
 
-# Preview without writing
+# 预览不写入
 oks distill --dry-run
 
-# Interactive review of generated drafts
+# 交互式审查生成的 drafts
 oks drafts list
 oks drafts promote <slug>
 ```
 
-## Core Invariant
+## 核心不变量
 
-**Never auto-promote raw to wiki without human review** (CONSTITUTION.md A3).
+**绝不未经人工审查将 raw 提升到 wiki**（CONSTITUTION.md A3）。
 
-The AI can dream, but humans decide what becomes permanent knowledge.
+AI 可以 dream，但人类决定什么成为持久知识。
 
-## Implementation
+## 实现
 
-- `/ingest` — AI triage (Claude Code skill)
-- `oks distill` — decay + evolve (CLI)
-- `/promote` — human review (Claude Code skill)
-- `cli/knowledge_studio/distiller.py` — core logic
+- `/ingest` — AI 分诊（Claude Code skill）
+- `oks distill` — 衰减 + 演化（CLI）
+- `/promote` — 人工审查（Claude Code skill）
+- `cli/knowledge_studio/distiller.py` — 核心逻辑
 
-## Next Steps
+## 下一步
 
-* **[Memories](memories.md)**: What memories look like after promotion
-* **[Raw Materials](raw-materials.md)**: What raw materials look like before distillation
-* **[Decay System](decay-system.md)**: How memory scores change over time
-* **[Architecture](architecture.md)**: The five-bucket structure
+* **[Memories](memories.md)**：提升后的 memory 长什么样
+* **[Raw Materials](raw-materials.md)**：蒸馏前的 raw material 长什么样
+* **[Decay System](decay-system.md)**：memory 评分如何随时间变化
+* **[Architecture](architecture.md)**：五桶结构

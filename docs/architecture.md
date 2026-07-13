@@ -1,95 +1,95 @@
-# Architecture
+# Architecture（架构）
 
-## Raw Material vs Memory — The Core Distinction
+## Raw Material vs Memory — 核心区分
 
-| | Raw Material (raw/) | Memory (wiki/) |
+| | Raw Material（raw/） | Memory（wiki/） |
 |---|---|---|
-| **What** | Original article, paper, repo note, or conversation | Durable takeaway, distilled and curated |
-| **Who writes** | Human collects, LLM reads only | LLM writes via Dreaming, human approves |
-| **Decay** | None — raw materials are permanent | Type-specific λ — knowledge fades over time |
-| **Recall** | Keyword + freshness | 6-factor relevance + memory curve |
-| **Advantage** | Typed intake (4 subdirs), A/B/C grading, fingerprint dedup | 22-domain structure, decay tiers, Crystal synthesis |
-| **Use when** | Need the full history or exact source | Need the pattern, decision, or lesson |
+| **是什么** | 原始文章、论文、仓库笔记或对话 | 持久的结论，经过蒸馏和策划 |
+| **谁写入** | 人类收集，LLM 只读 | LLM 通过 Dreaming 写入，人类审批 |
+| **衰减** | 无 — raw materials 永久保留 | 类型特定 λ — 知识随时间衰减 |
+| **召回** | 关键词 + 新鲜度 | 6 因子相关性 + 记忆曲线 |
+| **优势** | 类型化入料（4 子目录）、A/B/C 分级、指纹去重 | 22 域结构、衰减 tier、Crystal 合成 |
+| **何时用** | 需要完整历史或精确来源 | 需要模式、决策或教训 |
 
-A strong workflow: save the source into `raw/`, then distill the parts worth keeping into `wiki/` memories.
+推荐工作流：将来源保存到 `raw/`，然后将有价值的部分蒸馏为 `wiki/` memory。
 
-## Five-Bucket Memory Architecture
+## 五桶记忆架构
 
-| Bucket | Purpose | Decay | Recall |
-|--------|---------|-------|--------|
-| `profiles/` | Team, user, project profiles | None | Direct read |
-| `raw/` | Raw materials (threads) | None | Keyword + freshness |
-| `wiki/` | Curated knowledge (memories) | Type-specific λ | 6-factor recall |
-| `drafts/` | Dreaming candidates | None | N/A (human review) |
-| `settings/` | System config | None | Direct read |
+| 桶 | 用途 | 衰减 | 召回 |
+|------|------|------|------|
+| `profiles/` | 团队、用户、项目画像 | 无 | 直接读取 |
+| `raw/` | Raw materials（原始材料） | 无 | 关键词 + 新鲜度 |
+| `wiki/` | 策划知识（memories） | 类型特定 λ | 6 因子召回 |
+| `drafts/` | Dreaming 候选 | 无 | N/A（人工审查） |
+| `settings/` | 系统配置 | 无 | 直接读取 |
 
-## Directory Structure
+## 目录结构
 
 ```
 open-knowledge-studio/
-├── profiles/          # ① Profiles
+├── profiles/          # ① 画像
 │   ├── team.md
 │   ├── users/{id}.md
 │   └── projects/{slug}.md
-├── raw/               # ② Raw materials (threads)
+├── raw/               # ② Raw materials（原始材料）
 │   ├── articles/  papers/  repos/  misc/
-├── wiki/              # ③ Curated knowledge (memories)
+├── wiki/              # ③ 策划知识（memories）
 │   └── {domain}/{type}/{slug}.md
 │       # types: concept | strategy | anti-pattern
-├── drafts/            # ④ Dreaming candidates
-└── settings/          # ⑤ System config
+├── drafts/            # ④ Dreaming 候选
+└── settings/          # ⑤ 系统配置
     ├── decay-config.yaml
     └── input-sources.json
 ```
 
-## 22 Knowledge Domains
+## 22 个知识域
 
 management, transport, finance, production, computing, repair, engineering, construction, science, agriculture, social, administration, legal, sales, education, personal, media, healthcare, care, maintenance, food, security
 
-Each domain has three subdirectories: `concepts/`, `strategies/`, `anti-patterns/`.
+每个域有三个子目录：`concepts/`、`strategies/`、`anti-patterns/`。
 
-## Memory Lifecycle
+## 记忆生命周期
 
 ```
 Observe → Write → Store → Retrieve → Inject → Forget
 ```
 
-1. **Observe** — conversations, tool results, traces, feedback
-2. **Decide to write** — high-confidence, reusable, source-annotated
-3. **Store** — write to appropriate bucket by type
-4. **Retrieve** — scope first (workspace → topic → goal → time), then keyword search
-5. **Inject** — layered, stable first (KV Cache), with source labels
-6. **Update/Forget** — mark stale, re-score, archive
+1. **Observe（观察）** — 对话、工具结果、trace、反馈
+2. **Decide to write（决定写入）** — 高置信度、可复用、有来源标注
+3. **Store（存储）** — 按类型写入对应桶
+4. **Retrieve（检索）** — 先 scope（workspace → topic → goal → time），再关键词搜索
+5. **Inject（注入）** — 分层注入，稳定层在前（KV Cache 友好），带来源标签
+6. **Update/Forget（更新/遗忘）** — 标记 stale，重新评分，归档
 
-## Wiki Page Lifecycle
+## Wiki 页面生命周期
 
 ```
-Provisional → Active (access_count ≥ 3) → Dropped (score < threshold)
-                                         → Superseded (replaced by newer page)
+Provisional → Active（access_count ≥ 3）→ Dropped（score < threshold）
+                                         → Superseded（被新页面替代）
 ```
 
-### Knowledge Evolution Relationships
+### 知识演化关系
 
-When new knowledge relates to existing knowledge, four relationships are tracked:
+当新知识与已有知识产生关联时，系统追踪四种关系：
 
-| Relationship | Meaning | Effect on old page |
-|--------------|---------|---------------------|
-| `supersedes` | New page replaces the old one | Marked `superseded`, excluded from recall |
-| `enriches` | New page adds to the old one | Both stay active, linked |
-| `confirms` | New page validates the old one | Old page confidence boosted |
-| `challenges` | New page contradicts the old one | Old page flagged `[stale]` for review |
+| 关系 | 含义 | 对旧页面的影响 |
+|------|------|-----------------|
+| `supersedes` | 新页面替代旧页面 | 标记 `superseded`，从召回中排除 |
+| `enriches` | 新页面补充旧页面 | 两者保持 active，互相链接 |
+| `confirms` | 新页面验证旧页面 | 旧页面 confidence 提升 |
+| `challenges` | 新页面与旧页面矛盾 | 旧页面标记 `[stale]` 待复查 |
 
-### Crystals — Synthesized Reference Articles
+### Crystal — 合成参考文章
 
-When 3+ memories share the same tag and score > 0.5, the system synthesizes them into a reference article — a **Crystal**. Sources are cited. When related information is saved later, the Crystal updates.
+当 3+ 条 memory 共享同一标签且 score > 0.5 时，系统将它们合成为一篇参考文章 — **Crystal**。来源被引用。当后续保存相关信息时，Crystal 自动更新。
 
-### Working Memory — Daily Briefing
+### Working Memory — 每日简报
 
-Each day, Studio can generate a briefing from recent and important memories. This working memory file (`~/ai-now/memory.md` or equivalent) provides Claude Code with context about what you're working on before you say a word.
+每天，Studio 可以从近期和高重要性的 memories 中生成一份简报。这份工作记忆文件为 Claude Code 提供关于你当前工作的上下文 — 在你说任何话之前。
 
-## Design Principles
+## 设计原则
 
-- **Git IS the migration** — no database, schema changes versioned through `_meta/`
-- **Atomic writes** — all persistent writes use `mkstemp + fsync + os.replace`
-- **Human-gated** — the system never auto-promotes raw content to wiki without review
-- **No AI configuration** — Claude Code is the AI engine, CLI only handles file ops + recall scoring
+- **Git IS the migration** — 无数据库，schema 变更通过 `_meta/` 版本化
+- **Atomic writes** — 所有持久化写入使用 `mkstemp + fsync + os.replace`
+- **Human-gated** — 系统绝不未经人工审查就将 raw 内容提升到 wiki
+- **No AI configuration** — Claude Code 是 AI 引擎，CLI 只负责文件操作 + 召回评分

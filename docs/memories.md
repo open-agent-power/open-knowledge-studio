@@ -1,102 +1,94 @@
 # Memories
 
-A memory is one durable thing worth keeping: a concept, a strategy, an anti-pattern, or a decision. Each memory should stand on its own, readable without the full conversation that produced it.
+一条 memory 是一个值得保留的持久知识：一个 concept、一个 strategy、一个 anti-pattern、或一个决策。每条 memory 应该独立可读，不需要完整的对话上下文就能理解。
 
-Memories are the core unit of Open Knowledge Studio. Search, decay, evolution, and Claude Code integration all become more useful because memories exist underneath them.
+Memories 是 Open Knowledge Studio 的核心单元。搜索、衰减、演化和 Claude Code 集成都因为 memories 的存在而变得更有价值。
 
 ## Memories vs Raw Materials
 
 | | Memory (wiki/) | Raw Material (raw/) |
 |---|---|---|
-| **What** | The durable takeaway | The original article, paper, or conversation |
-| **Who writes** | LLM writes, human approves | Human collects |
-| **Decay** | Type-specific λ | None |
-| **Recall** | 6-factor relevance + curve | Keyword + freshness |
-| **Advantage** | 22-domain structure, decay tiers, Crystal synthesis | Typed intake (4 subdirs), A/B/C grading, fingerprint dedup |
-| **Use when** | You need the pattern | You need the full history |
+| **是什么** | 持久的、蒸馏后的知识 | 原始文章、论文或对话 |
+| **谁写** | LLM 写，人审批 | 人类收集 |
+| **衰减** | 类型特定 λ | 无 |
+| **召回** | 6 因子相关性 + 曲线 | 关键词 + 新鲜度 |
+| **优势** | 22 域结构、衰减 tier、Crystal 合成 | 类型化入料（4 子目录）、A/B/C 分级、指纹去重 |
+| **何时用** | 需要模式或决策 | 需要完整历史 |
 
-A strong workflow is: save or import the source into `raw/`, then distill the parts worth keeping into `wiki/` memories.
+推荐工作流：把来源保存到 `raw/`，然后把值得保留的部分蒸馏为 `wiki/` memories。
 
-## The First Useful Memory
+## 第一条有用的 Memory
 
-If you are new, do not overthink structure first. Save one real thing such as:
+如果你是新手，不要先纠结结构。保存一条真实内容：
 
-* a concept you learned
-* a strategy that worked
-* an anti-pattern you want to avoid
+* 一个你学到的 concept
+* 一个有效的 strategy
+* 一个你想避免的 anti-pattern
 
-Then search for it. Once that works, this whole page becomes much easier to understand.
+然后搜索它。一旦跑通，这整页文档就更容易理解了。
 
-## Anatomy of a Memory
+## Memory 结构
 
-| Field | What it is |
-|-------|------------|
-| **title** | A short summary. Set in frontmatter |
-| **type** | `concept`, `strategy`, or `anti-pattern` |
-| **area** | One of 22 knowledge domains (e.g., `computing`, `management`) |
-| **importance** | 0.1 to 1.0 — affects search ranking and decay priority |
-| **content** | The knowledge itself. Markdown body after frontmatter |
-| **tags** | Categories for filtering and organization |
-| **created** | Timestamp. Used for temporal search and decay calculation |
-| **access_count** | How many times this memory was recalled. Reinforces confidence |
-| **status** | `active`, `provisional`, `archived`, `dropped`, or `superseded` |
+| 字段 | 说明 |
+|------|------|
+| **title** | 简短摘要，在 frontmatter 中设置 |
+| **type** | `concept`、`strategy` 或 `anti-pattern` |
+| **area** | 22 个知识域之一（如 `computing`、`management`） |
+| **importance** | 0.1 到 1.0 — 影响搜索排名和衰减优先级 |
+| **content** | 知识本身，frontmatter 之后的 Markdown 正文 |
+| **tags** | 用于过滤和组织的标签 |
+| **created** | 时间戳，用于时序搜索和衰减计算 |
+| **access_count** | 被召回的次数，增强 confidence |
+| **status** | `active`、`provisional`、`archived`、`dropped` 或 `superseded` |
 
-### Importance Scale
+### Importance 等级
 
-| Range | Meaning | Examples |
-|-------|---------|----------|
-| 0.8 – 1.0 | Critical | Architectural decisions, core patterns, production anti-patterns |
-| 0.5 – 0.7 | Useful | Standard strategies, good practices, project learnings |
-| 0.1 – 0.4 | Background | Reference info, minor details, casual notes |
+| 范围 | 含义 | 示例 |
+|------|------|------|
+| 0.8 – 1.0 | 关键 | 架构决策、核心模式、生产级反模式 |
+| 0.5 – 0.7 | 有用 | 标准策略、良好实践、项目经验 |
+| 0.1 – 0.4 | 背景 | 参考信息、次要细节、随手笔记 |
 
-The default is 0.5. The recall engine uses this score to prioritize what surfaces in search results.
+默认值 0.5。召回引擎用这个分数决定搜索结果中什么优先展示。
 
 ### Memory Type
 
-Each memory has one primary type. This helps the recall engine decide how to weight it:
+每条 memory 有一个主类型。召回引擎按类型加权：
 
-| Type | Use for | Type Boost | Decay λ |
-|------|---------|------------|---------|
-| `concept` | Durable reference knowledge | ×0.6 | 0.0 (no decay) |
-| `strategy` | Approaches, decisions, workflows | ×0.8 | 0.014 (slow) |
-| `anti-pattern` | Things to avoid, failure patterns | ×1.5 | 0.010 (moderate) |
+| Type | 用途 | Type Boost | 衰减 λ |
+|------|------|------------|--------|
+| `concept` | 持久参考知识 | ×0.6 | 0.0（不衰减） |
+| `strategy` | 方法、决策、工作流 | ×0.8 | 0.014（缓慢） |
+| `anti-pattern` | 要避免的东西、失败模式 | ×1.5 | 0.010（中等） |
 
-Anti-patterns get the highest boost (×1.5) because mistakes are the most valuable to recall — you want to find them before you repeat them.
+anti-pattern 的 boost 最高（×1.5），因为**错误是最有价值的召回对象** — 你希望在重复之前先找到它。
 
-### Tags
+### 来源标签
 
-Tags are lowercase and hyphenated (`api-design`, `react-patterns`). Filter by tag in search:
+每条 memory 携带一个来源标签，表示其置信度：
 
-```bash
-oks search "error handling" --type strategy
-```
+| 标签 | 含义 |
+|------|------|
+| `[verified]` | 工具确认（有 trace）或人工审查通过 |
+| `[user-stated]` | 用户明确陈述 |
+| `[inferred]` | AI 蒸馏，尚未验证 |
+| `[stale]` | 可能过时，待重新验证 |
 
-### Source Labels
+## 创建 Memories
 
-Every memory carries a source label indicating its confidence level:
+### 从原始材料（主路径）
 
-| Label | Meaning |
-|-------|---------|
-| `[verified]` | Tool-confirmed (has traces) or human-reviewed |
-| `[user-stated]` | User explicitly stated this |
-| `[inferred]` | AI-distilled from raw materials, not yet verified |
-| `[stale]` | May be outdated, pending re-verification |
+1. 把来源材料放入 `raw/`（文章、论文、对话摘要）
+2. 运行 `/ingest` 或 `oks distill` — AI 扫描并识别模式
+3. 候选写入 `drafts/{slug}.md`
+4. 用 `/promote` 审查 — accept、revise 或 reject
+5. 接受的草稿变为 `wiki/{domain}/{type}/{slug}.md`
 
-## Creating Memories
+### 从 AI 对话
 
-### From Raw Materials (Primary Path)
+用 `/archive` 技能从对话中提取 Q&A 并写入 wiki。
 
-1. Place source material in `raw/` (article, paper, conversation summary)
-2. Run `/ingest` in Claude Code or `oks distill` — AI scans and identifies patterns
-3. Candidates are written to `drafts/{slug}.md`
-4. Review with `/promote` — accept, revise, or reject
-5. Accepted drafts become `wiki/{domain}/{type}/{slug}.md`
-
-### From AI Conversations
-
-Use the `/archive` skill to extract Q&A from conversations and write them to wiki.
-
-### From CLI
+### 从 CLI
 
 ```bash
 oks wiki create \
@@ -106,26 +98,26 @@ oks wiki create \
   --importance 0.7
 ```
 
-### From Templates
+### 从模板
 
 ```bash
 cp templates/strategy.md wiki/computing/strategies/my-strategy.md
-# Edit the frontmatter and body
+# 编辑 frontmatter 和正文
 ```
 
-## Searching Memories
+## 搜索 Memories
 
-### Three Search Modes
+### 三种搜索模式
 
-| Mode | How it works | Best for |
-|------|-------------|----------|
-| **Semantic** | Token overlap via jieba — finds by meaning, not just exact words | "design patterns" finds "architectural approaches" |
-| **Keyword** | Substring match in title and body | Exact terms, code names, specific APIs |
-| **Graph** | Topic trace + type boost + review penalty | Finding related decisions, tracing topic history |
+| 模式 | 工作方式 | 适合 |
+|------|----------|------|
+| **Semantic** | jieba 分词后的 token overlap — 按语义找，不只是精确匹配 | 搜"设计模式"能找到"架构方法" |
+| **Keyword** | 标题和正文中的 substring 精确匹配 | 精确术语、代码名、特定 API |
+| **Graph** | topic trace + type boost + review penalty | 找相关决策、追溯主题历史 |
 
-The 6-factor recall engine combines all three automatically. See [Recall Engine](recall-engine.md) for the full algorithm.
+6 因子召回引擎自动组合这三种模式。详见 [召回引擎](recall-engine.md)。
 
-### From CLI
+### 从 CLI
 
 ```bash
 oks search "authentication patterns"
@@ -134,78 +126,68 @@ oks recall "database design" --limit 5
 oks wiki list --domain computing --status active
 ```
 
-### From Claude Code
+### 从 Claude Code
 
 ```
 /query What patterns do we have for error handling?
 ```
 
-Claude Code calls `oks recall`, injects relevant wiki/ pages into context with source labels, and answers with citations.
+Claude Code 调用 `oks recall`，将相关 wiki 页面注入上下文（带来源标签），然后带引用回答。
 
-## Editing and Organizing
+## 编辑和组织
 
-### Update a Memory
+### 更新 Memory
 
-Edit the wiki page directly. Changes take effect immediately.
+直接编辑 wiki 页面，改动立即生效。
 
 ```bash
-oks wiki pin <slug>      # boost importance (pin_bonus = 0.5)
-oks wiki archive <slug>  # move to archived status
+oks wiki pin <slug>      # 提升 importance（pin_bonus = 0.5）
+oks wiki archive <slug>  # 归档
 ```
 
-### Delete a Memory
+### 删除 Memory
 
-Memories are never deleted — they are archived (`status: dropped`) or superseded (`status: superseded`). Git history is the safety net.
+Memories 从不删除 — 它们被归档（`status: dropped`）或被替代（`status: superseded`）。Git 历史是安全网。
 
-## How Memories Connect
+## 知识演化关系
 
-When you save something new about a topic you've written about before, the system tracks the relationship:
+当你保存的新知识和已有页面相关时，系统追踪 4 种关系：
 
-| Relationship | Meaning |
-|--------------|---------|
-| `supersedes` | New page replaces the old one — old page marked `superseded` |
-| `enriches` | New page adds to the old one — both stay active |
-| `confirms` | New page validates the old one — confidence boosted |
-| `challenges` | New page contradicts the old one — old page flagged for review |
+| 关系 | 含义 | 对旧页面的影响 |
+|------|------|---------------|
+| `supersedes` | 新页面替代旧页面 | 标记 `superseded`，排除出召回 |
+| `enriches` | 新页面补充旧页面 | 两者都保持 active，互相链接 |
+| `confirms` | 新页面确认旧页面 | 旧页面 confidence +0.1 |
+| `challenges` | 新页面挑战旧页面 | 旧页面标记 `[stale]`，待审查 |
 
-This creates a knowledge evolution graph. Trace how your understanding of any topic changed over time.
+这构成了知识演化图。你可以追溯对任何主题的理解是如何随时间变化的。
 
-### Crystals — Synthesized Reference Articles
+### Crystal — 合成参考文章
 
-When 3+ memories cover the same ground (same tag + score > 0.5), the system can synthesize them into a reference article — a **Crystal**. Sources are cited. When you save related information later, the Crystal updates.
+当 3+ 条同标签 memory 的 score > 0.5 时，系统可以将它们合成为一篇参考文章 — **Crystal**。引用来源。后续保存相关信息时 Crystal 会更新。
 
-This happens automatically during the Dreaming cycle. See [Dreaming Cycle](dreaming-cycle.md) for details.
+这在 Dreaming 循环中自动发生。详见 [Dreaming 循环](dreaming-cycle.md)。
 
-## Memory Lifecycle
+## Memory 生命周期
 
 ```
-Provisional → Active (access_count ≥ 3) → Dropped (score < threshold)
-                                         → Superseded (replaced by newer page)
+Provisional → Active（access_count ≥ 3）→ Dropped（score < threshold）
+                                         → Superseded（被新页面替代）
 ```
 
-| Tier | Score | Behavior |
-|------|-------|----------|
-| **hot** | ≥ 0.7 | Priority recall, high confidence |
-| **warm** | ≥ 0.4 | Normal recall |
-| **cold** | ≥ 0.15 | Low priority, may need review |
-| **evictable** | < 0.15 | Archive candidate — suggested for removal |
+| Tier | Score | 行为 |
+|------|-------|------|
+| **hot** | ≥ 0.7 | 优先召回，高 confidence |
+| **warm** | ≥ 0.4 | 正常召回 |
+| **cold** | ≥ 0.15 | 低优先级，可能需要审查 |
+| **evictable** | < 0.15 | 归档候选 — 建议移除 |
 
-Access reinforces confidence: `new_confidence = min(1.0, current + 0.1 × (1 - current))`
+访问增强 confidence：`new_confidence = min(1.0, current + 0.1 × (1 - current))`
 
-## Where Memories Come From
+## 下一步
 
-| Source | How | Learn more |
-|--------|-----|------------|
-| Raw materials | `/ingest` triage → drafts → `/promote` | [Raw Materials](raw-materials.md) |
-| AI conversations | `/archive` extracts Q&A | — |
-| CLI | `oks wiki create` | [Start Here](start-here.md) |
-| Templates | Copy from `templates/` | — |
-| Dreaming evolution | 3+ same-tag pages → Crystal | [Dreaming Cycle](dreaming-cycle.md) |
-
-## Next Steps
-
-* **[Raw Materials](raw-materials.md)**: Raw intake, distillation workflow, and import paths
-* **[Recall Engine](recall-engine.md)**: 6-factor scoring algorithm in detail
-* **[Dreaming Cycle](dreaming-cycle.md)**: How memories evolve, connect, and synthesize
-* **[Decay System](decay-system.md)**: Memory curve, type-specific λ, and tier classification
-* **[Architecture](architecture.md)**: Five-bucket structure and memory lifecycle
+* **[Raw Materials](raw-materials.md)**: 原始材料、蒸馏工作流和导入格式
+* **[召回引擎](recall-engine.md)**: 6 因子评分算法详解
+* **[Dreaming 循环](dreaming-cycle.md)**: memories 如何演化、连接和合成
+* **[衰减系统](decay-system.md)**: 记忆曲线、类型特定 λ 和 tier 分级
+* **[架构设计](architecture.md)**: 五桶结构和记忆生命周期

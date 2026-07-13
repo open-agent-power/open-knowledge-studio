@@ -1,53 +1,53 @@
-# Raw Materials
+# Raw Materials（原始材料）
 
-Raw is your intake layer — the original sources before distillation. Articles you read, papers you collected, code repos you studied, conversations you had. The system reads them, grades them, and distills the durable parts into [memories](memories.md).
+Raw 是你的入料层 — 蒸馏之前的原始来源。你读过的文章、收集的论文、研究过的代码仓库、经历过的对话。系统读取它们、评级、然后将持久部分蒸馏为 [Memory](memories.md)。
 
-> **Raw is not Thread.** Competitors lump everything into "conversations." We don't.
-> Our raw/ has **typed intake** (articles / papers / repos / misc), **A/B/C grading**,
-> **fingerprint dedup**, and **human-gated promotion**. That's the difference.
+> **Raw 不是 Thread。** 竞品把所有东西都塞进"conversations"。
+> 我们的 raw/ 有**类型化入料**（articles / papers / repos / misc）、**A/B/C 分级**、
+> **指纹去重**和**人工审批门控**。这就是区别。
 
-## Why raw/ is not just "conversations"
+## 为什么 raw/ 不只是"对话"
 
-| Our raw/ | Generic "Thread" |
-|----------|-------------------|
-| 4 typed subdirectories (articles/papers/repos/misc) | Flat list, conversations only |
-| A/B/C grading before distillation | All-or-nothing import |
-| Fingerprint dedup prevents duplicate drafts | No dedup |
-| Human-gated: raw → draft → review → wiki | Auto-promote or manual-only |
-| Feeds into 22-domain × 3-type structured wiki/ | Flat memory store |
-| Source-tracked: each draft records its raw origin | No provenance |
+| 我们的 raw/ | 通用 "Thread" |
+|-------------|-------------------|
+| 4 个类型子目录（articles/papers/repos/misc） | 扁平列表，仅对话 |
+| 蒸馏前 A/B/C 分级 | 全量导入或全手动 |
+| 指纹去重防止重复 draft | 无去重 |
+| 人工门控：raw → draft → review → wiki | 自动提升或纯手动 |
+| 输出到 22 域 × 3 类型的结构化 wiki/ | 扁平 memory store |
+| 来源追踪：每个 draft 记录其 raw 来源 | 无来源链路 |
 
-## The First Useful Raw Material
+## 第一个有用的 Raw Material
 
-If you are new, do one of these first:
+如果你是新用户，先做以下其中一件事：
 
-* save one article or note into `raw/`
-* let one `/ingest` run grade and extract drafts
-* distill one useful memory from those drafts
+* 把一篇文章或笔记保存到 `raw/`
+* 运行一次 `/ingest` 进行分级和提取 draft
+* 从这些 draft 中蒸馏出一条有用的 memory
 
-Then open that memory and confirm it captured what mattered. That is the core workflow.
+然后打开那条 memory，确认它捕捉了关键信息。这就是核心工作流。
 
-| I want to... | Jump to |
+| 我想... | 跳转到 |
 |---|---|
-| Save an article or paper | [Save to raw/](#saving-to-raw) |
-| Ingest raw materials into drafts | [Distillation](#distillation) |
-| Import a conversation | [Import Formats](#import-formats) |
-| Understand A/B/C grading | [Quality Gates](#quality-gates) |
-| Search past raw materials | [Searching Raw](#searching-raw) |
+| 保存文章或论文 | [保存到 raw/](#保存到-raw)
+| 将 raw materials 蒸馏为 drafts | [蒸馏](#蒸馏)
+| 导入对话 | [导入格式](#导入格式)
+| 了解 A/B/C 分级 | [质量门](#质量门)
+| 搜索历史 raw materials | [搜索 Raw](#搜索-raw)
 
-## Directory Structure
+## 目录结构
 
 ```
 raw/
-├── articles/       # Blog posts, web articles, documentation pages
-├── papers/         # Academic papers, PDFs (parsed to markdown)
-├── repos/          # Code repository notes, README summaries, code patterns
-└── misc/           # Conversations, traces, notes, anything else
+├── articles/       # 博客文章、网页文档、文档页面
+├── papers/         # 学术论文、PDF（解析为 markdown）
+├── repos/          # 代码仓库笔记、README 摘要、代码模式
+└── misc/           # 对话、trace、笔记、其他
 ```
 
-Materials are **organized by type, not by date**. This matters because the A/B/C grading and quality gates apply differently per type — an academic paper gets deeper analysis than a quick note.
+材料**按类型组织，不按日期**。这很重要，因为 A/B/C 分级和质量门对不同类型的应用方式不同 — 学术论文比随手记的笔记会得到更深入的分析。
 
-### Raw File Format
+### Raw 文件格式
 
 ```markdown
 ---
@@ -63,40 +63,40 @@ tags: [architecture, event-driven, microservices]
 Event-driven architecture is a paradigm where services communicate...
 ```
 
-**Minimal format** — just a markdown file with content. Frontmatter is optional but recommended for better search results and source tracking.
+**最简格式** — 一个带内容的 markdown 文件。Frontmatter 可选但推荐，能改善搜索结果和来源追踪。
 
-### Source Tracking
+### 来源追踪
 
-Every raw file can carry provenance metadata in frontmatter:
+每个 raw 文件可以在 frontmatter 中携带来源元数据：
 
-| Field | Purpose |
-|-------|---------|
-| `source` | URL or path where the material was obtained |
-| `date` | When the material was collected |
+| 字段 | 用途 |
+|------|------|
+| `source` | 获取材料的 URL 或路径 |
+| `date` | 材料收集时间 |
 | `type` | `article` / `paper` / `repo` / `conversation` / `note` |
-| `tags` | Topic tags for filtering |
+| `tags` | 用于过滤的主题标签 |
 
-When a raw material is distilled into a draft, the draft records its origin. This creates a **provenance chain**: wiki page ← draft ← raw file ← original source. You can always trace a curated memory back to its source.
+当 raw material 被蒸馏为 draft 时，draft 会记录其来源。这形成了一条**来源链路**：wiki 页面 ← draft ← raw 文件 ← 原始来源。你随时可以追溯一条策划好的 memory 回到它的源头。
 
-## Saving to Raw
+## 保存到 Raw
 
-### From a File
+### 从文件
 
-Drop any markdown file into the appropriate `raw/` subdirectory:
+将任意 markdown 文件放入对应的 `raw/` 子目录：
 
 ```bash
 cp ~/Downloads/article.md raw/articles/
 ```
 
-### From CLI
+### 从 CLI
 
 ```bash
 echo "We decided to use FastAPI for the new service" > raw/misc/api-decision.md
 ```
 
-### From AI Conversations
+### 从 AI 对话
 
-Save conversation summaries or Q&A extractions. The `/archive` skill can extract Q&A from Claude Code sessions and write them to raw/misc/:
+保存对话摘要或 Q&A 提取。`/archive` 技能可以从 Claude Code 会话中提取 Q&A 并写入 `raw/misc/`：
 
 ```markdown
 ## User
@@ -113,69 +113,69 @@ of Redux. For simpler apps, React Context is sufficient...
 Use Zustand for state management — lightweight, no boilerplate, good DX.
 ```
 
-## Distillation
+## 蒸馏
 
-The key workflow that connects raw materials (raw/) to memories (wiki/).
+连接 raw materials（raw/）到 memories（wiki/）的关键工作流。
 
-### How It Works
+### 工作原理
 
 ```
-raw/ (human-collected)
-  ↓ /ingest — AI scans + A/B/C grades each file
-  ↓ A-grade → drafts/ (candidate wiki pages)
-  ↓ B-grade → held in raw/ for future cycles
-  ↓ C-grade → skipped
-drafts/ (intermediate proposals)
-  ↓ /promote — human review: accept / revise / reject
-wiki/ (curated knowledge, with decay + evolution)
+raw/（人类收集）
+  ↓ /ingest — AI 扫描 + A/B/C 分级每个文件
+  ↓ A 级 → drafts/（候选 wiki 页面）
+  ↓ B 级 → 保留在 raw/，等下一轮
+  ↓ C 级 → 跳过
+drafts/（中间提案）
+  ↓ /promote — 人工审查：接受 / 修改 / 拒绝
+wiki/（策划知识，带衰减 + 演化）
 ```
 
-### A/B/C Grading — Our Advantage
+### A/B/C 分级 — 我们的优势
 
-Unlike competitors that import everything or nothing, our system grades each raw material:
+不同于全量导入或全手动的竞品，我们的系统对每个 raw material 进行分级：
 
-| Grade | Meaning | Action |
-|-------|---------|--------|
-| **A** | High-quality, pattern-worthy | Write to `drafts/` for human review |
-| **B** | Potentially useful | Keep in `raw/`, re-evaluate in next cycle |
-| **C** | Low quality or duplicate | Skip, leave in `raw/` |
+| 等级 | 含义 | 操作 |
+|------|------|------|
+| **A** | 高质量，有模式价值 | 写入 `drafts/` 供人工审查 |
+| **B** | 可能有用 | 保留在 `raw/`，下一轮重新评估 |
+| **C** | 低质量或重复 | 跳过，留在 `raw/` |
 
-This means the human only reviews the best candidates, not every file in raw/.
+这意味着人工只需审查最佳候选，而非 raw/ 中的每个文件。
 
-### Quality Gates
+### 质量门
 
-Before a raw material becomes an A-grade draft, it must pass:
+一个 raw material 成为 A 级 draft 之前，必须通过：
 
-| Gate | Rule | Why |
-|------|------|-----|
-| Content length | Skip if < 50 chars | Too short to contain useful knowledge |
-| Title check | Skip if generic ("Untitled", "Note") | No pattern to extract |
-| Importance floor | Skip if < 0.3 | Low-value knowledge not worth curating |
-| Fingerprint dedup | Skip if content hash already drafted | Prevents duplicate wiki pages |
+| 门控 | 规则 | 原因 |
+|------|------|------|
+| 内容长度 | < 50 字符则跳过 | 太短，不含有用知识 |
+| 标题检查 | 通用标题（"Untitled"、"Note"）则跳过 | 无模式可提取 |
+| 重要性下限 | < 0.3 则跳过 | 低价值知识不值得策划 |
+| 指纹去重 | 内容 hash 已有 draft 则跳过 | 防止重复 wiki 页面 |
 
-**Fingerprint dedup** is our unique advantage — the system computes a content hash for each raw file and checks it against existing drafts. If the same content was already distilled, it won't create a duplicate. This keeps wiki/ clean as raw/ grows.
+**指纹去重**是我们的独特优势 — 系统为每个 raw 文件计算内容 hash，与已有 drafts 对比。如果相同内容已被蒸馏过，不会创建重复。这让 wiki/ 在 raw/ 增长时保持干净。
 
-### Running Distillation
+### 运行蒸馏
 
 ```bash
-# Preview what would be distilled (no writes)
+# 预览蒸馏结果（不写入）
 oks distill --dry-run
 
-# Run the full cycle: grade raw → write drafts → apply decay → evolve
+# 运行完整循环：分级 raw → 写 drafts → 应用衰减 → 演化
 oks distill
 
-# List drafts awaiting human review
+# 列出待人工审查的 drafts
 oks drafts list
 
-# Promote a draft to wiki
+# 提升 draft 到 wiki
 oks drafts promote <slug>
 ```
 
-## Import Formats
+## 导入格式
 
 ### Conversation Markdown
 
-The portable format for importing conversations. Any tool that writes `## User` / `## Assistant` headers produces a file we can read.
+导入对话的通用格式。任何能写 `## User` / `## Assistant` 头部的工具生成的文件，我们都能读取。
 
 ```markdown
 ---
@@ -203,80 +203,80 @@ Use asyncio for I/O-bound work. Use threading for blocking libraries.
 Use multiprocessing for CPU-bound work.
 ```
 
-**Format rules:**
-- Headers: `## User`, `## Assistant`, or `## System` (level-2 heading, one per message)
-- Content: Everything between headers is one message
-- Frontmatter: Optional YAML block with `title`, `source`, `date`
-- Files without recognized headers are imported as a single document
+**格式规则：**
+- 头部：`## User`、`## Assistant` 或 `## System`（二级标题，每条消息一个）
+- 内容：头部之间的所有内容为一条消息
+- Frontmatter：可选 YAML 块，含 `title`、`source`、`date`
+- 无识别头部的文件作为单个文档导入
 
-### Bulk Import
+### 批量导入
 
 ```bash
-# Copy all articles into raw/
+# 复制所有文章到 raw/
 cp ~/Downloads/articles/*.md raw/articles/
 
-# Run distill to process them all
-oks distill --dry-run  # preview
-oks distill            # execute
+# 运行蒸馏处理全部
+oks distill --dry-run  # 预览
+oks distill            # 执行
 ```
 
-## Searching Raw
+## 搜索 Raw
 
-### By Keyword
+### 按关键词
 
 ```bash
 oks search "authentication" --source raw
 ```
 
-### By Freshness
+### 按新鲜度
 
-The recall engine applies a freshness factor: `0.95^days_old`. Newer materials score higher in episodic recall. This means recent raw materials surface first when you search.
+召回引擎应用新鲜度因子：`0.95^days_old`。越新的材料在 episodic recall 中得分越高。这意味着搜索时最近的 raw materials 优先呈现。
 
-### Dual-Path Recall
+### 双路召回
 
 ```bash
 oks recall "database design" --limit 5
 ```
 
-Returns both episodic results (from `raw/`) and knowledge results (from `wiki/`), combined:
+同时返回 episodic 结果（来自 `raw/`）和 knowledge 结果（来自 `wiki/`），合并展示：
 
 ```json
 {
-  "episodic": [...],   // raw/ materials matching by keyword + freshness
-  "knowledge": [...]    // wiki/ pages matching by 6-factor relevance + curve
+  "episodic": [...],   // raw/ 材料，按关键词 + 新鲜度匹配
+  "knowledge": [...]    // wiki/ 页面，按 6 因子相关性 + 曲线匹配
 }
 ```
 
-## Raw Material vs Memory — When to Use Which
+## Raw Material vs Memory — 何时用哪个
 
-| Scenario | Use Raw (raw/) | Use Memory (wiki/) |
-|----------|---------------|---------------------|
-| Need the full original source | Yes | No |
-| Need the durable pattern | No | Yes |
-| Searching for a specific decision | Maybe | Yes (higher relevance, scored) |
-| Want to trace understanding evolution | Both | Yes (version links, supersession) |
-| Quick lookup with confidence | No | Yes (tier-scored, source-labeled) |
-| Need provenance chain | Start here | Links back to raw origin |
+| 场景 | 用 Raw（raw/） | 用 Memory（wiki/） |
+|------|---------------|---------------------|
+| 需要完整原始来源 | 是 | 否 |
+| 需要持久模式 | 否 | 是 |
+| 搜索特定决策 | 也许 | 是（相关性更高，有评分） |
+| 想追溯理解演化 | 两者都用 | 是（有版本链接、supersession） |
+| 快速查阅带置信度 | 否 | 是（有 tier 评分、来源标签） |
+| 需要来源链路 | 从这里开始 | 链接回 raw 来源 |
 
-## Our Pipeline Advantage
+## 我们的管线优势
 
 ```
-raw/ (typed intake)
-  ↓ A/B/C grading (filter noise)
-  ↓ fingerprint dedup (prevent duplicates)
-drafts/ (human-gated review)
-  ↓ /promote — accept / revise / reject
-wiki/ (22 domains × 3 types, with decay)
-  ↓ 6-factor recall + memory curve
-  ↓ evolve: 3+ same-tag → Crystal
-injected into Claude Code context
+raw/（类型化入料）
+  ↓ A/B/C 分级（过滤噪声）
+  ↓ 指纹去重（防止重复）
+drafts/（人工门控审查）
+  ↓ /promote — 接受 / 修改 / 拒绝
+wiki/（22 域 × 3 类型，带衰减）
+  ↓ 6 因子召回 + 记忆曲线
+  ↓ 演化：3+ 同标签 → Crystal
+注入 Claude Code 上下文
 ```
 
-Each step has a quality gate. Nothing reaches wiki/ without passing through grading AND human review. This is why our wiki/ stays clean as raw/ grows — the pipeline filters noise at every stage.
+每一步都有质量门。没有通过分级**和**人工审查的内容不会进入 wiki/。这就是我们的 wiki/ 在 raw/ 增长时保持干净的原因 — 管线在每一阶段过滤噪声。
 
-## Next Steps
+## 下一步
 
-* **[Memories](memories.md)**: What happens after distillation — anatomy, types, search
-* **[Dreaming Cycle](dreaming-cycle.md)**: The full evolution pipeline including Crystals
-* **[Recall Engine](recall-engine.md)**: How 6-factor search scoring works
-* **[Architecture](architecture.md)**: Five-bucket structure and lifecycle
+* **[Memories](memories.md)**：蒸馏后会发生什么 — 结构、类型、搜索
+* **[Dreaming Cycle](dreaming-cycle.md)**：包含 Crystal 的完整演化管线
+* **[Recall Engine](recall-engine.md)**：6 因子搜索评分如何工作
+* **[Architecture](architecture.md)**：五桶结构和生命周期

@@ -1,47 +1,72 @@
-# Decay System
+# Decay System（衰减系统）
 
-Knowledge fades over time based on type-specific decay rates.
+知识随时间衰减，衰减率由类型决定。
 
-## Memory Curve
+## 记忆曲线
 
 ```
 score = importance × e^(-λ × days_old) + 0.5 × ln(1 + access_count) + pin_bonus
 ```
 
-Active pages get ×1.2 multiplier. Dropped/archived → 0.0.
+Active 页面获得 ×1.2 乘数。Dropped/archived → 0.0。
 
-## Type-Specific Decay (λ)
+- **importance** — 页面的重要性（0.0-1.0），人工设定
+- **e^(-λ × days_old)** — 时间衰减，λ 越大衰减越快
+- **ln(1 + access_count)** — 访问增强，被访问越多分数越高
+- **pin_bonus** — 固定页面加成（默认 0.5）
 
-| Type | λ | Behavior |
-|------|---|----------|
-| concept | 0.0 | No decay |
-| strategy | 0.014 | Slow decay |
-| anti-pattern | 0.010 | Moderate decay |
-| unknown | 0.030 | Fast decay (fallback) |
+## 类型特定衰减（λ）
 
-## Tiers
+| 类型 | λ | 行为 |
+|------|---|------|
+| concept | 0.0 | 不衰减 — 概念是永恒的 |
+| strategy | 0.014 | 缓慢衰减 — 策略会过时但周期长 |
+| anti-pattern | 0.010 | 中等衰减 — 教训会随场景变化 |
+| unknown | 0.030 | 快速衰减（fallback） |
 
-| Tier | Score | Action |
-|------|-------|--------|
-| hot | ≥ 0.7 | Priority recall |
-| warm | ≥ 0.4 | Normal recall |
-| cold | ≥ 0.15 | Low priority |
-| evictable | < 0.15 | Archive candidate |
+Concept 不衰减是因为 "什么是 REST API" 这类知识不会过时。Strategy 衰减最慢是因为 "用微服务拆分单体" 这类策略在几年内仍然有效。Anti-pattern 衰减略快是因为 "不要用 var 声明变量" 这类教训会随语言演进而变化。
 
-## Lifecycle
+## Tier 分级
+
+| Tier | Score | 行为 |
+|------|-------|------|
+| hot | ≥ 0.7 | 优先召回 |
+| warm | ≥ 0.4 | 正常召回 |
+| cold | ≥ 0.15 | 低优先级 |
+| evictable | < 0.15 | 归档候选 |
+
+分数越高的页面在召回时排序越靠前。Evictable 级别的页面是归档候选 — 系统会在下一次 `oks distill` 时考虑将其标记为 `status: dropped`。
+
+## 生命周期
 
 ```
-Provisional → Active (access ≥ 3) → Dropped (score < threshold)
+Provisional → Active（access_count ≥ 3）→ Dropped（score < threshold）
 ```
 
-## Access Reinforcement
+- **Provisional** — 新创建的页面，尚未被足够访问
+- **Active** — 被访问 3 次以上，成为正式知识
+- **Dropped** — 分数低于归档阈值，被标记为 dropped
+
+## 访问增强
+
+每次页面被召回命中时，confidence 提升：
 
 ```python
 new_confidence = min(1.0, current + 0.1 × (1 - current))
 ```
 
-## Config
+这意味着被频繁查询的知识会越来越"自信" — confidence 逐渐趋近 1.0 但永远不会达到。这是对有用知识的正反馈：越常被使用，越不容易被遗忘。
 
-`settings/decay-config.yaml`: `archive_threshold: 0.3`, `pin_bonus: 0.5`
+## 配置
 
-Source: `cli/knowledge_studio/store.py`
+`settings/decay-config.yaml`:
+
+```yaml
+archive_threshold: 0.3
+pin_bonus: 0.5
+```
+
+- **archive_threshold** — 低于此分数的页面成为归档候选
+- **pin_bonus** — Pinned 页面获得的额外分数
+
+源码：`cli/knowledge_studio/store.py`
