@@ -196,7 +196,7 @@ Access reinforces confidence: `new_confidence = min(1.0, current + 0.1 × (1 - c
 
 | Source | How | Learn more |
 |--------|-----|------------|
-| Raw materials | `/ingest` triage → drafts → `/promote` | [Raw Materials](threads.md) |
+| Raw materials | `/ingest` triage → drafts → `/promote` | [Raw Materials](raw-materials.md) |
 | AI conversations | `/archive` extracts Q&A | — |
 | CLI | `oks wiki create` | [Start Here](start-here.md) |
 | Templates | Copy from `templates/` | — |
@@ -204,7 +204,7 @@ Access reinforces confidence: `new_confidence = min(1.0, current + 0.1 × (1 - c
 
 ## Next Steps
 
-* **[Raw Materials](threads.md)**: Raw intake, distillation workflow, and import paths
+* **[Raw Materials](raw-materials.md)**: Raw intake, distillation workflow, and import paths
 * **[Recall Engine](recall-engine.md)**: 6-factor scoring algorithm in detail
 * **[Dreaming Cycle](dreaming-cycle.md)**: How memories evolve, connect, and synthesize
 * **[Decay System](decay-system.md)**: Memory curve, type-specific λ, and tier classification

@@ -31,7 +31,7 @@ injected into Claude Code context
 |---------|-------------|
 | **[Start Here](start-here.md)** | The shortest useful path: save one memory, search it, verify it works |
 | **[Memories](memories.md)** | Wiki page anatomy, types, creation paths, and search modes |
-| **[Raw Materials](threads.md)** | Raw intake, A/B/C grading, distillation workflow, and import paths |
+| **[Raw Materials](raw-materials.md)** | Raw intake, A/B/C grading, distillation workflow, and import paths |
 | **[Architecture](architecture.md)** | Five-bucket structure + memory lifecycle (Observe→Write→Store→Retrieve→Inject→Forget) |
 | **[Recall Engine](recall-engine.md)** | 6-factor scoring: token overlap, substring, topic trace, type boost, review penalty, memory curve |
 | **[Memory Model](memory-model.md)** | Six memory types, injection order (stable-first), source labels, conflict priority |
