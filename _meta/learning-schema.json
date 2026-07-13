@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autpilot.dev/schemas/learning.json",
+  "title": "Learning Frontmatter Schema",
+  "description": "Machine-validatable schema for learnings/*.md frontmatter. CI enforces this.",
+  "type": "object",
+  "required": ["title", "category", "source_type", "importance", "confidence", "created", "pinned", "archived", "tags"],
+  "properties": {
+    "title": {
+      "type": "string",
+      "maxLength": 120,
+      "description": "Human-readable title"
+    },
+    "category": {
+      "type": "string",
+      "enum": ["decision", "pattern", "mistake", "insight", "external", "rejected"],
+      "description": "Learning type — controls memory-curve decay rate. 'rejected' = anti-pattern / vetoed proposal (slowest decay)."
+    },
+    "source_type": {
+      "type": "string",
+      "enum": ["internal", "external", "auto", "manual"],
+      "description": "Where this learning came from"
+    },
+    "importance": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Importance weight for score = importance * e^(-lambda*t)"
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Confidence level"
+    },
+    "created": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO8601 creation timestamp"
+    },
+    "pinned": {
+      "type": "boolean",
+      "description": "Pinned (+0.5 score bonus)"
+    },
+    "archived": {
+      "type": "boolean",
+      "description": "Archived (score = 0)"
+    },
+    "tags": {
+      "type": "string",
+      "description": "Comma-separated tags"
+    },
+    "options": {
+      "type": "array",
+      "description": "Decision option tree — captures what was chosen AND what was rejected (the DNA of taste)",
+      "items": {
+        "type": "object",
+        "required": ["id", "chosen"],
+        "properties": {
+          "id": { "type": "string", "description": "Option identifier (A, B, C, etc.)" },
+          "chosen": { "type": "boolean", "description": "Was this option selected?" },
+          "rationale": { "type": "string", "description": "Why this option was chosen (if chosen=true)" },
+          "rejected_because": { "type": "string", "description": "Why this option was vetoed (if chosen=false)" }
+        }
+      }
+    },
+    "traces": {
+      "type": "array",
+      "description": "Source traces — links this learning back to its origin (Discuss, Goal, code)",
+      "items": {
+        "type": "object",
+        "required": ["kind"],
+        "properties": {
+          "kind": { "type": "string", "enum": ["discuss", "goal", "code", "execution", "external"] },
+          "id": { "type": "string", "description": "ID of the source (topic_id, goal_id, etc.)" },
+          "repo": { "type": "string", "description": "Repository name (for kind=code)" },
+          "path": { "type": "string", "description": "File path (for kind=code)" },
+          "screenshot": { "type": "string", "description": "Screenshot filename anchor (for kind=discuss)" }
+        }
+      }
+    },
+    "review": {
+      "type": "object",
+      "description": "Decision review — filled after goal execution to close the decision loop",
+      "required": ["outcome", "decision_correct"],
+      "properties": {
+        "outcome": { "type": "string", "enum": ["success", "failure", "partial"] },
+        "decision_correct": { "type": "boolean", "description": "Was the original decision correct?" },
+        "lesson": { "type": "string", "description": "Correction lesson if decision was wrong" },
+        "reviewed_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "promoted_to": {
+      "type": ["string", "null"],
+      "description": "Path in domain/ if this learning was promoted from case to pattern"
+    }
+  },
+  "additionalProperties": false
+}

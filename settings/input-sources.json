@@ -1,0 +1,45 @@
+{
+  "sources": [
+    {
+      "type": "github_user",
+      "name": "fancyboi999",
+      "url": "https://github.com/fancyboi999",
+      "scan_interval_hours": 168,
+      "strategy": "contributor_trail",
+      "description": "Active AI agent contributor — follow PR trail to discover repos"
+    },
+    {
+      "type": "github_topic",
+      "name": "ai-agents",
+      "url": "https://github.com/topics/ai-agents",
+      "scan_interval_hours": 168,
+      "strategy": "topic_discovery",
+      "description": "Trending AI agent repos"
+    },
+    {
+      "type": "github_topic",
+      "name": "llm-framework",
+      "url": "https://github.com/topics/llm-framework",
+      "scan_interval_hours": 168,
+      "strategy": "topic_discovery",
+      "description": "LLM framework repos"
+    },
+    {
+      "type": "web_search",
+      "name": "AI Native Strategy",
+      "keywords": ["AI native architecture", "agent loop framework", "knowledge evolution", "self-evolving agent"],
+      "scan_interval_hours": 24,
+      "strategy": "keyword_search",
+      "description": "Daily search for AI native strategies"
+    },
+    {
+      "type": "arxiv",
+      "name": "AI Agent Papers",
+      "categories": ["cs.AI", "cs.CL"],
+      "keywords": ["agent", "self-evolving", "knowledge management", "loop engineering"],
+      "scan_interval_hours": 168,
+      "strategy": "paper_scan",
+      "description": "Weekly arXiv paper scan"
+    }
+  ]
+}

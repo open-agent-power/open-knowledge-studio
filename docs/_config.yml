@@ -1,0 +1,7 @@
+theme: jekyll-theme-cayman
+title: Open Knowledge Studio
+description: File-based knowledge engineering for Claude Code — raw → wiki → recall
+markdown: kramdown
+kramdown:
+  input: GFM
+  syntax_highlighter: rouge

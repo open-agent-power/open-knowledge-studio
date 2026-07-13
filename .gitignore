@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+
+# Virtual env
+.venv/
+venv/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# CLI local data
+cli/.oks/
+cli/knowledge_studio.egg-info/
+
+# Logs
+*.log
+
+# GitHub Pages
+docs/_site/
+docs/.jekyll-cache/
