@@ -24,7 +24,8 @@ env/
 .DS_Store
 Thumbs.db
 
-# CLI local data
+# CLI local data (all .oks state, not just snapshots)
+.oks/
 cli/.oks/
 cli/knowledge_studio.egg-info/
 
@@ -43,5 +44,13 @@ wiki/**/*.md
 drafts/*.md
 !drafts/.gitkeep
 
-# Snapshots
-.oks/snapshots/
+# Old profiles (local only, not published to remote)
+profiles/projects/agentuniverse.md
+profiles/projects/apache-project-contribution.md
+profiles/projects/current-microservice-migration.md
+profiles/projects/current-paper-project.md
+profiles/projects/current-ui-refactor.md
+profiles/projects/higress.md
+profiles/projects/oss-compass.md
+profiles/projects/rocketmq.md
+profiles/users/mrjlv1/
