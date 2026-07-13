@@ -4,14 +4,15 @@ A memory is one durable thing worth keeping: a concept, a strategy, an anti-patt
 
 Memories are the core unit of Open Knowledge Studio. Search, decay, evolution, and Claude Code integration all become more useful because memories exist underneath them.
 
-## Memories vs Threads
+## Memories vs Raw Materials
 
-| | Memory (wiki/) | Thread (raw/) |
+| | Memory (wiki/) | Raw Material (raw/) |
 |---|---|---|
-| **What** | The durable takeaway | The original conversation or source |
+| **What** | The durable takeaway | The original article, paper, or conversation |
 | **Who writes** | LLM writes, human approves | Human collects |
 | **Decay** | Type-specific λ | None |
 | **Recall** | 6-factor relevance + curve | Keyword + freshness |
+| **Advantage** | 22-domain structure, decay tiers, Crystal synthesis | Typed intake (4 subdirs), A/B/C grading, fingerprint dedup |
 | **Use when** | You need the pattern | You need the full history |
 
 A strong workflow is: save or import the source into `raw/`, then distill the parts worth keeping into `wiki/` memories.
@@ -195,7 +196,7 @@ Access reinforces confidence: `new_confidence = min(1.0, current + 0.1 × (1 - c
 
 | Source | How | Learn more |
 |--------|-----|------------|
-| Raw materials | `/ingest` triage → drafts → `/promote` | [Threads](threads.md) |
+| Raw materials | `/ingest` triage → drafts → `/promote` | [Raw Materials](threads.md) |
 | AI conversations | `/archive` extracts Q&A | — |
 | CLI | `oks wiki create` | [Start Here](start-here.md) |
 | Templates | Copy from `templates/` | — |
@@ -203,7 +204,7 @@ Access reinforces confidence: `new_confidence = min(1.0, current + 0.1 × (1 - c
 
 ## Next Steps
 
-* **[Threads](threads.md)**: Raw materials, distillation workflow, and import paths
+* **[Raw Materials](threads.md)**: Raw intake, distillation workflow, and import paths
 * **[Recall Engine](recall-engine.md)**: 6-factor scoring algorithm in detail
 * **[Dreaming Cycle](dreaming-cycle.md)**: How memories evolve, connect, and synthesize
 * **[Decay System](decay-system.md)**: Memory curve, type-specific λ, and tier classification

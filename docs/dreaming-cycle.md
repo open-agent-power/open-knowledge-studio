@@ -127,6 +127,6 @@ The AI can dream, but humans decide what becomes permanent knowledge.
 ## Next Steps
 
 * **[Memories](memories.md)**: What memories look like after promotion
-* **[Threads](threads.md)**: What raw materials look like before distillation
+* **[Raw Materials](threads.md)**: What raw materials look like before distillation
 * **[Decay System](decay-system.md)**: How memory scores change over time
 * **[Architecture](architecture.md)**: The five-bucket structure

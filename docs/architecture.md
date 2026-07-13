@@ -1,14 +1,15 @@
 # Architecture
 
-## Thread vs Memory — The Core Distinction
+## Raw Material vs Memory — The Core Distinction
 
-| | Thread (raw/) | Memory (wiki/) |
+| | Raw Material (raw/) | Memory (wiki/) |
 |---|---|---|
-| **What** | The original conversation, article, or source | The durable takeaway, distilled and curated |
+| **What** | Original article, paper, repo note, or conversation | Durable takeaway, distilled and curated |
 | **Who writes** | Human collects, LLM reads only | LLM writes via Dreaming, human approves |
 | **Decay** | None — raw materials are permanent | Type-specific λ — knowledge fades over time |
 | **Recall** | Keyword + freshness | 6-factor relevance + memory curve |
-| **Use when** | You need the full history or exact source | You need the pattern, decision, or lesson |
+| **Advantage** | Typed intake (4 subdirs), A/B/C grading, fingerprint dedup | 22-domain structure, decay tiers, Crystal synthesis |
+| **Use when** | Need the full history or exact source | Need the pattern, decision, or lesson |
 
 A strong workflow: save the source into `raw/`, then distill the parts worth keeping into `wiki/` memories.
 

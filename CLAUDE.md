@@ -13,15 +13,15 @@ Open Knowledge Studio is a file-based knowledge base system designed for use wit
 - **22 knowledge domains**: pre-created directory skeleton
 - **CLI tool (`oks`)**: search, recall, wiki CRUD, drafts, distill, lint, status, metrics, sync
 
-## Thread vs Memory — The Core Distinction
+## Raw Material vs Memory — The Core Distinction
 
-| | Thread (raw/) | Memory (wiki/) |
+| | Raw Material (raw/) | Memory (wiki/) |
 |---|---|---|
-| **What** | Original conversation, article, or source | Durable takeaway, distilled and curated |
+| **What** | Original article, paper, repo note, or conversation | Durable takeaway, distilled and curated |
 | **Who writes** | Human collects, LLM reads only | LLM writes via Dreaming, human approves |
 | **Decay** | None | Type-specific λ |
 | **Recall** | Keyword + freshness | 6-factor relevance + memory curve |
-| **Use when** | Need full history | Need the pattern or decision |
+| **Advantage** | Typed intake (4 subdirs), A/B/C grading, fingerprint dedup | 22-domain structure, decay tiers, Crystal synthesis |
 
 A strong workflow: save the source into `raw/`, then distill the parts worth keeping into `wiki/` memories.
 

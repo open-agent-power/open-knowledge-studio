@@ -130,7 +130,7 @@ The point on day one is to prove the loop, not to wire every domain at once.
 ## Next Steps
 
 * [Memories](memories.md) — Wiki page anatomy, types, creation, and search
-* [Threads](threads.md) — Raw materials, distillation workflow, and import paths
+* [Raw Materials](threads.md) — Raw intake, A/B/C grading, distillation workflow, and import paths
 * [Architecture](architecture.md) — Five-bucket structure and memory lifecycle
 * [Recall Engine](recall-engine.md) — 6-factor scoring algorithm
 * [Dreaming Cycle](dreaming-cycle.md) — Knowledge evolution pipeline

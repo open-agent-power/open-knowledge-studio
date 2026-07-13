@@ -31,7 +31,7 @@ injected into Claude Code context
 |---------|-------------|
 | **[Start Here](start-here.md)** | The shortest useful path: save one memory, search it, verify it works |
 | **[Memories](memories.md)** | Wiki page anatomy, types, creation paths, and search modes |
-| **[Threads](threads.md)** | Raw materials, distillation workflow, and import paths |
+| **[Raw Materials](threads.md)** | Raw intake, A/B/C grading, distillation workflow, and import paths |
 | **[Architecture](architecture.md)** | Five-bucket structure + memory lifecycle (Observe→Write→Store→Retrieve→Inject→Forget) |
 | **[Recall Engine](recall-engine.md)** | 6-factor scoring: token overlap, substring, topic trace, type boost, review penalty, memory curve |
 | **[Memory Model](memory-model.md)** | Six memory types, injection order (stable-first), source labels, conflict priority |
@@ -51,7 +51,7 @@ oks search "your query"
 
 ## Philosophy
 
-- **Thread vs Memory** — raw/ keeps the full conversation; wiki/ keeps the durable takeaway. Distill when the pattern matters, not every time.
+- **Raw Material vs Memory** — raw/ has typed intake (4 subdirs), A/B/C grading, and fingerprint dedup; wiki/ has 22-domain structure, decay tiers, and Crystal synthesis. Distill when the pattern matters, not every time.
 - **Human-gated** — the system never auto-promotes raw content to wiki without your review.
 - **Knowledge as Code** — all knowledge lives in Markdown + YAML frontmatter, versioned through Git.
 - **Decay is a feature** — knowledge fades over time. Well-used knowledge stays sharp; forgotten knowledge fades to archive.
