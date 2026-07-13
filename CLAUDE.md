@@ -13,6 +13,18 @@ Open Knowledge Studio is a file-based knowledge base system designed for use wit
 - **22 knowledge domains**: pre-created directory skeleton
 - **CLI tool (`oks`)**: search, recall, wiki CRUD, drafts, distill, lint, status, metrics, sync
 
+## Thread vs Memory — The Core Distinction
+
+| | Thread (raw/) | Memory (wiki/) |
+|---|---|---|
+| **What** | Original conversation, article, or source | Durable takeaway, distilled and curated |
+| **Who writes** | Human collects, LLM reads only | LLM writes via Dreaming, human approves |
+| **Decay** | None | Type-specific λ |
+| **Recall** | Keyword + freshness | 6-factor relevance + memory curve |
+| **Use when** | Need full history | Need the pattern or decision |
+
+A strong workflow: save the source into `raw/`, then distill the parts worth keeping into `wiki/` memories.
+
 ## Quick Start
 
 ```bash
@@ -42,7 +54,7 @@ See `CONSTITUTION.md` for the full memory design (A1-A5):
 - **A1**: Five-bucket architecture + memory lifecycle (Observe→Write→Store→Retrieve→Inject→Forget)
 - **A2**: Six-type memory model + injection order + source labels + conflict priority
 - **A3**: Dreaming — human-reviewed knowledge evolution
-- **A4**: Knowledge supersession
+- **A4**: Knowledge evolution — supersedes, enriches, confirms, challenges
 - **A5**: Atomic file writes
 
 ## Directory Structure

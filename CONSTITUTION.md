@@ -168,20 +168,35 @@ wiki knowledge, like sleep consolidation in human memory.
 
 **Do not** auto-promote raw content to `wiki/` without human review.
 
-### A4: Knowledge supersession
+### A4: Knowledge evolution and supersession
 
-When new wiki content covers the same topic as an existing page, the old
-page must be marked `status: superseded` with a `superseded_by` field
-pointing to the new page's slug. Superseded pages are excluded from
-recall and `get_top_wiki()` but retained on disk for audit history.
+When new wiki content relates to existing knowledge, four relationships
+are tracked. The system never silently overwrites old knowledge.
 
-`write_wiki_page()` accepts a `supersedes` parameter (slug of the page
-being replaced). When set, the old page's frontmatter is updated before
-the new page is written.
+**Relationship types:**
 
-**Do not** overwrite or delete old `wiki/` pages without marking them
-superseded first. Git history is the safety net, but explicit
-`superseded` status is the runtime signal for recall exclusion.
+| Relationship | Meaning | Effect on old page |
+|--------------|---------|---------------------|
+| `supersedes` | New page replaces the old one | Marked `status: superseded` with `superseded_by` field. Excluded from recall. Retained on disk for audit history. |
+| `enriches` | New page adds to the old one | Both stay `active`. New page linked via `enriches` field. |
+| `confirms` | New page validates the old one | Old page `confidence` boosted by +0.1 (max 1.0). New page linked via `confirms` field. |
+| `challenges` | New page contradicts the old one | Old page marked `[stale]` source label, flagged for review. New page linked via `challenges` field. |
+
+`write_wiki_page()` accepts a `relates_to` parameter (slug of the existing
+page) and a `relationship` parameter (`supersedes` | `enriches` | `confirms` |
+`challenges`). When set, the old page's frontmatter is updated before the new
+page is written.
+
+**Superseded pages** are excluded from recall and `get_top_wiki()` but
+retained on disk for audit history. Git history is the safety net, but
+explicit `superseded` status is the runtime signal for recall exclusion.
+
+**Challenged pages** remain in recall but carry the `[stale]` source label
+so injected knowledge warns the consumer that it may be outdated.
+
+**Do not** overwrite or delete old `wiki/` pages without marking the
+relationship first. Every knowledge change must leave a traceable link
+to what came before.
 
 ### A5: Atomic file writes
 
