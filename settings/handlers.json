@@ -1,0 +1,38 @@
+[
+  {
+    "name": "web",
+    "modalities": ["url:http", "url:https"],
+    "enabled": true,
+    "description": "Web article fetch + Readability extraction"
+  },
+  {
+    "name": "pdf",
+    "modalities": ["pdf"],
+    "enabled": true,
+    "description": "PDF parse → text + structure"
+  },
+  {
+    "name": "video",
+    "modalities": ["mp4", "mov", "avi", "mkv", "webm", "url:youtube", "url:bilibili"],
+    "enabled": false,
+    "description": "Video: ffmpeg frame extraction + Whisper subtitle + Vision analysis"
+  },
+  {
+    "name": "audio",
+    "modalities": ["mp3", "wav", "m4a", "flac", "aac", "ogg"],
+    "enabled": false,
+    "description": "Audio: Whisper STT → transcript"
+  },
+  {
+    "name": "image",
+    "modalities": ["png", "jpg", "jpeg", "webp", "gif", "bmp"],
+    "enabled": false,
+    "description": "Image: Vision model / OCR → structured description"
+  },
+  {
+    "name": "repo",
+    "modalities": ["directory"],
+    "enabled": true,
+    "description": "Code repo: structure scan + README + key patterns"
+  }
+]

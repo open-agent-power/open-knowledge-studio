@@ -7,11 +7,13 @@
 Open Knowledge Studio is a file-based knowledge base system designed for use with Claude Code. It provides:
 
 - **5-bucket architecture**: profiles/, raw/, wiki/, drafts/, settings/
+- **Multi-modal intake**: 6 handlers (web/pdf/video/audio/image/repo) — universal pipeline, any modality → raw/
 - **6-factor recall engine**: token overlap + substring + topic trace + type boost + review penalty + memory curve
 - **Dreaming cycle**: raw → AI distill → drafts → human review → wiki
 - **Decay system**: memory curve scoring with type-specific λ, tier classification (hot/warm/cold/evictable)
 - **22 knowledge domains**: pre-created directory skeleton
-- **CLI tool (`oks`)**: search, recall, wiki CRUD, drafts, distill, lint, status, metrics, sync
+- **Global config**: `~/.oks/config.json` enables cross-project access from any directory
+- **CLI tool (`oks`)**: search, recall, wiki CRUD, drafts, ingest, handlers, distill, lint, status, metrics, sync, config
 
 ## Raw Material vs Memory — The Core Distinction
 
@@ -81,7 +83,7 @@ open-knowledge-studio/
 | Skill | Purpose |
 |-------|---------|
 | `/start` | First-time setup: choose domain, build structure, scan raw/ |
-| `/ingest` | Triage raw/ files → AI grade A/B/C → A-grade to drafts/ |
+| `/ingest` | Universal intake: multi-modal handler dispatch → raw/, then A/B/C triage → drafts/ |
 | `/query` | 6-factor recall → inject into context → AI answers with citations |
 | `/lint` | Scan wiki/: frontmatter, orphans, broken links, stale |
 | `/compile` | Re-compile concept pages from sources → drafts/ |
@@ -102,12 +104,17 @@ oks drafts list | promote <slug> | reject <slug>
 oks distill [--dry-run]
 oks lint | status | metrics | decay
 oks sync [--pull]
+oks ingest <url|path|dir> [--handler video] [--dry-run]
+oks handlers list | enable <name> | disable <name>
+oks config init | show | set <key> <value>
 ```
 
 ## Conventions
 
-- **raw/** is human-collected only. LLM reads but does not write to raw/.
+- **raw/** is fed by handlers (modality conversion) or human-collected. Handlers preserve maximum fidelity — they convert format, not knowledge. LLM does not write knowledge to raw/.
 - **wiki/** is LLM-written, human-approved via drafts/ review.
+- **Handlers** may use AI APIs (vision, STT) via keys from `~/.oks/config.json`. The CLI core does not call AI APIs.
+- **Global config** (`~/.oks/config.json`) enables cross-project access — `oks recall` works from any directory.
 - **Git IS the migration** — no database, schema changes versioned through _meta/.
 - **Atomic writes** — all persistent writes use mkstemp + fsync + os.replace.
 - **Never auto-promote** raw content to wiki/ without human review.

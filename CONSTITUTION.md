@@ -18,18 +18,34 @@ Directory fsync after replace is required for crash safety.
 
 **Do not** write wiki pages or config with bare `open(path, 'w')`.
 
-### P3: raw/ is human-collected, wiki/ is LLM-written
+### P3: raw/ is human-collected or handler-processed, wiki/ is LLM-written
 
-- `raw/` contains original materials collected by humans. LLM reads but
-  does not write to `raw/`.
+- `raw/` contains original materials collected by humans OR processed by
+  handlers (modality conversion: video→text, audio→text, URL→markdown).
+  Handlers preserve maximum fidelity — they convert format, not knowledge.
+  LLM does not write knowledge to `raw/`.
 - `wiki/` contains curated knowledge written by LLM via the Dreaming cycle,
   approved by humans through `drafts/` review.
 
-### P4: No AI configuration
+### P4: CLI core is API-free, handlers may use AI APIs
 
-The AI engine is Claude Code itself. There is no `config.json` with
-`base_url`, `api_key`, or `model` settings. The CLI tool (`oks`) handles
-only file system operations and recall scoring — it does not call AI APIs.
+The AI engine is Claude Code itself. The CLI core (`oks`) handles only file
+system operations and recall scoring — it does not call AI APIs. However,
+**handlers** (modality processors) may use AI APIs (vision, STT) via keys
+from `~/.oks/config.json`. This is modality conversion, not knowledge creation.
+
+### P5: Universal intake — maximum fidelity principle
+
+The intake pipeline accepts any modality (URL, PDF, video, audio, image, repo)
+and outputs structured markdown to `raw/`. The core constraint is **maximum
+fidelity preservation**: handlers extract original content directly when
+possible, and only use AI to fill gaps (frame descriptions, audio transcripts).
+Output is layered: `[原始文本]` + `[AI描述]` + `[元数据]` so downstream
+distillation can distinguish source types.
+
+Handlers are registered in `settings/handlers.json` and discovered via
+`HandlerRegistry`. Disabled handlers are skipped — the system degrades
+gracefully (e.g., no ffmpeg → video handler unavailable → user installs it).
 
 ---
 
