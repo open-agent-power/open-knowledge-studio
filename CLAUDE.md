@@ -6,12 +6,14 @@
 
 Open Knowledge Studio is a file-based knowledge base system designed for use with Claude Code. It provides:
 
-- **5-bucket architecture**: profiles/, raw/, wiki/, drafts/, settings/
+- **5-bucket architecture**: profiles/ (incl. recipes, goals), raw/, wiki/, drafts/, settings/
 - **Three-level tool protocol**: agent-direct intake (L0 system tools, L1 OKS protocol CLIs, L2 independent tools)
 - **6-factor recall engine**: token overlap + substring + topic trace + type boost + review penalty + memory curve
+- **4 knowledge relationships**: supersedes, enriches, confirms, challenges (CONSTITUTION A4)
+- **Recipes & goals**: executable automation recipes + goal-aware recall boosting
 - **Dreaming cycle**: raw → AI distill → drafts → human review → wiki
 - **Decay system**: memory curve scoring with type-specific λ, tier classification (hot/warm/cold/evictable)
-- **22 knowledge domains**: pre-created directory skeleton
+- **Date-based raw/**: `raw/{YYYY}/{MM}/{DD}/{source}/` — auto-organized by intake date + source category
 - **Global config**: `~/.oks/config.json` enables cross-project access from any directory
 - **CLI tool (`oks`)**: search, recall, wiki CRUD, drafts, distill, lint, status, metrics, sync, config
 
@@ -23,7 +25,7 @@ Open Knowledge Studio is a file-based knowledge base system designed for use wit
 | **Who writes** | Human collects, LLM reads only | LLM writes via Dreaming, human approves |
 | **Decay** | None | Type-specific λ |
 | **Recall** | Keyword + freshness | 6-factor relevance + memory curve |
-| **Advantage** | Typed intake (4 subdirs), A/B/C grading, fingerprint dedup | 22-domain structure, decay tiers, Crystal synthesis |
+| **Advantage** | Date-based ({YYYY}/{MM}/{DD}/{source}/), A/B/C grading, fingerprint dedup | 22-domain structure, decay tiers, 4 relationships |
 
 A strong workflow: save the source into `raw/`, then distill the parts worth keeping into `wiki/` memories.
 
@@ -64,8 +66,8 @@ See `CONSTITUTION.md` for the full memory design (A1-A5):
 ```
 open-knowledge-studio/
 ├── .claude/          # Claude Code skills (8) + hooks (3) + rules (2)
-├── profiles/         # ① Portraits — team, users, projects
-├── raw/              # ② Raw materials — articles, papers, repos
+├── profiles/         # ① Portraits — team, users, projects, recipes, goals
+├── raw/              # ② Raw materials — date-based: {YYYY}/{MM}/{DD}/{source}/
 ├── wiki/             # ③ Curated knowledge — 22 domains × 3 types
 ├── drafts/           # ④ Dreaming candidates
 ├── settings/         # ⑤ System config — decay, input sources

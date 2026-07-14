@@ -85,11 +85,11 @@ and recall strategy.
 
 | Bucket | Purpose | Decay | Recall |
 |--------|---------|-------|--------|
-| `profiles/` | Team/user/project portraits | None | Direct read |
-| `raw/` | Original records (articles, papers, traces) | None | Keyword + freshness |
+| `profiles/` | Team/user/project portraits, recipes, goals | None | Direct read (goals influence recall relevance) |
+| `raw/` | Original records, date-based by source | None | Keyword + freshness (rglob any structure) |
 | `wiki/` | Curated knowledge (from raw via Dreaming) | Type-specific λ | 6-factor relevance + curve |
 | `drafts/` | Dreaming candidates (raw → wiki intermediate) | None | N/A (human review) |
-| `settings/` | System infrastructure (decay-config, input-sources) | None | Direct read |
+| `settings/` | System infrastructure (handlers.json, input-sources, decay-config) | None | Direct read |
 
 **Directory structure:**
 
@@ -98,19 +98,22 @@ open-knowledge-studio/
 ├── profiles/                     # ① Portraits
 │   ├── team.md
 │   ├── users/{id}.md
-│   └── projects/{slug}.md
+│   ├── projects/{slug}.md
+│   ├── recipes/{slug}.md         # Executable automation recipes
+│   └── goals/{slug}.md           # Goals & objectives (influences recall)
 ├── raw/                          # ② Original records
 │   └── {YYYY}/{MM}/{DD}/
-│       └── {topic_id}/
-│           ├── conversation.jsonl
-│           └── summary.md
+│       └── {source}/             # articles | papers | videos | audio | repos | misc
+│           ├── {slug}.md
+│           └── {slug}.jsonl
 ├── wiki/                         # ③ Curated knowledge
 │   └── {domain}/{type}/{slug}.md  # concept | strategy | anti-pattern
 ├── drafts/                       # ④ Dreaming candidates
 │   └── {slug}.md
 └── settings/                     # ⑤ System config
     ├── decay-config.yaml
-    └── input-sources.json
+    ├── handlers.json             # 3-level tool registry
+    └── input-sources.json        # Scheduled intake sources
 ```
 
 **Memory curve scoring** (wiki/):
@@ -148,17 +151,25 @@ recall, scope, and decay:
 |------|---------|--------|-------|-------|
 | User Memory | `profiles/users/{id}.md` | Direct read | None | `user_id` |
 | Project Memory | `profiles/projects/{slug}.md` | Direct read | None | `project_slug` |
-| Episodic Memory | `raw/{date}/{topic}/conversation.jsonl` | Keyword + freshness | None | `topic_id` |
+| Episodic Memory | `raw/{YYYY}/{MM}/{DD}/{source}/` | Keyword + freshness | None | `source`, `date` |
 | Semantic Memory | `wiki/{domain}/{type}/{slug}.md` | 6-factor relevance + curve | Type-specific λ | `domain` |
 | Procedural Memory | `.claude/skills/{slug}/` | Keyword trigger | None | — |
 | Draft Memory | `drafts/{slug}.md` | N/A | None | N/A |
 
 **Bucket mapping:** The six types map to five buckets + Claude Code skills:
-- User/Project Memory → `profiles/`
-- Episodic Memory → `raw/`
+- User/Project Memory → `profiles/` (also includes `recipes/` and `goals/`)
+- Episodic Memory → `raw/` (date-based: `{YYYY}/{MM}/{DD}/{source}/`)
 - Semantic Memory → `wiki/`
 - Draft Memory → `drafts/`
 - Procedural Memory → `.claude/skills/` (managed by Claude Code)
+
+**Recipes** (`profiles/recipes/`): Executable automation patterns with triggers,
+steps, tools, and schedules. Not cognitive knowledge (wiki/ strategy) —
+recipes are "how to do" playbooks the agent can follow.
+
+**Goals** (`profiles/goals/`): Team/user objectives with status and period.
+Active goals influence recall relevance — wiki pages matching an active
+goal's domain/keywords receive a relevance boost.
 
 **Injection order** (stable first for KV Cache, mutable last):
 
@@ -180,7 +191,8 @@ recall, scope, and decay:
 **Scope filtering:** Profiles must be filtered before injection:
 - User Memory: only the current user's profile
 - Project Memory: only the current project's profile
-- Episodic: filter by `topic_id` when available
+- Episodic: filter by `source` and `date` when available
+- Goals: active goals boost recall relevance for matching domains/keywords
 
 **Do not** inject another user's preferences or another project's facts
 into the current context.
@@ -218,17 +230,18 @@ are tracked. The system never silently overwrites old knowledge.
 
 **Relationship types:**
 
-| Relationship | Meaning | Effect on old page |
-|--------------|---------|---------------------|
-| `supersedes` | New page replaces the old one | Marked `status: superseded` with `superseded_by` field. Excluded from recall. Retained on disk for audit history. |
-| `enriches` | New page adds to the old one | Both stay `active`. New page linked via `enriches` field. |
-| `confirms` | New page validates the old one | Old page `confidence` boosted by +0.1 (max 1.0). New page linked via `confirms` field. |
-| `challenges` | New page contradicts the old one | Old page marked `[stale]` source label, flagged for review. New page linked via `challenges` field. |
+| Relationship | Meaning | Effect on old page | New page fields |
+|--------------|---------|---------------------|-----------------|
+| `supersedes` | New page replaces the old one | `status: superseded`, `superseded_by: {slug}`. Excluded from recall. | `relates_to`, `relationship: supersedes` |
+| `enriches` | New page adds to the old one | Both stay `active`. `enriched_by: {slug}` added. | `relates_to`, `relationship: enriches` |
+| `confirms` | New page validates the old one | `confidence` boosted by +0.1 (max 1.0). `confirmed_by: {slug}` added. | `relates_to`, `relationship: confirms` |
+| `challenges` | New page contradicts the old one | `status: stale`, `challenged_by: {slug}`. Still in recall but carries `[stale]` label. | `relates_to`, `relationship: challenges` |
 
-`write_wiki_page()` accepts a `relates_to` parameter (slug of the existing
-page) and a `relationship` parameter (`supersedes` | `enriches` | `confirms` |
-`challenges`). When set, the old page's frontmatter is updated before the new
-page is written.
+`write_wiki_page()` accepts `relates_to` (slug of existing page) and
+`relationship` (`supersedes` | `enriches` | `confirms` | `challenges`).
+The `supersedes` parameter is kept for backward compatibility — it's
+merged into `relates_to` + `relationship` internally. When set, the old
+page's frontmatter is updated before the new page is written.
 
 **Superseded pages** are excluded from recall and `get_top_wiki()` but
 retained on disk for audit history. Git history is the safety net, but
