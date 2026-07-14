@@ -36,11 +36,15 @@ not call AI APIs and does not wrap tool calls.
 External tools (Level 1/2) may use AI APIs (vision, STT) independently.
 The agent calls these tools directly via Bash; OKS is not in the runtime path.
 
-### P5: Agent-direct intake — three-level tool protocol
+### P5: OKS provides capability, not runtime wrapping
 
-The intake pipeline is orchestrated by Claude Code itself, not by OKS.
-OKS is a capability layer: it provides the routing table
-(`settings/handlers.json`) and gets out of the way.
+**Core invariant: OKS 只提供能力，不提供运行时包装。**
+
+OKS is a capability layer — it installs, configures, routes, and health-checks.
+It is NOT a runtime wrapper. The agent (Claude Code) IS the orchestrator:
+it reads the routing table, checks tool availability via Bash, calls tools
+directly, and writes results to `raw/`. OKS is never in the runtime path
+between the agent and the tool.
 
 **Three-level tool protocol:**
 
@@ -59,7 +63,16 @@ Tools are registered in `settings/handlers.json` with `level`, `check_cmd`,
 `install_hint`, `raw_subdir` fields. The agent checks availability by
 running `check_cmd` via Bash — no CLI doctor command needed.
 
-**Do not** build a runtime wrapper. The agent calls tools directly.
+**Do not** build a runtime wrapper — OKS must not sit between the agent
+and external tools (no `oks ingest <input>` that internally dispatches
+to handlers). The agent calls tools directly via Bash.
+
+**Do not** add AI API calls to the CLI core — `oks` handles only file
+system operations and recall scoring. External tools (L1/L2) may use AI
+APIs independently.
+
+**Do not** auto-detect modality inside OKS — modality detection is the
+agent's job, guided by the routing table in `settings/handlers.json`.
 
 ---
 
