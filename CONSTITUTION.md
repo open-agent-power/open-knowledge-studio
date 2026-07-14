@@ -18,34 +18,48 @@ Directory fsync after replace is required for crash safety.
 
 **Do not** write wiki pages or config with bare `open(path, 'w')`.
 
-### P3: raw/ is human-collected or handler-processed, wiki/ is LLM-written
+### P3: raw/ is human-collected or tool-processed, wiki/ is LLM-written
 
 - `raw/` contains original materials collected by humans OR processed by
-  handlers (modality conversion: video→text, audio→text, URL→markdown).
-  Handlers preserve maximum fidelity — they convert format, not knowledge.
+  external tools (modality conversion: video→text, audio→text, URL→markdown).
+  Tools preserve maximum fidelity — they convert format, not knowledge.
   LLM does not write knowledge to `raw/`.
 - `wiki/` contains curated knowledge written by LLM via the Dreaming cycle,
   approved by humans through `drafts/` review.
 
-### P4: CLI core is API-free, handlers may use AI APIs
+### P4: CLI core is API-free, external tools may use AI APIs
 
-The AI engine is Claude Code itself. The CLI core (`oks`) handles only file
-system operations and recall scoring — it does not call AI APIs. However,
-**handlers** (modality processors) may use AI APIs (vision, STT) via keys
-from `~/.oks/config.json`. This is modality conversion, not knowledge creation.
+The AI engine is Claude Code itself — it IS the orchestrator. The CLI core
+(`oks`) handles only file system operations and recall scoring — it does
+not call AI APIs and does not wrap tool calls.
 
-### P5: Universal intake — maximum fidelity principle
+External tools (Level 1/2) may use AI APIs (vision, STT) independently.
+The agent calls these tools directly via Bash; OKS is not in the runtime path.
 
-The intake pipeline accepts any modality (URL, PDF, video, audio, image, repo)
-and outputs structured markdown to `raw/`. The core constraint is **maximum
-fidelity preservation**: handlers extract original content directly when
-possible, and only use AI to fill gaps (frame descriptions, audio transcripts).
-Output is layered: `[原始文本]` + `[AI描述]` + `[元数据]` so downstream
-distillation can distinguish source types.
+### P5: Agent-direct intake — three-level tool protocol
 
-Handlers are registered in `settings/handlers.json` and discovered via
-`HandlerRegistry`. Disabled handlers are skipped — the system degrades
-gracefully (e.g., no ffmpeg → video handler unavailable → user installs it).
+The intake pipeline is orchestrated by Claude Code itself, not by OKS.
+OKS is a capability layer: it provides the routing table
+(`settings/handlers.json`) and gets out of the way.
+
+**Three-level tool protocol:**
+
+| Level | Type | Example | Called by | Output |
+|-------|------|---------|-----------|--------|
+| 0 | System tool | curl, pdftotext | Agent via Bash | Raw stdout |
+| 1 | OKS protocol CLI | oks-video | Agent via Bash | JSON to stdout |
+| 2 | Independent tool | agent-reach, yt-dlp | Agent via Bash | Tool-specific |
+
+**Level 1 JSON output protocol:**
+```json
+{"markdown": "...", "title": "...", "source": "...", "modality": "...", "metadata": {}}
+```
+
+Tools are registered in `settings/handlers.json` with `level`, `check_cmd`,
+`install_hint`, `raw_subdir` fields. The agent checks availability by
+running `check_cmd` via Bash — no CLI doctor command needed.
+
+**Do not** build a runtime wrapper. The agent calls tools directly.
 
 ---
 

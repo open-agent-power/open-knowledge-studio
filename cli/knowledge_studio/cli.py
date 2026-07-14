@@ -26,11 +26,9 @@ console = Console()
 
 wiki_app = typer.Typer(help="Wiki page management.")
 drafts_app = typer.Typer(help="Draft proposal management.")
-handlers_app = typer.Typer(help="Handler management — multi-modal intake plugins.")
 config_app = typer.Typer(help="Global configuration (~/.oks/config.json).")
 app.add_typer(wiki_app, name="wiki")
 app.add_typer(drafts_app, name="drafts")
-app.add_typer(handlers_app, name="handlers")
 app.add_typer(config_app, name="config")
 
 
@@ -427,93 +425,6 @@ def sync(
         console.print("[green]Sync complete.[/green]")
     else:
         console.print("[red]Sync failed.[/red]")
-        raise typer.Exit(1)
-
-
-# ── Ingest — Universal Intake ─────────────────────────────────────
-
-@app.command()
-def ingest(
-    input_path: str = typer.Argument(help="URL, file path, or directory to ingest"),
-    handler: str = typer.Option(None, "--handler", "-H", help="Force specific handler (web/pdf/video/audio/image/repo)"),
-    dry_run: bool = typer.Option(False, "--dry-run", help="Detect only, don't write to raw/"),
-):
-    """Universal multi-modal intake — auto-detects modality and processes input."""
-    from knowledge_studio.ingest import ingest as run_ingest
-
-    result = run_ingest(input_path, handler_name=handler, dry_run=dry_run)
-
-    if result.get("error"):
-        console.print(f"[red]Error:[/red] {result['error']}")
-        if result.get("hint"):
-            console.print(f"[dim]Hint: {result['hint']}[/dim]")
-        raise typer.Exit(1)
-
-    if dry_run:
-        console.print(f"[cyan]Dry run:[/cyan] modality={result['modality']} handler={result['handler']}")
-        return
-
-    console.print(f"[green]Ingested:[/green] {result['raw_path']}")
-    console.print(f"  [dim]Modality: {result['modality']}  Handler: {result['handler']}[/dim]")
-    console.print(f"  [dim]Title: {result['title']}[/dim]")
-
-
-# ── Handlers ────────────────────────────────────────────────────
-
-@handlers_app.command("list")
-def handlers_list():
-    """List registered modality handlers."""
-    from knowledge_studio.handlers.registry import HandlerRegistry
-
-    registry = HandlerRegistry()
-    handlers = registry.list_handlers()
-
-    table = Table(show_header=True, header_style="bold cyan")
-    table.add_column("Name", style="dim", max_width=15)
-    table.add_column("Modalities", max_width=40)
-    table.add_column("Description", max_width=40)
-    table.add_column("Enabled", justify="center", max_width=8)
-    table.add_column("Available", justify="center", max_width=10)
-
-    for h in handlers:
-        table.add_row(
-            h["name"],
-            ", ".join(h["modalities"]),
-            h["description"],
-            "[green]✓[/green]" if h["enabled"] else "[red]✗[/red]",
-            "[green]✓[/green]" if h["available"] else "[red]✗[/red]",
-        )
-
-    console.print(table)
-
-
-@handlers_app.command("enable")
-def handlers_enable(
-    name: str = typer.Argument(help="Handler name (web/pdf/video/audio/image/repo)"),
-):
-    """Enable a handler."""
-    from knowledge_studio.handlers.registry import HandlerRegistry
-
-    registry = HandlerRegistry()
-    if registry.enable(name):
-        console.print(f"[green]Enabled:[/green] {name}")
-    else:
-        console.print(f"[red]Not found:[/red] {name}")
-        raise typer.Exit(1)
-
-
-@handlers_app.command("disable")
-def handlers_disable(
-    name: str = typer.Argument(help="Handler name (web/pdf/video/audio/image/repo)"),
-):
-    """Disable a handler."""
-    from knowledge_studio.handlers.registry import HandlerRegistry
-
-    registry = HandlerRegistry()
-    if registry.disable(name):
-        console.print(f"[yellow]Disabled:[/yellow] {name}")
-    else:
-        console.print(f"[red]Not found:[/red] {name}")
         raise typer.Exit(1)
 
 

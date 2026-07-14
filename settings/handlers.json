@@ -1,38 +1,58 @@
 [
   {
-    "name": "web",
+    "name": "curl",
+    "level": 0,
+    "description": "HTTP fetch — web articles, API endpoints",
+    "check_cmd": "which curl",
+    "install_hint": "brew install curl",
     "modalities": ["url:http", "url:https"],
-    "enabled": true,
-    "description": "Web article fetch + Readability extraction"
+    "raw_subdir": "articles"
   },
   {
-    "name": "pdf",
+    "name": "pdftotext",
+    "level": 0,
+    "description": "PDF → text extraction",
+    "check_cmd": "which pdftotext",
+    "install_hint": "brew install poppler",
     "modalities": ["pdf"],
-    "enabled": true,
-    "description": "PDF parse → text + structure"
+    "raw_subdir": "papers"
   },
   {
-    "name": "video",
-    "modalities": ["mp4", "mov", "avi", "mkv", "webm", "url:youtube", "url:bilibili"],
-    "enabled": false,
-    "description": "Video: ffmpeg frame extraction + Whisper subtitle + Vision analysis"
+    "name": "oks-video",
+    "level": 1,
+    "description": "Video → frames + Whisper transcript + vision analysis",
+    "check_cmd": "oks-video --version",
+    "install_hint": "pip install oks-video",
+    "modalities": ["mp4", "mov", "avi", "mkv", "webm"],
+    "raw_subdir": "videos",
+    "json_protocol": true
   },
   {
-    "name": "audio",
+    "name": "oks-audio",
+    "level": 1,
+    "description": "Audio → Whisper STT transcript",
+    "check_cmd": "oks-audio --version",
+    "install_hint": "pip install oks-audio",
     "modalities": ["mp3", "wav", "m4a", "flac", "aac", "ogg"],
-    "enabled": false,
-    "description": "Audio: Whisper STT → transcript"
+    "raw_subdir": "audio",
+    "json_protocol": true
   },
   {
-    "name": "image",
-    "modalities": ["png", "jpg", "jpeg", "webp", "gif", "bmp"],
-    "enabled": false,
-    "description": "Image: Vision model / OCR → structured description"
+    "name": "agent-reach",
+    "level": 2,
+    "description": "Multi-channel web content extraction (YouTube, Bilibili, etc.)",
+    "check_cmd": "which agent-reach",
+    "install_hint": "pip install agent-reach",
+    "modalities": ["url:youtube", "url:bilibili"],
+    "raw_subdir": "articles"
   },
   {
-    "name": "repo",
-    "modalities": ["directory"],
-    "enabled": true,
-    "description": "Code repo: structure scan + README + key patterns"
+    "name": "yt-dlp",
+    "level": 2,
+    "description": "Video/audio download from YouTube and other platforms",
+    "check_cmd": "yt-dlp --version",
+    "install_hint": "pip install yt-dlp",
+    "modalities": ["url:youtube", "url:bilibili"],
+    "raw_subdir": "videos"
   }
 ]

@@ -1,78 +1,111 @@
 ---
-description: Universal intake — multi-modal handler dispatch + A/B/C triage of raw/ into drafts/
+description: Multi-modal intake — 3-level routing → raw/, then A/B/C triage → drafts/
 ---
 
-# /ingest — Universal Intake & Triage
+# /ingest — Multi-Modal Intake
 
 ## Purpose
 
-Two roles:
-1. **Intake** — Accept any modality (URL, PDF, video, audio, image, repo), auto-detect and process through the handler pipeline into `raw/`.
-2. **Triage** — Scan `raw/` for unprocessed materials, AI-assess quality, write A-grade items as draft proposals to `drafts/`.
+Accept any modality (URL, PDF, video, audio, image, repo), route to the
+right tool, extract content with maximum fidelity, write to `raw/`.
+Then triage: A-grade → drafts/, B-grade → skip, C-grade → skip.
 
-## Phase 1: Universal Intake
+## Phase 1: Intake — 3-Level Routing Table
 
-When the user provides a URL, file path, or directory:
+Agent reads `settings/handlers.json` as a routing reference and routes
+by modality detection.
+
+### Modality Detection
+
+| Input pattern | Modality | Route to |
+|---------------|----------|----------|
+| `http://` or `https://` (general) | url | curl (L0) or agent-reach (L2) |
+| `youtube.com` or `youtu.be` | url:youtube | agent-reach (L2) or yt-dlp (L2) |
+| `bilibili.com` | url:bilibili | agent-reach (L2) or yt-dlp (L2) |
+| `*.pdf` | pdf | pdftotext (L0) |
+| `*.mp4 *.mov *.avi *.mkv *.webm` | video | oks-video (L1) |
+| `*.mp3 *.wav *.m4a *.flac *.aac *.ogg` | audio | oks-audio (L1) |
+| `*.png *.jpg *.jpeg *.webp *.gif *.bmp` | image | vision API via agent (L0) |
+| Directory path | repo | agent scans directly (L0) |
+
+### Tool Availability Check
+
+Before routing, agent checks if the selected tool is available by
+running its `check_cmd` from `settings/handlers.json` via Bash:
 
 ```bash
-# Auto-detect modality and process
-oks ingest <input>              # writes to raw/{articles,papers,repos,misc}/
-
-# Preview without writing
-oks ingest <input> --dry-run
-
-# Force a specific handler
-oks ingest <input> --handler video
+# Example: check if curl is available
+which curl
 ```
 
-### Handler Pipeline
+If the tool is missing, inform the user with the `install_hint` from
+handlers.json and suggest an alternative tool if one exists.
 
+### Level 0 — System Tools (agent runs directly)
+
+Agent uses Bash to run system commands directly:
+- `curl -sL <url>` → HTML → agent extracts text
+- `pdftotext <file> -` → text
+- Directory scan: `find`, `cat`, `ls` → agent reads structure
+
+Output: raw stdout, agent writes to `raw/{subdir}/{slug}.md`
+
+### Level 1 — OKS Protocol CLIs
+
+Agent calls CLI tools that output standard JSON:
+```json
+{"markdown": "...", "title": "...", "source": "...", "modality": "...", "metadata": {}}
 ```
-Input (any modality)
-  ↓ detect_modality() — URL? file ext? directory?
-  ↓ HandlerRegistry.find_handler() — match to available handler
-  ↓ handler.process() — modality-specific processing
-  ↓ Maximum Fidelity Principle:
-    - Original text extracted directly (no AI summary)
-    - AI only fills gaps (frame descriptions, audio transcripts)
-    - Layered output: [原始文本] + [AI描述] + [元数据]
-  ↓ Write to raw/{subdir}/{slug}.md with frontmatter
-```
 
-### Available Handlers
+- `oks-video <file>` → JSON with transcript + frame descriptions
+- `oks-audio <file>` → JSON with transcript
 
-| Handler | Modalities | Dependencies | Status |
-|---------|-----------|--------------|--------|
-| web | http/https URLs | None (stdlib) | Enabled |
-| pdf | .pdf files | pypdf | Enabled |
-| repo | Git directories | None (stdlib) | Enabled |
-| video | mp4/mov/youtube/bilibili | ffmpeg + whisper + vision API | Disabled (opt-in) |
-| audio | mp3/wav/m4a/flac | whisper | Disabled (opt-in) |
-| image | png/jpg/webp | Vision API key | Disabled (opt-in) |
+Agent writes `markdown` field to `raw/{subdir}/{slug}.md`
 
-Enable handlers: `oks handlers enable video` → install deps → set API keys via `oks config set`.
+### Level 2 — Independent Tools
 
-## Phase 2: A/B/C Triage
+Agent calls external tools directly, parses their output:
+- `agent-reach <url>` → markdown/JSON
+- `yt-dlp <url>` → downloaded file → further processing
 
-After materials are in `raw/`, or when the user asks to "ingest" or "process raw":
+Agent adapts to each tool's output format.
 
-1. **Scan raw/** — List files in raw/articles/, raw/papers/, raw/repos/, raw/misc/.
-2. **For each file, AI-assess:**
-   - **Relevance** — Does this relate to active domains?
-   - **Quality** — Is the content substantial (≥50 chars)?
-   - **Novelty** — Run `oks search <keywords>` to check duplicates.
-   - **Grade**: A (→ drafts/), B (→ held), C (skip)
-3. **Quality gates:**
-   - Content < 50 chars → skip
-   - Generic title ("Untitled", "Note") → skip
-   - Importance < 0.3 → skip
-   - Duplicate fingerprint → skip
-4. **For A-grade items** — Extract concepts, determine type + area, write to `drafts/{slug}.md`.
-5. **Report** — Summary: X scanned, Y drafted, Z held, W skipped.
+### Intake Workflow
+
+1. **Detect** — agent determines modality from input pattern
+2. **Check** — run `check_cmd` via Bash to verify tool is available
+3. **Route** — select tool by level (prefer L0, then L1, then L2)
+4. **Execute** — agent runs tool directly via Bash
+5. **Write** — agent writes extracted content to `raw/{subdir}/{slug}.md`
+   - Write to: `{kb_root}/raw/{YYYY}/{MM}/{DD}/{topic_id}/` or `raw/{subdir}/`
+   - Use atomic write pattern (mkstemp + fsync + os.replace)
+6. **Record** — log source URL/path, modality, tool used in frontmatter
+
+### Maximum Fidelity Principle
+
+- Extract original content directly when possible (curl, pdftotext)
+- AI only fills gaps (frame descriptions, audio transcripts)
+- Output is layered: `[原始文本]` + `[AI描述]` + `[元数据]`
+
+## Phase 2: Triage — A/B/C Grading
+
+After intake, scan `raw/` for unprocessed files:
+
+1. **For each new file, AI-assess:**
+   - **Relevance** — relates to active domains?
+   - **Quality** — substantial content (≥50 chars)?
+   - **Novelty** — run `oks search <keywords>` to check duplicates
+   - **Grade**: A (→ drafts/), B (→ skip), C (→ skip)
+
+2. **For A-grade items** — Extract concepts, determine type + area,
+   write to `drafts/{slug}.md` with source reference.
+
+3. **Report** — Summary: X scanned, Y drafted, Z skipped.
 
 ## Rules
 
-- Never write directly to `wiki/` — always through `drafts/` for human review (CONSTITUTION.md A3).
-- Include source reference in the draft body.
-- Handlers that need AI models (vision, STT) read API keys from `~/.oks/config.json`.
-- If a handler is not available, report the dependency hint — don't silently fail.
+- Never write directly to `wiki/` — always through `drafts/`.
+- Include source reference in every draft.
+- Agent is the orchestrator — OKS does NOT wrap tool calls.
+- Agent checks tool availability via Bash (`which curl`, etc.),
+  NOT via a CLI doctor command.

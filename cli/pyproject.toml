@@ -15,13 +15,7 @@ dependencies = [
     "jieba>=0.42",
     "gitpython>=3",
     "pyyaml>=6",
-    "pypdf>=4",
 ]
-
-[project.optional-dependencies]
-video = ["openai-whisper"]
-image = ["httpx"]
-handlers = ["openai-whisper", "httpx"]
 
 [project.scripts]
 oks = "knowledge_studio.cli:app"
