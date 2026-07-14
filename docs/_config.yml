@@ -1,6 +1,6 @@
 remote_theme: just-the-docs/just-the-docs
 title: Open Knowledge Studio
-description: 面向 Claude Code 的知识工程仓库 — raw → wiki → recall
+description: 面向 AI Agent 的知识工程工作区 — raw → wiki → recall
 baseurl: "/open-knowledge-studio"
 url: "https://open-agent-power.github.io"
 lang: zh-CN
@@ -25,3 +25,9 @@ back_to_top: true
 back_to_top_text: "回到顶部"
 
 color_scheme: light
+
+aux_links:
+  "GitHub":
+    - "https://github.com/open-agent-power/open-knowledge-studio"
+
+footer_content: 'Copyright &copy; 2026 Open Knowledge Studio. <a href="https://github.com/open-agent-power/open-knowledge-studio/blob/main/LICENSE">MIT License</a>.'

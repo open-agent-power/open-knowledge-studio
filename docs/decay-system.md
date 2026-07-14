@@ -74,3 +74,7 @@ pin_bonus: 0.5
 - **pin_bonus** — Pinned 页面获得的额外分数
 
 源码：`cli/knowledge_studio/store.py`
+
+---
+
+{% include comments.html %}

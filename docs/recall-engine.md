@@ -14,6 +14,8 @@ nav_order: 5
 | **Keyword（关键词）** | 精确匹配特定术语 | Substring match |
 | **Graph（图谱）** | 通过主题关联和类型加权查找 | Topic trace + type boost + review penalty |
 
+<img src="assets/recall-engine.svg" alt="Recall Engine" style="max-width:100%;height:auto;" />
+
 三种模式在每次查询时自动运行。6 因子引擎将它们与记忆曲线乘数结合，生成最终相关性评分。
 
 ## 评分公式
@@ -121,3 +123,7 @@ oks recall "authentication" --limit 5
 * **[Memories](memories.md)**：Memory 结构、类型和创建路径
 * **[Decay System](decay-system.md)**：记忆曲线公式和 tier 分级
 * **[Architecture](architecture.md)**：五桶结构
+
+---
+
+{% include comments.html %}

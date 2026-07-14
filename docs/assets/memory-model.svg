@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 420" font-family="'SF Mono','Fira Code',monospace" fill="none">
+  <rect x="20" y="20" width="180" height="55" rx="6" fill="#fff3e0" stroke="#ff8a65" stroke-width="1.5"/>
+  <text x="110" y="42" text-anchor="middle" font-size="11" font-weight="bold" fill="#5d4037">User Memory</text>
+  <text x="110" y="60" text-anchor="middle" font-size="10" fill="#795548">profiles/users/</text>
+  <rect x="220" y="20" width="180" height="55" rx="6" fill="#fff3e0" stroke="#ff8a65" stroke-width="1.5"/>
+  <text x="310" y="42" text-anchor="middle" font-size="11" font-weight="bold" fill="#5d4037">Project Memory</text>
+  <text x="310" y="60" text-anchor="middle" font-size="10" fill="#795548">profiles/projects/</text>
+  <rect x="420" y="20" width="180" height="55" rx="6" fill="#e8f5e9" stroke="#66bb6a" stroke-width="1.5"/>
+  <text x="510" y="42" text-anchor="middle" font-size="11" font-weight="bold" fill="#2e7d32">Episodic Memory</text>
+  <text x="510" y="60" text-anchor="middle" font-size="10" fill="#558b2f">raw/{date}/{source}/</text>
+  <rect x="620" y="20" width="180" height="55" rx="6" fill="#e3f2fd" stroke="#42a5f5" stroke-width="1.5"/>
+  <text x="710" y="42" text-anchor="middle" font-size="11" font-weight="bold" fill="#1565c0">Semantic Memory</text>
+  <text x="710" y="60" text-anchor="middle" font-size="10" fill="#1976d2">wiki/{domain}/{type}/</text>
+  <rect x="120" y="100" width="180" height="55" rx="6" fill="#f3e5f5" stroke="#ab47bc" stroke-width="1.5"/>
+  <text x="210" y="122" text-anchor="middle" font-size="11" font-weight="bold" fill="#6a1b9a">Procedural Memory</text>
+  <text x="210" y="140" text-anchor="middle" font-size="10" fill="#8e24aa">.claude/skills/</text>
+  <rect x="340" y="100" width="180" height="55" rx="6" fill="#fff8e1" stroke="#ffc107" stroke-width="1.5"/>
+  <text x="430" y="122" text-anchor="middle" font-size="11" font-weight="bold" fill="#5d4037">Draft Memory</text>
+  <text x="430" y="140" text-anchor="middle" font-size="10" fill="#795548">drafts/</text>
+  <rect x="20" y="200" width="140" height="80" rx="8" fill="#fff3e0" stroke="#ff8a65" stroke-width="2" stroke-dasharray="4 3"/>
+  <text x="90" y="232" text-anchor="middle" font-size="13" font-weight="bold" fill="#5d4037">profiles/</text>
+  <text x="90" y="252" text-anchor="middle" font-size="10" fill="#795548">User · Project</text>
+  <text x="90" y="268" text-anchor="middle" font-size="10" fill="#795548">Recipes · Goals</text>
+  <rect x="190" y="200" width="140" height="80" rx="8" fill="#e8f5e9" stroke="#66bb6a" stroke-width="2" stroke-dasharray="4 3"/>
+  <text x="260" y="232" text-anchor="middle" font-size="13" font-weight="bold" fill="#2e7d32">raw/</text>
+  <text x="260" y="252" text-anchor="middle" font-size="10" fill="#558b2f">Episodic</text>
+  <text x="260" y="268" text-anchor="middle" font-size="10" fill="#558b2f">{date}/{source}/</text>
+  <rect x="360" y="200" width="140" height="80" rx="8" fill="#e3f2fd" stroke="#42a5f5" stroke-width="2" stroke-dasharray="4 3"/>
+  <text x="430" y="232" text-anchor="middle" font-size="13" font-weight="bold" fill="#1565c0">wiki/</text>
+  <text x="430" y="252" text-anchor="middle" font-size="10" fill="#1976d2">Semantic</text>
+  <text x="430" y="268" text-anchor="middle" font-size="10" fill="#1976d2">22域 × 3类型</text>
+  <rect x="530" y="200" width="100" height="80" rx="8" fill="#fff8e1" stroke="#ffc107" stroke-width="2" stroke-dasharray="4 3"/>
+  <text x="580" y="232" text-anchor="middle" font-size="13" font-weight="bold" fill="#5d4037">drafts/</text>
+  <text x="580" y="252" text-anchor="middle" font-size="10" fill="#795548">Draft</text>
+  <rect x="660" y="200" width="140" height="80" rx="8" fill="#f3e5f5" stroke="#ab47bc" stroke-width="2" stroke-dasharray="4 3"/>
+  <text x="730" y="232" text-anchor="middle" font-size="13" font-weight="bold" fill="#6a1b9a">.claude/skills/</text>
+  <text x="730" y="252" text-anchor="middle" font-size="10" fill="#8e24aa">Procedural</text>
+  <text x="410" y="320" text-anchor="middle" font-size="12" font-weight="bold" fill="#37474f">注入顺序（稳定层在前，KV Cache 友好）</text>
+  <rect x="40" y="340" width="740" height="30" rx="4" fill="#fafafa" stroke="#e0e0e0" stroke-width="1"/>
+  <text x="60" y="360" font-size="9" fill="#999">① System</text>
+  <text x="140" y="360" font-size="9" fill="#ff8a65">② Team</text>
+  <text x="210" y="360" font-size="9" fill="#ff8a65">③ Project</text>
+  <text x="290" y="360" font-size="9" fill="#ab47bc">④ Skills</text>
+  <line x1="360" y1="340" x2="360" y2="370" stroke="#bbb" stroke-width="1" stroke-dasharray="2 2"/>
+  <text x="380" y="360" font-size="9" fill="#42a5f5">⑤ Semantic</text>
+  <text x="460" y="360" font-size="9" fill="#66bb6a">⑥ Episodic</text>
+  <text x="540" y="360" font-size="9" fill="#ff8a65">⑦ User Prefs</text>
+  <text x="620" y="360" font-size="8" fill="#ccc">─── KV Cache 断点 ───</text>
+  <text x="760" y="360" text-anchor="end" font-size="9" fill="#ec407a">→ Agent</text>
+  <rect x="40" y="385" width="740" height="25" rx="4" fill="#fce4ec" stroke="#ec407a" stroke-width="1" opacity="0.5"/>
+  <text x="410" y="402" text-anchor="middle" font-size="10" fill="#ad1457">[verified] 工具确认 · [inferred] AI推断 · [stale] 可能过时 · 动态生成，不存储</text>
+</svg>

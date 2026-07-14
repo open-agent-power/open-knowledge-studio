@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 400" font-family="'SF Mono','Fira Code',monospace" fill="none">
+  <defs><marker id="arr2" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#78909c"/></marker></defs>
+  <rect x="310" y="10" width="200" height="40" rx="6" fill="#eceff1" stroke="#78909c" stroke-width="1.5"/>
+  <text x="410" y="35" text-anchor="middle" font-size="13" fill="#37474f">用户查询 query</text>
+  <rect x="20" y="80" width="140" height="55" rx="6" fill="#e8f5e9" stroke="#66bb6a" stroke-width="1.5"/>
+  <text x="90" y="105" text-anchor="middle" font-size="11" font-weight="bold" fill="#2e7d32">1. Token Overlap</text>
+  <text x="90" y="122" text-anchor="middle" font-size="10" fill="#558b2f">jieba 分词 ×0.3</text>
+  <rect x="180" y="80" width="140" height="55" rx="6" fill="#fff3e0" stroke="#ff8a65" stroke-width="1.5"/>
+  <text x="250" y="105" text-anchor="middle" font-size="11" font-weight="bold" fill="#5d4037">2. Substring</text>
+  <text x="250" y="122" text-anchor="middle" font-size="10" fill="#795548">标题 +1.0 / 正文 +0.5</text>
+  <rect x="340" y="80" width="140" height="55" rx="6" fill="#e3f2fd" stroke="#42a5f5" stroke-width="1.5"/>
+  <text x="410" y="105" text-anchor="middle" font-size="11" font-weight="bold" fill="#1565c0">3. Topic Trace</text>
+  <text x="410" y="122" text-anchor="middle" font-size="10" fill="#1976d2">关联追溯 +2.0</text>
+  <rect x="500" y="80" width="140" height="55" rx="6" fill="#f3e5f5" stroke="#ab47bc" stroke-width="1.5"/>
+  <text x="570" y="105" text-anchor="middle" font-size="11" font-weight="bold" fill="#6a1b9a">4. Type Boost</text>
+  <text x="570" y="122" text-anchor="middle" font-size="10" fill="#8e24aa">×1.5 / ×0.8 / ×0.6</text>
+  <rect x="660" y="80" width="140" height="55" rx="6" fill="#fce4ec" stroke="#ec407a" stroke-width="1.5"/>
+  <text x="730" y="105" text-anchor="middle" font-size="11" font-weight="bold" fill="#ad1457">5. Review Penalty</text>
+  <text x="730" y="122" text-anchor="middle" font-size="10" fill="#c2185b">失败 +2.0 / +1.0</text>
+  <rect x="180" y="160" width="460" height="55" rx="6" fill="#fff8e1" stroke="#ffc107" stroke-width="1.5"/>
+  <text x="410" y="185" text-anchor="middle" font-size="11" font-weight="bold" fill="#5d4037">6. Memory Curve</text>
+  <text x="410" y="202" text-anchor="middle" font-size="10" fill="#795548">importance × e^(-λ × days) + 0.5 × ln(1 + access) + pin_bonus</text>
+  <path d="M410,50 L410,78" stroke="#78909c" stroke-width="1.5" marker-end="url(#arr2)"/>
+  <rect x="310" y="250" width="200" height="50" rx="8" fill="#37474f" stroke="#263238" stroke-width="2"/>
+  <text x="410" y="272" text-anchor="middle" font-size="11" font-weight="bold" fill="#eceff1">relevance =</text>
+  <text x="410" y="290" text-anchor="middle" font-size="10" fill="#cfd8dc">(base × type_boost)</text>
+  <path d="M410,300 L410,330" stroke="#78909c" stroke-width="2" marker-end="url(#arr2)"/>
+  <rect x="310" y="335" width="200" height="45" rx="6" fill="#e8f5e9" stroke="#66bb6a" stroke-width="2"/>
+  <text x="410" y="362" text-anchor="middle" font-size="12" font-weight="bold" fill="#2e7d32">排序结果 + 来源标签</text>
+</svg>
