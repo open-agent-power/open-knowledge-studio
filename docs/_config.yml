@@ -1,8 +1,36 @@
-theme: jekyll-theme-cayman
+remote_theme: mmistakes/minimal-mistakes
+minimal_mistakes_skin: contrast
+locale: zh-CN
 title: Open Knowledge Studio
+title_separator: "|"
 description: 面向 Claude Code 的知识工程仓库 — raw → wiki → recall
-lang: zh-CN
+url: "https://open-agent-power.github.io"
+baseurl: "/open-knowledge-studio"
 markdown: kramdown
 kramdown:
   input: GFM
   syntax_highlighter: rouge
+search: true
+search_full_content: true
+search_provider: lunr
+include:
+  - _pages
+exclude:
+  - "*.json"
+  - "*.yaml"
+  - "node_modules"
+  - "Gemfile"
+  - "Gemfile.lock"
+  - "README.md"
+
+defaults:
+  - scope:
+      path: ""
+      type: pages
+    values:
+      layout: single
+      sidebar:
+        nav: "docs"
+      toc: true
+      toc_sticky: true
+      classes: wide
