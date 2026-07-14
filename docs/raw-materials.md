@@ -1,3 +1,7 @@
+---
+title: Raw Materials
+nav_order: 3
+---
 # Raw Materials（原始材料）
 
 Raw 是你的入料层 — 蒸馏之前的原始来源。你读过的文章、收集的论文、研究过的代码仓库、经历过的对话。系统读取它们、评级、然后将持久部分蒸馏为 [Memory](memories.md)。

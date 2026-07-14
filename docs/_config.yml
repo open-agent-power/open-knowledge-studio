@@ -1,36 +1,27 @@
-remote_theme: mmistakes/minimal-mistakes
-minimal_mistakes_skin: contrast
-locale: zh-CN
+remote_theme: just-the-docs/just-the-docs
 title: Open Knowledge Studio
-title_separator: "|"
 description: 面向 Claude Code 的知识工程仓库 — raw → wiki → recall
-url: "https://open-agent-power.github.io"
 baseurl: "/open-knowledge-studio"
+url: "https://open-agent-power.github.io"
+lang: zh-CN
+
 markdown: kramdown
 kramdown:
   input: GFM
   syntax_highlighter: rouge
-search: true
-search_full_content: true
-search_provider: lunr
-include:
-  - _pages
-exclude:
-  - "*.json"
-  - "*.yaml"
-  - "node_modules"
-  - "Gemfile"
-  - "Gemfile.lock"
-  - "README.md"
 
-defaults:
-  - scope:
-      path: ""
-      type: pages
-    values:
-      layout: single
-      sidebar:
-        nav: "docs"
-      toc: true
-      toc_sticky: true
-      classes: wide
+search_enabled: true
+search:
+  heading_level: 2
+  previews: 2
+  preview_words_before: 3
+  preview_words_after: 3
+  tokenizer_separator: /[\s/]+/
+  rel_url: true
+  button: false
+
+heading_anchors: true
+back_to_top: true
+back_to_top_text: "回到顶部"
+
+color_scheme: light

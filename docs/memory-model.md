@@ -1,3 +1,7 @@
+---
+title: 记忆模型
+nav_order: 6
+---
 # Six-Type Memory Model（六型记忆模型）
 
 ## 记忆类型

@@ -1,3 +1,7 @@
+---
+title: 快速开始
+nav_order: 1
+---
 # 快速开始
 
 Open Knowledge Studio 最容易理解的方式是一个循环：

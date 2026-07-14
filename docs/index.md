@@ -1,3 +1,7 @@
+---
+title: 首页
+nav_exclude: true
+---
 # Open Knowledge Studio
 
 > 你的 AI 工具不会替你记住工作内容。Open Knowledge Studio 会。

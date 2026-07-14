@@ -1,3 +1,7 @@
+---
+title: Frontmatter Schema
+nav_order: 9
+---
 # Frontmatter Schema v0.7
 
 Wiki 页面、draft 和画像的 YAML frontmatter 规范。

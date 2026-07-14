@@ -1,3 +1,7 @@
+---
+title: Dreaming 循环
+nav_order: 7
+---
 # Dreaming Cycle（做梦循环）
 
 知识通过**人工审查的 draft 提案**演化 — 系统绝不自动将 raw 内容提升到 wiki。

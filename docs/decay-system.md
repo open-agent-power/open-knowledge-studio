@@ -1,3 +1,7 @@
+---
+title: 衰减系统
+nav_order: 8
+---
 # Decay System（衰减系统）
 
 知识随时间衰减，衰减率由类型决定。

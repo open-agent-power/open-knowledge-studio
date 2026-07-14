@@ -1,3 +1,7 @@
+---
+title: Memories
+nav_order: 2
+---
 # Memories
 
 一条 memory 是一个值得保留的持久知识：一个 concept、一个 strategy、一个 anti-pattern、或一个决策。每条 memory 应该独立可读，不需要完整的对话上下文就能理解。
