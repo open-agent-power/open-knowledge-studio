@@ -1,8 +1,11 @@
 ---
 title: 衰减系统
-nav_order: 8
+nav_order: 15
+parent: 内部机制
 ---
 # Decay System（衰减系统）
+
+*记忆曲线、类型特定 λ 与 tier 分级——知识如何随时间衰减。*
 
 知识随时间衰减，衰减率由类型决定。
 
@@ -28,6 +31,7 @@ Active 页面获得 ×1.2 乘数。Dropped/archived → 0.0。
 | anti-pattern | 0.010 | 中等衰减 — 教训会随场景变化 |
 | unknown | 0.030 | 快速衰减（fallback） |
 
+{: .note }
 Concept 不衰减是因为 "什么是 REST API" 这类知识不会过时。Strategy 衰减最慢是因为 "用微服务拆分单体" 这类策略在几年内仍然有效。Anti-pattern 衰减略快是因为 "不要用 var 声明变量" 这类教训会随语言演进而变化。
 
 ## Tier 分级
@@ -74,3 +78,9 @@ pin_bonus: 0.5
 - **pin_bonus** — Pinned 页面获得的额外分数
 
 源码：`cli/knowledge_studio/store.py`
+
+## 下一步
+
+* **[召回引擎](recall-engine.md)**：记忆曲线如何作为第六因子影响召回
+* **[Dreaming 循环](dreaming-cycle.md)**：衰减在演化循环中的位置
+* **[架构设计](architecture.md)**：五桶结构

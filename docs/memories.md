@@ -1,8 +1,11 @@
 ---
 title: Memories
-nav_order: 2
+nav_order: 3
+parent: 概述
 ---
 # Memories
+
+*wiki 记忆的结构、类型、创建路径与搜索。*
 
 一条 memory 是一个值得保留的持久知识：一个 concept、一个 strategy、一个 anti-pattern、或一个决策。每条 memory 应该独立可读，不需要完整的对话上下文就能理解。
 
@@ -23,13 +26,14 @@ Memories 是 Open Knowledge Studio 的核心单元。搜索、衰减、演化和
 
 ## 第一条有用的 Memory
 
-如果你是新手，不要先纠结结构。保存一条真实内容：
-
-* 一个你学到的 concept
-* 一个有效的 strategy
-* 一个你想避免的 anti-pattern
-
-然后搜索它。一旦跑通，这整页文档就更容易理解了。
+{: .tip }
+> 如果你是新手，不要先纠结结构。保存一条真实内容：
+>
+> * 一个你学到的 concept
+> * 一个有效的 strategy
+> * 一个你想避免的 anti-pattern
+>
+> 然后搜索它。一旦跑通，这整页文档就更容易理解了。
 
 ## Memory 结构
 
@@ -151,6 +155,7 @@ oks wiki archive <slug>  # 归档
 
 ### 删除 Memory
 
+{: .note }
 Memories 从不删除 — 它们被归档（`status: dropped`）或被替代（`status: superseded`）。Git 历史是安全网。
 
 ## 知识演化关系

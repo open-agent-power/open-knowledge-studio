@@ -1,0 +1,36 @@
+<script>
+(function () {
+  function init() {
+    var main = document.querySelector('.main-content');
+    if (main && !main.getAttribute('data-oks-toc')) {
+      main.setAttribute('data-oks-toc', '1');
+      var heads = main.querySelectorAll('h2');
+      if (heads.length >= 2) {
+        var aside = document.createElement('aside');
+        aside.className = 'toc-right';
+        var title = document.createElement('div');
+        title.className = 'toc-right-title';
+        title.textContent = 'On this page';
+        aside.appendChild(title);
+        var ul = document.createElement('ul');
+        heads.forEach(function (h) {
+          var li = document.createElement('li');
+          var a = document.createElement('a');
+          a.href = '#' + (h.id || '');
+          a.textContent = h.textContent;
+          li.appendChild(a);
+          ul.appendChild(li);
+        });
+        aside.appendChild(ul);
+        var mainEl = document.querySelector('.main');
+        if (mainEl) mainEl.appendChild(aside);
+      }
+    }
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();
+</script>

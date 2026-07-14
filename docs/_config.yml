@@ -25,3 +25,32 @@ back_to_top: true
 back_to_top_text: "回到顶部"
 
 color_scheme: light
+
+# Callout 提示框（just-the-docs v0.4.0+）
+# 用法：在段落或引用块前加 {: .note } / {: .tip } / {: .warning } / {: .important } / {: .highlight }
+callouts:
+  note:
+    title: 提示
+    color: blue
+  tip:
+    title: 建议
+    color: green
+  warning:
+    title: 注意
+    color: red
+  important:
+    title: 重要
+    color: purple
+  highlight:
+    color: yellow
+
+# 顶部辅助链接
+aux_links:
+  "GitHub 仓库": "https://github.com/open-agent-power/open-knowledge-studio"
+
+# 所有页面默认套 just-the-docs 的 default layout（左侧导航 + 侧边栏）
+defaults:
+  - scope:
+      path: ""
+    values:
+      layout: "default"

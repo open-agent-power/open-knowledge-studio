@@ -35,6 +35,9 @@ cli/knowledge_studio.egg-info/
 # GitHub Pages
 docs/_site/
 docs/.jekyll-cache/
+docs/Gemfile
+docs/Gemfile.lock
+docs/_config.dev.yml
 
 # Wiki content (local only — do not push to remote)
 wiki/**/*.md

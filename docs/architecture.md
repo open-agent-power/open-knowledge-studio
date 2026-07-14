@@ -1,8 +1,11 @@
 ---
 title: 架构设计
-nav_order: 4
+nav_order: 11
+parent: 内部机制
 ---
 # Architecture（架构）
+
+*五桶架构、记忆生命周期与设计原则。*
 
 ## Raw Material vs Memory — 核心区分
 
@@ -97,3 +100,9 @@ Provisional → Active（access_count ≥ 3）→ Dropped（score < threshold）
 - **Atomic writes** — 所有持久化写入使用 `mkstemp + fsync + os.replace`
 - **Human-gated** — 系统绝不未经人工审查就将 raw 内容提升到 wiki
 - **No AI configuration** — Claude Code 是 AI 引擎，CLI 只负责文件操作 + 召回评分
+
+## 下一步
+
+* **[召回引擎](recall-engine.md)**：6 因子评分算法
+* **[记忆模型](memory-model.md)**：六型记忆与注入顺序
+* **[Dreaming 循环](dreaming-cycle.md)**：知识演化管线
