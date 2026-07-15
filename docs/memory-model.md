@@ -9,11 +9,13 @@ parent: 内部机制
 
 ## 记忆类型
 
+<img src="assets/memory-model.svg" alt="Memory Model" style="max-width:100%;height:auto;" />
+
 | 类型 | 存储 | 召回 | 衰减 | Scope |
 |------|------|------|------|-------|
 | User Memory | `profiles/users/{id}.md` | 直接读取 | 无 | `user_id` |
 | Project Memory | `profiles/projects/{slug}.md` | 直接读取 | 无 | `project_slug` |
-| Episodic Memory | `raw/{date}/{topic}/` | 关键词 + 新鲜度 | 无 | `topic_id` |
+| Episodic Memory | `raw/{YYYY}/{MM}/{DD}/{source}/` | 关键词 + 新鲜度 | 无 | `topic_id` |
 | Semantic Memory | `wiki/{domain}/{type}/` | 6 因子 + 曲线 | 类型 λ | `domain` |
 | Procedural Memory | `.claude/skills/` | 关键词触发 | 无 | — |
 | Draft Memory | `drafts/{slug}.md` | N/A | 无 | N/A |
@@ -24,7 +26,7 @@ parent: 内部机制
 - Episodic → `raw/`
 - Semantic → `wiki/`
 - Draft → `drafts/`
-- Procedural → `.claude/skills/`（由 Claude Code 管理）
+- Procedural → `.claude/skills/`（由 Agent 管理）
 
 ## 注入顺序（稳定层在前，KV Cache 友好）
 
@@ -39,10 +41,11 @@ parent: 内部机制
 
 ## 来源标签
 
-- `[verified]` — 工具确认或人工审查
-- `[user-stated]` — 用户明确陈述
-- `[inferred]` — AI 蒸馏，尚未验证
-- `[stale]` — 可能过时
+来源标签在注入时**动态生成**，不存储在 frontmatter 中：
+
+- `[verified]` — `has_traces=true` 或 `status=active`
+- `[inferred]` — `confidence < 0.5` 或 `status=provisional`
+- `[stale]` — `status=stale`（被 challenges 关系标记）
 
 ## 冲突优先级
 
@@ -58,3 +61,7 @@ parent: 内部机制
 * **[召回引擎](recall-engine.md)**：六型记忆如何被评分召回
 * **[架构设计](architecture.md)**：五桶结构
 * **[衰减系统](decay-system.md)**：记忆如何随时间变化
+
+---
+
+{% include comments.html %}

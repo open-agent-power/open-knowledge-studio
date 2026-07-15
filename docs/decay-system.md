@@ -84,3 +84,7 @@ pin_bonus: 0.5
 * **[召回引擎](recall-engine.md)**：记忆曲线如何作为第六因子影响召回
 * **[Dreaming 循环](dreaming-cycle.md)**：衰减在演化循环中的位置
 * **[架构设计](architecture.md)**：五桶结构
+
+---
+
+{% include comments.html %}

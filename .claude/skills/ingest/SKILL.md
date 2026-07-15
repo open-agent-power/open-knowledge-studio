@@ -48,7 +48,7 @@ Agent uses Bash to run system commands directly:
 - `pdftotext <file> -` → text
 - Directory scan: `find`, `cat`, `ls` → agent reads structure
 
-Output: raw stdout, agent writes to `raw/{subdir}/{slug}.md`
+Output: raw stdout, agent writes to `raw/{YYYY}/{MM}/{DD}/{source}/{slug}.md`
 
 ### Level 1 — OKS Protocol CLIs
 
@@ -60,7 +60,7 @@ Agent calls CLI tools that output standard JSON:
 - `oks-video <file>` → JSON with transcript + frame descriptions
 - `oks-audio <file>` → JSON with transcript
 
-Agent writes `markdown` field to `raw/{subdir}/{slug}.md`
+Agent writes `markdown` field to `raw/{YYYY}/{MM}/{DD}/{source}/{slug}.md`
 
 ### Level 2 — Independent Tools
 
@@ -76,8 +76,9 @@ Agent adapts to each tool's output format.
 2. **Check** — run `check_cmd` via Bash to verify tool is available
 3. **Route** — select tool by level (prefer L0, then L1, then L2)
 4. **Execute** — agent runs tool directly via Bash
-5. **Write** — agent writes extracted content to `raw/{subdir}/{slug}.md`
-   - Write to: `{kb_root}/raw/{YYYY}/{MM}/{DD}/{topic_id}/` or `raw/{subdir}/`
+5. **Write** — agent writes extracted content to `raw/{YYYY}/{MM}/{DD}/{source}/{slug}.md`
+   - Source categories: `articles`, `papers`, `videos`, `audio`, `repos`, `misc`
+   - Auto-create today's directory: `mkdir -p raw/{YYYY}/{MM}/{DD}/{source}/`
    - Use atomic write pattern (mkstemp + fsync + os.replace)
 6. **Record** — log source URL/path, modality, tool used in frontmatter
 

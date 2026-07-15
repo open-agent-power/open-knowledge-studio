@@ -7,9 +7,9 @@ has_children: true
 
 > 你的 AI 工具不会替你记住工作内容。Open Knowledge Studio 会。
 
-它是你的 AI 工作记忆层。保存一个决策、一个洞察、一个有用的来源、或一段对话——Studio 让它可搜索，把它和你已有的知识连接起来，让 Claude Code 从同样的上下文开始工作。
+它是你的 AI 工作记忆层。保存一个决策、一个洞察、一个有用的来源、或一段对话。Studio 让它可搜索，把它和你已有的知识连接起来，让 AI Agent 从同样的上下文开始工作。
 
-你不需要一次性配置所有东西。先保存一条知识，再找到它，然后让 Claude Code 用它。一旦这个循环跑通，Studio 就变得容易理解了。
+你不需要一次性配置所有东西。先保存一条知识，再找到它，然后让 Agent 用它。一旦这个循环跑通，Studio 就变得容易理解了。
 
 ## 核心概念
 
@@ -24,19 +24,25 @@ has_children: true
 
 ```
 raw/（人类收集的原始材料）
-  ↓ /ingest — AI 分级 A/B/C
+  ↓ /ingest — 三级路由 → A/B/C 分级
 drafts/（中间态草稿）
   ↓ /promote — 人工审查
 wiki/（策展知识，带衰减）
   ↓ oks search / /query — 6 因子召回
-注入 Claude Code 上下文
+注入 Agent 上下文
 ```
+
+## 架构总览
+
+<img src="assets/architecture-overview.svg" alt="Architecture Overview" style="max-width:100%;height:auto;" />
+
+<img src="assets/pipeline.svg" alt="Pipeline" style="max-width:100%;height:auto;" />
 
 ## 独特之处
 
 - **Knowledge as Code** — 所有知识以 Markdown + YAML frontmatter 存储，通过 Git 版本管理。
 - **Git IS the migration** — 无数据库，schema 变更通过 `_meta/` 版本化。
-- **Agent-direct** — OKS 只提供能力，不包装工具调用。Claude Code 是 AI 引擎，CLI 只做文件操作 + 召回评分。
+- **Agent-direct** — OKS 只提供能力，不包装工具调用。Agent 是 AI 引擎，CLI 只做文件操作 + 召回评分。
 - **人工审批门控** — 系统绝不在未经审查的情况下将 raw 内容提升到 wiki。
 - **衰减是特性** — 知识随时间遗忘。常用的保持敏锐，被遗忘的淡入归档。
 - **第一天少做** — 保存一条记忆，跑一次搜索，验证它工作。不要一次性配置所有东西。
@@ -54,3 +60,7 @@ oks search "your query"
 - **[快速开始](start-here.md)** — 最短可用路径：保存一条 → 搜索到它 → 验证工作
 - **[使用你的知识](memories.md)** — wiki 页面结构、类型和搜索
 - **[Raw Materials](raw-materials.md)** — 原始材料、A/B/C 分级、蒸馏工作流
+
+---
+
+{% include comments.html %}

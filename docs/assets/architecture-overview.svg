@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 480" font-family="'SF Mono','Fira Code',monospace" fill="none">
+  <defs>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="4" orient="auto">
+      <path d="M0,0 L0,8 L10,4 z" fill="#78909c"/>
+    </marker>
+    <marker id="arrow-orange" markerWidth="12" markerHeight="12" refX="10" refY="4" orient="auto">
+      <path d="M0,0 L0,8 L10,4 z" fill="#ff8a65"/>
+    </marker>
+  </defs>
+  <rect x="20" y="20" width="140" height="100" rx="8" fill="#fff3e0" stroke="#ff8a65" stroke-width="2" stroke-dasharray="4 3"/>
+  <text x="90" y="50" text-anchor="middle" font-size="14" font-weight="bold" fill="#5d4037">profiles/</text>
+  <text x="90" y="72" text-anchor="middle" font-size="11" fill="#795548">team · users</text>
+  <text x="90" y="88" text-anchor="middle" font-size="11" fill="#795548">projects · recipes</text>
+  <text x="90" y="104" text-anchor="middle" font-size="11" fill="#795548">goals</text>
+  <rect x="200" y="20" width="160" height="100" rx="8" fill="#e8f5e9" stroke="#66bb6a" stroke-width="2" stroke-dasharray="4 3"/>
+  <text x="280" y="50" text-anchor="middle" font-size="14" font-weight="bold" fill="#2e7d32">raw/</text>
+  <text x="280" y="72" text-anchor="middle" font-size="11" fill="#558b2f">{YYYY}/{MM}/{DD}/</text>
+  <text x="280" y="88" text-anchor="middle" font-size="11" fill="#558b2f">{source}/</text>
+  <text x="280" y="104" text-anchor="middle" font-size="10" fill="#81c784">articles·papers·videos</text>
+  <rect x="420" y="20" width="140" height="100" rx="8" fill="#fff8e1" stroke="#ffc107" stroke-width="2" stroke-dasharray="4 3"/>
+  <text x="490" y="50" text-anchor="middle" font-size="14" font-weight="bold" fill="#5d4037">drafts/</text>
+  <text x="490" y="72" text-anchor="middle" font-size="11" fill="#795548">Dreaming 候选</text>
+  <text x="490" y="88" text-anchor="middle" font-size="11" fill="#795548">人工审查门控</text>
+  <rect x="620" y="20" width="180" height="100" rx="8" fill="#e3f2fd" stroke="#42a5f5" stroke-width="2" stroke-dasharray="4 3"/>
+  <text x="710" y="50" text-anchor="middle" font-size="14" font-weight="bold" fill="#1565c0">wiki/</text>
+  <text x="710" y="72" text-anchor="middle" font-size="11" fill="#1976d2">{domain}/{type}/</text>
+  <text x="710" y="88" text-anchor="middle" font-size="11" fill="#1976d2">concept·strategy</text>
+  <text x="710" y="104" text-anchor="middle" font-size="11" fill="#1976d2">anti-pattern</text>
+  <rect x="20" y="380" width="180" height="80" rx="8" fill="#f3e5f5" stroke="#ab47bc" stroke-width="2" stroke-dasharray="4 3"/>
+  <text x="110" y="410" text-anchor="middle" font-size="14" font-weight="bold" fill="#6a1b9a">settings/</text>
+  <text x="110" y="432" text-anchor="middle" font-size="11" fill="#8e24aa">handlers.json</text>
+  <text x="110" y="448" text-anchor="middle" font-size="11" fill="#8e24aa">input-sources.json</text>
+  <path d="M360,70 L420,70" stroke="#78909c" stroke-width="2" marker-end="url(#arrow)" stroke-dasharray="5 3"/>
+  <text x="390" y="62" text-anchor="middle" font-size="10" fill="#78909c">A/B/C 分级</text>
+  <path d="M560,70 L620,70" stroke="#78909c" stroke-width="2" marker-end="url(#arrow)" stroke-dasharray="5 3"/>
+  <text x="590" y="62" text-anchor="middle" font-size="10" fill="#78909c">promote</text>
+  <path d="M710,120 Q710,200 560,200 Q400,200 400,280 Q400,340 280,340" stroke="#ff8a65" stroke-width="2.5" fill="none" marker-end="url(#arrow-orange)" stroke-dasharray="6 4"/>
+  <rect x="430" y="190" width="120" height="24" rx="4" fill="#fff3e0" stroke="#ff8a65" stroke-width="1"/>
+  <text x="490" y="206" text-anchor="middle" font-size="11" fill="#bf360c">6-factor recall</text>
+  <rect x="200" y="300" width="160" height="80" rx="8" fill="#fce4ec" stroke="#ec407a" stroke-width="2"/>
+  <text x="280" y="332" text-anchor="middle" font-size="14" font-weight="bold" fill="#ad1457">Agent 上下文</text>
+  <text x="280" y="352" text-anchor="middle" font-size="11" fill="#c2185b">[verified] [inferred]</text>
+  <text x="280" y="368" text-anchor="middle" font-size="11" fill="#c2185b">[stale] 来源标签</text>
+  <path d="M90,120 Q90,220 200,340" stroke="#ff8a65" stroke-width="1.5" fill="none" stroke-dasharray="3 4" opacity="0.6"/>
+  <text x="100" y="200" font-size="10" fill="#ff8a65" opacity="0.8">goals 影响</text>
+  <rect x="440" y="380" width="360" height="80" rx="8" fill="#eceff1" stroke="#78909c" stroke-width="1.5"/>
+  <text x="620" y="406" text-anchor="middle" font-size="12" font-weight="bold" fill="#455a64">三级工具协议</text>
+  <text x="500" y="426" text-anchor="middle" font-size="10" fill="#607d8b">L0 curl</text>
+  <text x="580" y="426" text-anchor="middle" font-size="10" fill="#607d8b">L1 oks-video</text>
+  <text x="680" y="426" text-anchor="middle" font-size="10" fill="#607d8b">L2 agent-reach</text>
+  <text x="760" y="426" text-anchor="middle" font-size="10" fill="#607d8b">yt-dlp</text>
+  <path d="M620,120 Q620,250 620,380" stroke="#78909c" stroke-width="1.5" fill="none" stroke-dasharray="3 4" opacity="0.4"/>
+</svg>

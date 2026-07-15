@@ -149,9 +149,12 @@ def recall_knowledge(
             "status": item.get("status", "active"),
             "score": round(item.get("score", 0), 3),
             "relevance": round(relevance, 3),
+            "confidence": item.get("confidence", 0.8),
             "body_preview": item.get("body", "")[:MAX_BODY_PREVIEW],
             "tags": item.get("tags", ""),
             "has_traces": bool(item.get("traces")),
+            "relates_to": item.get("relates_to", ""),
+            "relationship": item.get("relationship", ""),
         }
         if review.get("lesson"):
             entry["review_lesson"] = review["lesson"][:200]

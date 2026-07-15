@@ -15,12 +15,14 @@ parent: 内部机制
 | **谁写入** | 人类收集，LLM 只读 | LLM 通过 Dreaming 写入，人类审批 |
 | **衰减** | 无 — raw materials 永久保留 | 类型特定 λ — 知识随时间衰减 |
 | **召回** | 关键词 + 新鲜度 | 6 因子相关性 + 记忆曲线 |
-| **优势** | 类型化入料（4 子目录）、A/B/C 分级、指纹去重 | 22 域结构、衰减 tier、Crystal 合成 |
+| **优势** | 日期 + 来源分类、A/B/C 分级、指纹去重 | 22 域结构、衰减 tier、4 种知识关系 |
 | **何时用** | 需要完整历史或精确来源 | 需要模式、决策或教训 |
 
 推荐工作流：将来源保存到 `raw/`，然后将有价值的部分蒸馏为 `wiki/` memory。
 
 ## 五桶记忆架构
+
+<img src="assets/architecture-overview.svg" alt="Architecture Overview" style="max-width:100%;height:auto;" />
 
 | 桶 | 用途 | 衰减 | 召回 |
 |------|------|------|------|
@@ -37,15 +39,17 @@ open-knowledge-studio/
 ├── profiles/          # ① 画像
 │   ├── team.md
 │   ├── users/{id}.md
-│   └── projects/{slug}.md
-├── raw/               # ② Raw materials（原始材料）
-│   ├── articles/  papers/  repos/  misc/
-├── wiki/              # ③ 策划知识（memories）
+│   ├── projects/{slug}.md
+│   ├── recipes/{slug}.md     # 自动化配方
+│   └── goals/{slug}.md       # 目标（影响召回）
+├── raw/               # ② Raw materials
+│   └── {YYYY}/{MM}/{DD}/{source}/   # articles|papers|videos|audio|repos|misc
+├── wiki/              # ③ 策展知识
 │   └── {domain}/{type}/{slug}.md
-│       # types: concept | strategy | anti-pattern
 ├── drafts/            # ④ Dreaming 候选
 └── settings/          # ⑤ 系统配置
     ├── decay-config.yaml
+    ├── handlers.json          # 三级工具注册表
     └── input-sources.json
 ```
 
@@ -86,23 +90,23 @@ Provisional → Active（access_count ≥ 3）→ Dropped（score < threshold）
 | `confirms` | 新页面验证旧页面 | 旧页面 confidence 提升 |
 | `challenges` | 新页面与旧页面矛盾 | 旧页面标记 `[stale]` 待复查 |
 
-### Crystal — 合成参考文章
+### Working Memory — 每日简报（规划中）
 
-当 3+ 条 memory 共享同一标签且 score > 0.5 时，系统将它们合成为一篇参考文章 — **Crystal**。来源被引用。当后续保存相关信息时，Crystal 自动更新。
-
-### Working Memory — 每日简报
-
-每天，Studio 可以从近期和高重要性的 memories 中生成一份简报。这份工作记忆文件为 Claude Code 提供关于你当前工作的上下文 — 在你说任何话之前。
+每天，Studio 可以从近期和高重要性的 memories 中生成一份简报。这份工作记忆文件为 Agent 提供关于你当前工作的上下文 — 在你说任何话之前。
 
 ## 设计原则
 
 - **Git IS the migration** — 无数据库，schema 变更通过 `_meta/` 版本化
 - **Atomic writes** — 所有持久化写入使用 `mkstemp + fsync + os.replace`
 - **Human-gated** — 系统绝不未经人工审查就将 raw 内容提升到 wiki
-- **No AI configuration** — Claude Code 是 AI 引擎，CLI 只负责文件操作 + 召回评分
+- **No AI configuration** — Agent 是 AI 引擎，CLI 只负责文件操作 + 召回评分
 
 ## 下一步
 
 * **[召回引擎](recall-engine.md)**：6 因子评分算法
 * **[记忆模型](memory-model.md)**：六型记忆与注入顺序
 * **[Dreaming 循环](dreaming-cycle.md)**：知识演化管线
+
+---
+
+{% include comments.html %}

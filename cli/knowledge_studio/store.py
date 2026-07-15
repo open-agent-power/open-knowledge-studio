@@ -318,6 +318,8 @@ def write_wiki_page(
     traces: list[dict] | None = None,
     review: dict | None = None,
     supersedes: str | None = None,
+    relates_to: str | None = None,
+    relationship: str | None = None,
 ) -> Path:
     fp = _fingerprint(content)
     fp_index = _load_fingerprint_index()
@@ -345,11 +347,28 @@ def write_wiki_page(
         file_path = type_dir / f"{slug}-{counter}.md"
         counter += 1
 
-    if supersedes:
-        old_file = _find_file_by_slug(supersedes)
+    if supersedes and not relates_to:
+        relates_to = supersedes
+        relationship = "supersedes"
+
+    if relates_to and relationship:
+        old_file = _find_file_by_slug(relates_to)
         if old_file:
-            _update_frontmatter_field(old_file, "status", "superseded")
-            _update_frontmatter_field(old_file, "superseded_by", slug)
+            if relationship == "supersedes":
+                _update_frontmatter_field(old_file, "status", "superseded")
+                _update_frontmatter_field(old_file, "superseded_by", slug)
+            elif relationship == "enriches":
+                _update_frontmatter_field(old_file, "enriched_by", slug)
+            elif relationship == "confirms":
+                old_meta = parse_wiki_file(old_file)
+                if old_meta:
+                    current_conf = old_meta.get("confidence", 0.8)
+                    new_conf = min(1.0, current_conf + 0.1)
+                    _update_frontmatter_field(old_file, "confidence", round(new_conf, 4))
+                _update_frontmatter_field(old_file, "confirmed_by", slug)
+            elif relationship == "challenges":
+                _update_frontmatter_field(old_file, "status", "stale")
+                _update_frontmatter_field(old_file, "challenged_by", slug)
 
     frontmatter: dict = {
         "title": title,
@@ -371,6 +390,9 @@ def write_wiki_page(
         frontmatter["traces"] = traces
     if review:
         frontmatter["review"] = review
+    if relates_to and relationship:
+        frontmatter["relates_to"] = relates_to
+        frontmatter["relationship"] = relationship
 
     fm_str = yaml.dump(frontmatter, default_flow_style=False, allow_unicode=True, sort_keys=False)
     _atomic_write(file_path, f"---\n{fm_str}---\n\n{content}")
