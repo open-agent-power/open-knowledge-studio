@@ -63,6 +63,8 @@ oks search "your query"
 - **[快速开始](start-here.md)** — 最短可用路径：保存一条 → 搜索到它 → 验证工作
 - **[理念](philosophy.md)** — 为什么说知识库就是你在训练的模型
 - **[每日循环](daily-loop.md)** — 把训练闭环变成每天都能跑的流程
+- **[自动驾驶](autonomous.md)** — 人类判断随自动化程度如何分级（L0→L5）
+- **[案例](cases.md)** — 托管你的简历 / GitHub / 科研，看循环怎么落地
 - **[使用你的知识](memories.md)** — wiki 页面结构、类型和搜索
 - **[Raw Materials](raw-materials.md)** — 原始材料、A/B/C 分级、蒸馏工作流
 
