@@ -1,5 +1,5 @@
 """Tests for the 6-factor recall engine."""
-import os
+import json
 import yaml
 from pathlib import Path
 
@@ -103,3 +103,71 @@ def test_recall_combined(kb_root):
     assert "knowledge" in result
     assert isinstance(result["episodic"], list)
     assert isinstance(result["knowledge"], list)
+
+
+def test_recall_multimodal_bundle_uses_content_not_sidecars(kb_root):
+    from knowledge_studio.recall import recall_episodic
+
+    bundle = kb_root / "raw" / "2026" / "07" / "16" / "videos" / "java-video"
+    bundle.mkdir(parents=True)
+    (bundle / "metadata.json").write_text(
+        json.dumps({"schema_version": "raw-multimodal/v0.1", "processing_status": "partial"}),
+        encoding="utf-8",
+    )
+    (bundle / "raw.md").write_text("索引说明 三元运算符", encoding="utf-8")
+    (bundle / "content.md").write_text(
+        "# Raw提取正文\n\n00:19–00:21 使用三元运算符。", encoding="utf-8"
+    )
+    (bundle / "transcript.md").write_text("三元运算符逐字稿", encoding="utf-8")
+    (bundle / "evidence.jsonl").write_text(
+        json.dumps(
+            {
+                "kind": "speech",
+                "text": "三元运算符",
+                "method": "test",
+                "locator": {"start": 19.8, "end": 21.0},
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    results = recall_episodic("三元运算符", limit=10)
+
+    bundle_results = [item for item in results if "java-video" in item["source_path"]]
+    assert len(bundle_results) == 1
+    assert bundle_results[0]["source_path"].endswith("content.md")
+    assert "三元运算符" in bundle_results[0]["snippet"]
+
+
+def test_recall_multimodal_ocr_fallback_keeps_locator(kb_root):
+    from knowledge_studio.recall import recall_episodic
+
+    bundle = kb_root / "raw" / "2026" / "07" / "16" / "misc" / "image-only"
+    bundle.mkdir(parents=True)
+    (bundle / "metadata.json").write_text(
+        json.dumps({"schema_version": "raw-multimodal/v0.1", "processing_status": "partial"}),
+        encoding="utf-8",
+    )
+    (bundle / "content.md").write_text("# 图片Raw\n\nOCR正文仅保留高层索引。", encoding="utf-8")
+    locator = {"asset": "assets/original/screen.png", "bbox": [1, 2, 30, 40]}
+    (bundle / "evidence.jsonl").write_text(
+        json.dumps(
+            {
+                "id": "rapidocr-text-000001",
+                "kind": "ocr",
+                "text": "知识复利基础设施",
+                "method": "rapidocr",
+                "locator": locator,
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    results = recall_episodic("知识复利基础设施", limit=5)
+
+    assert len(results) == 1
+    assert results[0]["type"] == "ocr_evidence"
+    assert results[0]["locator"] == locator
+    assert results[0]["evidence_id"] == "rapidocr-text-000001"

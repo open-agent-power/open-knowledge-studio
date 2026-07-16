@@ -20,22 +20,70 @@
   {
     "name": "oks-video",
     "level": 1,
-    "description": "Video → frames + Whisper transcript + vision analysis",
-    "check_cmd": "oks-video --version",
-    "install_hint": "pip install oks-video",
+    "description": "Video → timestamped transcript + frames + OCR evidence Raw Bundle",
+    "check_argv": ["{watch_python}", "-c", "import watch_skill, faster_whisper, rapidocr"],
+    "install_hint": "Install scripts/watch_extract_requirements.txt and configure settings/raw-tools.json",
     "modalities": ["mp4", "mov", "avi", "mkv", "webm"],
     "raw_subdir": "videos",
-    "json_protocol": true
+    "json_protocol": true,
+    "output_contract": "raw-multimodal/v0.1",
+    "tool_config": "settings/raw-tools.json",
+    "command_argv": ["{watch_python}", "scripts/raw_bundle_adapter.py", "watch", "{input}", "--output", "{output}"]
   },
   {
     "name": "oks-audio",
     "level": 1,
-    "description": "Audio → Whisper STT transcript",
-    "check_cmd": "oks-audio --version",
-    "install_hint": "pip install oks-audio",
+    "description": "Audio → timestamped ASR evidence Raw Bundle",
+    "check_argv": ["{watch_python}", "-c", "import watch_skill, faster_whisper"],
+    "install_hint": "Install scripts/watch_extract_requirements.txt and configure settings/raw-tools.json",
     "modalities": ["mp3", "wav", "m4a", "flac", "aac", "ogg"],
     "raw_subdir": "audio",
-    "json_protocol": true
+    "json_protocol": true,
+    "output_contract": "raw-multimodal/v0.1",
+    "tool_config": "settings/raw-tools.json",
+    "command_argv": ["{watch_python}", "scripts/raw_bundle_adapter.py", "watch", "{input}", "--output", "{output}", "--transcript-only"]
+  },
+  {
+    "name": "oks-image",
+    "level": 1,
+    "description": "Image → OCR text + confidence + bounding-box evidence Raw Bundle",
+    "check_argv": ["{watch_python}", "-c", "import rapidocr"],
+    "install_hint": "Install scripts/raw_extract_requirements.txt and configure settings/raw-tools.json",
+    "modalities": ["png", "jpg", "jpeg", "webp", "bmp"],
+    "raw_subdir": "misc",
+    "json_protocol": true,
+    "output_contract": "raw-multimodal/v0.1",
+    "tool_config": "settings/raw-tools.json",
+    "command_argv": ["{watch_python}", "scripts/raw_bundle_adapter.py", "image", "{input}", "--output", "{output}"]
+  },
+  {
+    "name": "oks-document",
+    "level": 1,
+    "description": "Office document → Markdown + embedded-media evidence Raw Bundle",
+    "check_argv": ["{document_python}", "-c", "import markitdown"],
+    "install_hint": "Install scripts/raw_extract_requirements.txt and configure settings/raw-tools.json",
+    "modalities": ["docx", "pptx"],
+    "raw_subdir": "papers",
+    "json_protocol": true,
+    "output_contract": "raw-multimodal/v0.1",
+    "tool_config": "settings/raw-tools.json",
+    "command_argv": ["{document_python}", "scripts/raw_bundle_adapter.py", "markitdown", "{input}", "--output", "{output}"]
+  },
+  {
+    "name": "oks-pdf",
+    "level": 1,
+    "description": "PDF → MinerU layout output + page/formula/asset evidence Raw Bundle",
+    "check_argv": ["{mineru_cli}", "--version"],
+    "install_hint": "Install scripts/mineru_extract_requirements.txt and configure settings/raw-tools.json",
+    "modalities": ["pdf"],
+    "raw_subdir": "papers",
+    "json_protocol": true,
+    "output_contract": "raw-multimodal/v0.1",
+    "tool_config": "settings/raw-tools.json",
+    "command_argv_sequence": [
+      ["{mineru_cli}", "-p", "{input}", "-o", "{work_dir}", "-m", "auto", "-b", "pipeline"],
+      ["{mineru_python}", "scripts/raw_bundle_adapter.py", "mineru", "{mineru_result}", "--source", "{input}", "--output", "{output}"]
+    ]
   },
   {
     "name": "agent-reach",

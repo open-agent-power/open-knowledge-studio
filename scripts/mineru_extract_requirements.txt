@@ -1,0 +1,2 @@
+# Install in a separate Python 3.12 environment because MinerU is heavyweight.
+mineru==3.4.4

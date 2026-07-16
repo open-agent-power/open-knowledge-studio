@@ -1,0 +1,6 @@
+# Install in an isolated Python 3.12 environment.
+watch-skill @ git+https://github.com/oxbshw/watch-skill.git@bf177b09a4c8a4d850c878f3965caecf971555e6
+faster-whisper==1.2.1
+rapidocr==3.9.1
+onnxruntime==1.27.0
+yt-dlp==2026.7.4

@@ -52,16 +52,26 @@ def recall_episodic(
     query_lower = query.lower().strip()
     query_tokens = _tokenize(query_lower)
     results: list[tuple[float, dict[str, Any]]] = []
+    matched_bundle_roots: set[Path] = set()
 
     rd = raw_dir()
     if rd.exists():
         for f in rd.rglob("*.md"):
+            bundle = _multimodal_bundle_root(f)
+            if bundle is not None:
+                primary = bundle / "content.md"
+                expected = primary if primary.is_file() else bundle / "raw.md"
+                if f != expected:
+                    continue
             try:
                 content = f.read_text(encoding="utf-8").lower()
                 if _matches_query(content, query_lower, query_tokens):
+                    if bundle is not None:
+                        matched_bundle_roots.add(bundle.resolve())
                     freshness = _freshness_score(f)
                     snippet_idx = content.find(query_lower) if len(query_lower) > 3 else 0
-                    snippet = content[snippet_idx:snippet_idx + 300] if snippet_idx >= 0 else content[:300]
+                    snippet_start = max(0, snippet_idx - 120) if snippet_idx >= 0 else 0
+                    snippet = content[snippet_start:snippet_start + 300]
                     results.append((freshness, {
                         "type": "raw",
                         "source_path": str(f.relative_to(root)),
@@ -73,6 +83,8 @@ def recall_episodic(
                 continue
 
         for f in rd.rglob("*.jsonl"):
+            if f.name == "evidence.jsonl" and _multimodal_bundle_root(f) is not None:
+                continue
             try:
                 for line in f.read_text(encoding="utf-8").splitlines():
                     if not line.strip():
@@ -99,7 +111,8 @@ def recall_episodic(
                 if _matches_query(content, query_lower, query_tokens):
                     freshness = _freshness_score(f)
                     snippet_idx = content.find(query_lower) if len(query_lower) > 3 else 0
-                    snippet = content[snippet_idx:snippet_idx + 300] if snippet_idx >= 0 else content[:300]
+                    snippet_start = max(0, snippet_idx - 120) if snippet_idx >= 0 else 0
+                    snippet = content[snippet_start:snippet_start + 300]
                     results.append((freshness + 1.0, {
                         "type": "profile",
                         "source_path": str(f.relative_to(root)),
@@ -111,7 +124,86 @@ def recall_episodic(
                 continue
 
     results.sort(key=lambda x: -x[0])
-    return [r[1] for r in results[:limit]]
+    selected = [r[1] for r in results[:limit]]
+    if len(selected) < limit and rd.exists():
+        selected.extend(
+            _recall_multimodal_ocr_evidence(
+                rd=rd,
+                root=root,
+                query_lower=query_lower,
+                query_tokens=query_tokens,
+                excluded_bundles=matched_bundle_roots,
+                limit=limit - len(selected),
+            )
+        )
+    return selected
+
+
+def _recall_multimodal_ocr_evidence(
+    *,
+    rd: Path,
+    root: Path,
+    query_lower: str,
+    query_tokens: set[str],
+    excluded_bundles: set[Path],
+    limit: int,
+) -> list[dict[str, Any]]:
+    """Fill recall gaps with OCR evidence from Raw Bundle sidecars."""
+    if limit <= 0:
+        return []
+    candidates: list[tuple[float, dict[str, Any]]] = []
+    seen: set[tuple[str, str]] = set()
+    for evidence_path in rd.rglob("evidence.jsonl"):
+        bundle = _multimodal_bundle_root(evidence_path)
+        if bundle is None or bundle.resolve() in excluded_bundles:
+            continue
+        try:
+            for line in evidence_path.read_text(encoding="utf-8").splitlines():
+                if not line.strip():
+                    continue
+                entry = json.loads(line)
+                if entry.get("kind") != "ocr":
+                    continue
+                text = str(entry.get("text", "")).strip()
+                if not text or not _matches_query(text.lower(), query_lower, query_tokens):
+                    continue
+                key = (str(bundle.resolve()), text.lower())
+                if key in seen:
+                    continue
+                seen.add(key)
+                freshness = _freshness_score(evidence_path)
+                candidates.append(
+                    (
+                        freshness,
+                        {
+                            "type": "ocr_evidence",
+                            "source_path": str(evidence_path.relative_to(root)),
+                            "snippet": text[:300],
+                            "locator": entry.get("locator", {}),
+                            "evidence_id": entry.get("id"),
+                            "freshness": round(freshness, 3),
+                            "relevance": round(max(0.01, freshness - 0.1), 3),
+                        },
+                    )
+                )
+        except (json.JSONDecodeError, OSError):
+            continue
+    candidates.sort(key=lambda item: -item[0])
+    return [item[1] for item in candidates[:limit]]
+
+
+def _multimodal_bundle_root(path: Path) -> Path | None:
+    """Return a direct Raw Bundle root, if the schema marker is present."""
+    metadata_path = path.parent / "metadata.json"
+    if not metadata_path.is_file():
+        return None
+    try:
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if metadata.get("schema_version") != "raw-multimodal/v0.1":
+        return None
+    return path.parent
 
 
 def recall_knowledge(

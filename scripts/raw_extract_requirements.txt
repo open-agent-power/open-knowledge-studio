@@ -1,0 +1,3 @@
+# Lightweight document adapters used by raw_bundle_adapter.py.
+# Video/audio and PDF extractors keep their own isolated environments.
+markitdown[docx]==0.1.6

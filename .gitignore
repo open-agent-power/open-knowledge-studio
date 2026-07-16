@@ -7,6 +7,10 @@ dist/
 build/
 .eggs/
 *.egg
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.cache/
 
 # Virtual env
 .venv/
@@ -29,8 +33,18 @@ Thumbs.db
 cli/.oks/
 cli/knowledge_studio.egg-info/
 
+# Local agent configuration
+.agents/
+.codex/
+settings/raw-tools.json
+
 # Logs
 *.log
+
+# Generated Raw bundles and captured source assets
+raw/**
+!raw/**/
+!raw/**/.gitkeep
 
 # GitHub Pages
 docs/_site/
