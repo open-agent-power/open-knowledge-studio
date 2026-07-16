@@ -1,8 +1,11 @@
 ---
 title: Frontmatter Schema
-nav_order: 9
+nav_order: 21
+parent: 参考
 ---
 # Frontmatter Schema v0.7
+
+*Wiki 页面、draft 和画像的 YAML frontmatter 规范。*
 
 Wiki 页面、draft 和画像的 YAML frontmatter 规范。
 
@@ -91,6 +94,7 @@ status: draft
 ---
 ```
 
+{: .note }
 Draft frontmatter 是 wiki 页面的前置状态。`source_pages` 记录了 draft 来自哪些 raw materials，形成来源链路。当 draft 被 promote 后，frontmatter 转换为 wiki 页面格式，`draft_type` → `type`，`draft_area` → `area`。
 
 ## 知识关系字段
@@ -120,6 +124,12 @@ RELATIONSHIPS 字段用于建立新旧知识页面之间的关系网络，支持
 | **challenges** | `relationship: challenges` | `challenged_by` | 旧页面 confidence 降低，召回时附带冲突警告 |
 
 `supersedes` 是最强的关系 — 旧页面被明确替代，状态变为 `superseded`，并通过 `superseded_by` 指向新页面。其余三种关系保留旧页面的有效状态，但在召回时影响排序和置信度。
+
+## 下一步
+
+* **[Memories](memories.md)**：frontmatter 字段如何影响记忆结构与召回
+* **[架构设计](architecture.md)**：五桶结构与生命周期
+* **[Dreaming 循环](dreaming-cycle.md)**：draft 如何被审查并提升为 wiki
 
 ---
 

@@ -1,8 +1,11 @@
 ---
 title: 召回引擎
-nav_order: 5
+nav_order: 12
+parent: 内部机制
 ---
 # 6-Factor Recall Engine（六因子召回引擎）
+
+*六个因子如何为 wiki 页面评分，找到最相关知识。*
 
 使用六个因子对 wiki 页面评分，找到最相关的知识。引擎将语义搜索、关键词匹配和图谱关联融合在一次统一的评分过程中。
 
@@ -73,6 +76,7 @@ if page.get("trace_id") == topic_id:
 - `decision_correct = false`：**+2.0**
 - `outcome = failure`：**+1.0**
 
+{: .note }
 这看似反直觉 — 为什么加成"坏"知识？因为最有价值的知识往往是"我们试了 X 但没用"。回忆失败可以防止重蹈覆辙。
 
 ### 6. Memory Curve（×0.5）

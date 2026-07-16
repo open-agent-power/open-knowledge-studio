@@ -1,8 +1,11 @@
 ---
 title: Dreaming 循环
-nav_order: 7
+nav_order: 14
+parent: 内部机制
 ---
 # Dreaming Cycle（做梦循环）
+
+*人工审查的知识演化：raw → 蒸馏 → drafts → 审查 → wiki。*
 
 知识通过**人工审查的 draft 提案**演化 — 系统绝不自动将 raw 内容提升到 wiki。
 
@@ -101,9 +104,10 @@ oks drafts promote <slug>
 
 ## 核心不变量
 
-**绝不未经人工审查将 raw 提升到 wiki**（CONSTITUTION.md A3）。
-
-AI 可以 dream，但人类决定什么成为持久知识。
+{: .important }
+> **绝不未经人工审查将 raw 提升到 wiki**（CONSTITUTION.md A3）。
+>
+> AI 可以 dream，但人类决定什么成为持久知识。
 
 ## 实现
 

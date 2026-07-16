@@ -1,22 +1,40 @@
 ---
 title: Raw Materials
-nav_order: 3
+nav_order: 4
+parent: 概述
 ---
 # Raw Materials（原始材料）
 
+*蒸馏前的入料层——文章、论文、仓库笔记、对话，按类型组织、A/B/C 分级。*
+
 Raw 是你的入料层 — 蒸馏之前的原始来源。你读过的文章、收集的论文、研究过的代码仓库、经历过的对话。系统读取它们、评级、然后将持久部分蒸馏为 [Memory](memories.md)。
 
-> Raw 是有结构的入料层 — 日期 + 来源分类、A/B/C 分级、指纹去重、人工审批门控。
+{: .important }
+> **Raw 不是 Thread。** 竞品把所有东西都塞进"conversations"。
+> 我们的 raw/ 有**类型化入料**（articles / papers / repos / misc）、**A/B/C 分级**、
+> **指纹去重**和**人工审批门控**。这就是区别。
+
+## 为什么 raw/ 不只是"对话"
+
+| 我们的 raw/ | 通用 "Thread" |
+|-------------|-------------------|
+| 4 个类型子目录（articles/papers/repos/misc） | 扁平列表，仅对话 |
+| 蒸馏前 A/B/C 分级 | 全量导入或全手动 |
+| 指纹去重防止重复 draft | 无去重 |
+| 人工门控：raw → draft → review → wiki | 自动提升或纯手动 |
+| 输出到 22 域 × 3 类型的结构化 wiki/ | 扁平 memory store |
+| 来源追踪：每个 draft 记录其 raw 来源 | 无来源链路 |
 
 ## 第一个有用的 Raw Material
 
-如果你是新用户，先做以下其中一件事：
-
-* 把一篇文章或笔记保存到 `raw/`
-* 运行一次 `/ingest` 进行分级和提取 draft
-* 从这些 draft 中蒸馏出一条有用的 memory
-
-然后打开那条 memory，确认它捕捉了关键信息。这就是核心工作流。
+{: .tip }
+> 如果你是新用户，先做以下其中一件事：
+>
+> * 把一篇文章或笔记保存到 `raw/`
+> * 运行一次 `/ingest` 进行分级和提取 draft
+> * 从这些 draft 中蒸馏出一条有用的 memory
+>
+> 然后打开那条 memory，确认它捕捉了关键信息。这就是核心工作流。
 
 | 我想... | 跳转到 |
 |---|---|

@@ -1,6 +1,7 @@
 ---
-title: 首页
-nav_exclude: true
+title: 概述
+nav_order: 1
+has_children: true
 ---
 # Open Knowledge Studio
 
@@ -10,12 +11,14 @@ nav_exclude: true
 
 你不需要一次性配置所有东西。先保存一条知识，再找到它，然后让 Agent 用它。一旦这个循环跑通，Studio 就变得容易理解了。
 
-最短路径：
+## 核心概念
 
-1. [搭建仓库](start-here.md)
-2. [保存第一条知识](memories.md)
-3. [连接 AI Agent](start-here.md#连接-ai-agent)
-4. [验证召回是否工作](start-here.md#验收标准)
+| 概念 | 是什么 | 了解更多 |
+|------|--------|----------|
+| **Memory** | 从原始材料蒸馏出的持久知识——一个 concept、strategy 或 anti-pattern | [Memories →](memories.md) |
+| **Raw Material** | 蒸馏前的入料层——文章、论文、仓库笔记、对话 | [Raw Materials →](raw-materials.md) |
+| **召回引擎** | 六因子评分找到最相关知识：token overlap + substring + topic trace + type boost + review penalty + memory curve | [召回引擎 →](recall-engine.md) |
+| **Dreaming 循环** | 人工审查的知识演化：raw → AI 蒸馏 → drafts → 人工审查 → wiki | [Dreaming 循环 →](dreaming-cycle.md) |
 
 ## 核心管线
 
@@ -35,21 +38,16 @@ wiki/（策展知识，带衰减）
 
 <img src="assets/pipeline.svg" alt="Pipeline" style="max-width:100%;height:auto;" />
 
-## 文档导航
+## 独特之处
 
-| 页面 | 内容 |
-|------|------|
-| **[快速开始](start-here.md)** | 最短可用路径：保存一条 → 搜索到它 → 验证工作 |
-| **[Memories](memories.md)** | wiki 页面结构、类型、创建路径和搜索模式 |
-| **[Raw Materials](raw-materials.md)** | 原始材料层、A/B/C 分级、蒸馏工作流和导入格式 |
-| **[架构设计](architecture.md)** | 五桶结构 + 记忆生命周期 |
-| **[召回引擎](recall-engine.md)** | 6 因子评分：token overlap + substring + topic trace + type boost + review penalty + memory curve |
-| **[记忆模型](memory-model.md)** | 六型记忆、注入顺序（稳定层在前）、来源标签、冲突优先级 |
-| **[Dreaming 循环](dreaming-cycle.md)** | 知识演化：collect → dream → drafts → review → promote → decay → evolve |
-| **[衰减系统](decay-system.md)** | 记忆曲线、类型特定 λ、tier 分级（hot/warm/cold/evictable） |
-| **[Frontmatter Schema](frontmatter-schema.md)** | YAML 元数据规范 v0.7 |
+- **Knowledge as Code** — 所有知识以 Markdown + YAML frontmatter 存储，通过 Git 版本管理。
+- **Git IS the migration** — 无数据库，schema 变更通过 `_meta/` 版本化。
+- **Agent-direct** — OKS 只提供能力，不包装工具调用。Agent 是 AI 引擎，CLI 只做文件操作 + 召回评分。
+- **人工审批门控** — 系统绝不在未经审查的情况下将 raw 内容提升到 wiki。
+- **衰减是特性** — 知识随时间遗忘。常用的保持敏锐，被遗忘的淡入归档。
+- **第一天少做** — 保存一条记忆，跑一次搜索，验证它工作。不要一次性配置所有东西。
 
-## 快速开始
+## 准备开始？
 
 ```bash
 git clone <repo-url> open-knowledge-studio
@@ -59,13 +57,9 @@ oks status
 oks search "your query"
 ```
 
-## 设计哲学
-
-- **Raw Material vs Memory** — raw/ 有类型化入料（日期 + 来源结构）、A/B/C 分级、指纹去重；wiki/ 有 22 域结构、衰减 tier、4 种知识关系（supersedes/enriches/confirms/challenges）。模式重要时才蒸馏，不必每次都蒸馏。
-- **人工审批** — 系统绝不在未经审查的情况下将 raw 内容提升到 wiki。
-- **Knowledge as Code** — 所有知识以 Markdown + YAML frontmatter 存储，通过 Git 版本管理。
-- **衰减是特性** — 知识随时间遗忘。常用的知识保持敏锐，被遗忘的知识淡入归档。
-- **第一天少做** — 保存一条记忆，跑一次搜索，验证它工作。不要一次性配置所有东西。
+- **[快速开始](start-here.md)** — 最短可用路径：保存一条 → 搜索到它 → 验证工作
+- **[使用你的知识](memories.md)** — wiki 页面结构、类型和搜索
+- **[Raw Materials](raw-materials.md)** — 原始材料、A/B/C 分级、蒸馏工作流
 
 ---
 
