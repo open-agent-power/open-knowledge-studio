@@ -52,6 +52,7 @@ oks search "为什么 选型 消息队列"
 
 ## 接下来读哪里
 
+* **[实战：自动化开源贡献](case-github-practice.md)**：一次真跑通的循环（RocketMQ PR #10619），看知识库如何逐步替你做判断。
 * **[托管你的科研](case-research.md)**：论文与实验的沉淀方式。
 * **[召回引擎](recall-engine.md)**：为什么失败经验会被优先召回。
 
