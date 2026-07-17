@@ -20,22 +20,62 @@
   {
     "name": "oks-video",
     "level": 1,
-    "description": "Video → frames + Whisper transcript + vision analysis",
-    "check_cmd": "oks-video --version",
-    "install_hint": "pip install oks-video",
+    "description": "Video → timestamped transcript + frames + OCR evidence Raw Bundle",
+    "check_cmd": "oks-raw-bundle --version",
+    "install_hint": "pip install 'oks-multimodal[watch]' (isolated py3.12 env)",
+    "command": "oks-raw-bundle watch <input> --output <bundle_dir>",
     "modalities": ["mp4", "mov", "avi", "mkv", "webm"],
     "raw_subdir": "videos",
-    "json_protocol": true
+    "json_protocol": true,
+    "output_contract": "raw-multimodal/v0.1"
   },
   {
     "name": "oks-audio",
     "level": 1,
-    "description": "Audio → Whisper STT transcript",
-    "check_cmd": "oks-audio --version",
-    "install_hint": "pip install oks-audio",
+    "description": "Audio → timestamped ASR transcript Raw Bundle",
+    "check_cmd": "oks-raw-bundle --version",
+    "install_hint": "pip install 'oks-multimodal[watch]' (isolated py3.12 env)",
+    "command": "oks-raw-bundle watch <input> --output <bundle_dir> --transcript-only",
     "modalities": ["mp3", "wav", "m4a", "flac", "aac", "ogg"],
     "raw_subdir": "audio",
-    "json_protocol": true
+    "json_protocol": true,
+    "output_contract": "raw-multimodal/v0.1"
+  },
+  {
+    "name": "oks-image",
+    "level": 1,
+    "description": "Image → OCR text + confidence + bounding-box evidence Raw Bundle",
+    "check_cmd": "oks-raw-bundle --version",
+    "install_hint": "pip install 'oks-multimodal[watch]' (isolated py3.12 env)",
+    "command": "oks-raw-bundle image <input> --output <bundle_dir>",
+    "modalities": ["png", "jpg", "jpeg", "webp", "bmp"],
+    "raw_subdir": "misc",
+    "json_protocol": true,
+    "output_contract": "raw-multimodal/v0.1"
+  },
+  {
+    "name": "oks-document",
+    "level": 1,
+    "description": "Office document → Markdown + embedded-media evidence Raw Bundle",
+    "check_cmd": "oks-raw-bundle --version",
+    "install_hint": "pip install 'oks-multimodal[document]' (isolated py3.12 env)",
+    "command": "oks-raw-bundle markitdown <input> --output <bundle_dir>",
+    "modalities": ["docx", "pptx"],
+    "raw_subdir": "papers",
+    "json_protocol": true,
+    "output_contract": "raw-multimodal/v0.1"
+  },
+  {
+    "name": "oks-pdf",
+    "level": 1,
+    "description": "PDF → MinerU layout + page/formula/asset evidence Raw Bundle",
+    "check_cmd": "oks-raw-bundle --version",
+    "install_hint": "pip install 'oks-multimodal[pdf]' (isolated py3.12 env)",
+    "command": "oks-raw-bundle mineru <mineru_result> --source <input> --output <bundle_dir>",
+    "modalities": ["pdf"],
+    "raw_subdir": "papers",
+    "json_protocol": true,
+    "output_contract": "raw-multimodal/v0.1"
   },
   {
     "name": "agent-reach",
