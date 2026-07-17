@@ -135,9 +135,7 @@ open-knowledge-studio/
 ```
 
 **Infrastructure (not buckets):** `cli/` (the API-free `oks` core),
-`scripts/` (repo maintenance/bootstrap helpers, e.g. `init-domains.sh` —
-*not* L1 tools, which install independently), `templates/`, and `docs/`
-live at top level but hold code/docs, not knowledge.
+`templates/`, and `docs/` live at top level but hold code/docs, not knowledge.
 
 **Memory curve scoring** (wiki/):
 

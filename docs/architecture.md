@@ -59,7 +59,7 @@ open-knowledge-studio/
     └── learning-schema.json   # CI 强制的 learning schema
 ```
 
-**基础设施（非桶）**：`cli/`（API-free 的 `oks` 核心）、`scripts/`（仓库运维/引导助手，*非* L1 工具 —— L1 工具独立安装）、`templates/`、`docs/` 同样位于顶层，但装的是代码/文档，不是知识。
+**基础设施（非桶）**：`cli/`（API-free 的 `oks` 核心）、`templates/`、`docs/` 同样位于顶层，但装的是代码/文档，不是知识。
 
 ## 22 个知识域
 
