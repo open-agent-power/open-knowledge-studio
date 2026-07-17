@@ -5,7 +5,7 @@ parent: 内部机制
 ---
 # Architecture（架构）
 
-*五桶架构、记忆生命周期与设计原则。*
+*4 认知桶 + 2 基础设施层、记忆生命周期与设计原则。*
 
 ## Raw Material vs Memory — 核心区分
 
@@ -20,17 +20,20 @@ parent: 内部机制
 
 推荐工作流：将来源保存到 `raw/`，然后将有价值的部分蒸馏为 `wiki/` memory。
 
-## 五桶记忆架构
+## 4 认知桶 + 2 基础设施层
 
 <img src="assets/architecture-overview.svg" alt="Architecture Overview" style="max-width:100%;height:auto;" />
 
-| 桶 | 用途 | 衰减 | 召回 |
-|------|------|------|------|
-| `profiles/` | 团队、用户、项目画像 | 无 | 直接读取 |
-| `raw/` | Raw materials（原始材料） | 无 | 关键词 + 新鲜度 |
-| `wiki/` | 策划知识（memories） | 类型特定 λ | 6 因子召回 |
-| `drafts/` | Dreaming 候选 | 无 | N/A（人工审查） |
-| `settings/` | 系统配置 | 无 | 直接读取 |
+四个**认知桶**是 Agent 观察、写入、召回、遗忘的知识；两个**基础设施层**（配置 + schema）是 Agent 读取来决定"怎么运转"、但从不作为知识写入的东西 —— 它们不衰减、不按相关性召回。
+
+| 层 | 目录 | 用途 | 衰减 | 访问 |
+|----|------|------|------|------|
+| 认知 | `profiles/` | 团队、用户、项目画像 | 无 | 直接读取 |
+| 认知 | `raw/` | Raw materials（原始材料） | 无 | 关键词 + 新鲜度 |
+| 认知 | `wiki/` | 策划知识（memories） | 类型特定 λ | 6 因子召回 |
+| 认知 | `drafts/` | Dreaming 候选 | 无 | N/A（人工审查） |
+| 配置 | `settings/` | 运行时旋钮：路由表、衰减、intake | 无 | 直接读取（运行时读路由表） |
+| Schema | `_meta/` | 数据形状契约：frontmatter/learning | 无 | 读时应用；CI 强制 |
 
 ## 目录结构
 
@@ -47,11 +50,16 @@ open-knowledge-studio/
 ├── wiki/              # ③ 策展知识
 │   └── {domain}/{type}/{slug}.md
 ├── drafts/            # ④ Dreaming 候选
-└── settings/          # ⑤ 系统配置
-    ├── decay-config.yaml
-    ├── handlers.json          # 三级工具注册表
-    └── input-sources.json
+├── settings/          # ⑤ 配置层
+│   ├── decay-config.yaml
+│   ├── handlers.json          # 三级工具注册表
+│   └── input-sources.json
+└── _meta/             # ⑥ Schema 层
+    ├── frontmatter-schema.md  # wiki/ frontmatter 契约
+    └── learning-schema.json   # CI 强制的 learning schema
 ```
+
+**基础设施（非桶）**：`cli/`（API-free 的 `oks` 核心）、`scripts/`（仓库运维/引导助手，*非* L1 工具 —— L1 工具独立安装）、`templates/`、`docs/` 同样位于顶层，但装的是代码/文档，不是知识。
 
 ## 22 个知识域
 

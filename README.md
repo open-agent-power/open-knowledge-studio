@@ -48,7 +48,7 @@ See [`docs/`](docs/) for in-depth design documentation (GitHub Pages ready).
 
 Open Knowledge Studio 是一个为 Claude Code 设计的文件式知识库系统。提供：
 
-- **五桶架构**：`profiles/`、`raw/`、`wiki/`、`drafts/`、`settings/`
+- **4 认知桶 + 2 基础设施层**：认知桶 `profiles/`、`raw/`、`wiki/`、`drafts/`；基础设施 `settings/`（配置）、`_meta/`（schema）
 - **6 因子召回引擎**：token 交集 + 子串匹配 + topic trace + 类型加权 + 审查惩罚 + 记忆曲线
 - **Dreaming 循环**：AI 将原始材料蒸馏为草稿提案，人工审查后提升为 wiki
 - **衰减系统**：记忆曲线评分，类型特定 λ，tier 分级（hot/warm/cold/evictable）

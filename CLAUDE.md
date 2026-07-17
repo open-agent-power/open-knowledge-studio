@@ -55,7 +55,7 @@ injected into Claude Code context
 
 See `CONSTITUTION.md` for the full memory design (A1-A5):
 
-- **A1**: Five-bucket architecture + memory lifecycle (Observe→Write→Store→Retrieve→Inject→Forget)
+- **A1**: Four cognitive buckets (profiles/raw/wiki/drafts) + two infrastructure layers (settings=config, _meta=schema) + memory lifecycle (Observe→Write→Store→Retrieve→Inject→Forget)
 - **A2**: Six-type memory model + injection order + source labels + conflict priority
 - **A3**: Dreaming — human-reviewed knowledge evolution
 - **A4**: Knowledge evolution — supersedes, enriches, confirms, challenges
@@ -70,10 +70,11 @@ open-knowledge-studio/
 ├── raw/              # ② Raw materials — date-based: {YYYY}/{MM}/{DD}/{source}/
 ├── wiki/             # ③ Curated knowledge — 22 domains × 3 types
 ├── drafts/           # ④ Dreaming candidates
-├── settings/         # ⑤ System config — decay, input sources
-├── _meta/            # Frontmatter schema v0.7
+├── settings/         # ⑤ Config layer — decay, tool registry, input sources
+├── _meta/            # ⑥ Schema layer — frontmatter/learning contracts (CI-enforced)
 ├── templates/        # concept, strategy, anti-pattern, draft
-├── cli/              # Python CLI tool (oks)
+├── cli/              # Python CLI tool (oks) — API-free core
+├── scripts/          # Repo maintenance/bootstrap helpers (not L1 tools)
 ├── docs/             # GitHub Pages design documentation
 ├── CONSTITUTION.md   # Memory architecture design
 ├── CLAUDE.md         # This file

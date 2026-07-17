@@ -78,18 +78,27 @@ agent's job, guided by the routing table in `settings/handlers.json`.
 
 ## Architecture Invariants
 
-### A1: Five-bucket memory architecture
+### A1: Four cognitive buckets + two infrastructure layers
 
-The knowledge base has **five buckets**. Each bucket has a clear purpose
-and recall strategy.
+The knowledge repo separates **four cognitive buckets** — content the agent
+observes, writes, recalls, and forgets — from **two infrastructure layers**
+(config + schema) that the agent reads to know how to behave but never writes
+as knowledge. Config and schema do not decay and are not recalled by relevance.
 
-| Bucket | Purpose | Decay | Recall |
-|--------|---------|-------|--------|
-| `profiles/` | Team/user/project portraits, recipes, goals | None | Direct read (goals influence recall relevance) |
-| `raw/` | Original records, date-based by source | None | Keyword + freshness (rglob any structure) |
-| `wiki/` | Curated knowledge (from raw via Dreaming) | Type-specific λ | 6-factor relevance + curve |
-| `drafts/` | Dreaming candidates (raw → wiki intermediate) | None | N/A (human review) |
-| `settings/` | System infrastructure (handlers.json, input-sources, decay-config) | None | Direct read |
+| Layer | Dir | Contents | Decay | Access |
+|-------|-----|----------|-------|--------|
+| Cognitive | `profiles/` | Team/user/project portraits, recipes, goals | None | Direct read (goals influence recall relevance) |
+| Cognitive | `raw/` | Original records, date-based by source | None | Keyword + freshness (rglob any structure) |
+| Cognitive | `wiki/` | Curated knowledge (from raw via Dreaming) | Type-specific λ | 6-factor relevance + curve |
+| Cognitive | `drafts/` | Dreaming candidates (raw → wiki intermediate) | None | N/A (human review) |
+| Config | `settings/` | Runtime knobs: handlers.json, input-sources, decay-config | None | Direct read (agent reads routing table at runtime) |
+| Schema | `_meta/` | Data-shape contracts: frontmatter-schema, learning-schema | None | Applied on read; CI-enforced |
+
+`settings/` answers *"what should happen"* (config, changes per deployment);
+`_meta/` answers *"what shape is valid"* (schema, versioned, CI-gated). Both
+are git-synced (P1) and sit at top level alongside the cognitive buckets, but
+neither is "memory" in the cognitive sense — do not treat them as recallable
+knowledge.
 
 **Directory structure:**
 
@@ -110,11 +119,19 @@ open-knowledge-studio/
 │   └── {domain}/{type}/{slug}.md  # concept | strategy | anti-pattern
 ├── drafts/                       # ④ Dreaming candidates
 │   └── {slug}.md
-└── settings/                     # ⑤ System config
-    ├── decay-config.yaml
-    ├── handlers.json             # 3-level tool registry
-    └── input-sources.json        # Scheduled intake sources
+├── settings/                     # ⑤ Config layer
+│   ├── decay-config.yaml
+│   ├── handlers.json             # 3-level tool registry
+│   └── input-sources.json        # Scheduled intake sources
+└── _meta/                        # ⑥ Schema layer
+    ├── frontmatter-schema.md     # wiki/ frontmatter contract
+    └── learning-schema.json      # CI-enforced learning schema
 ```
+
+**Infrastructure (not buckets):** `cli/` (the API-free `oks` core),
+`scripts/` (repo maintenance/bootstrap helpers, e.g. `init-domains.sh` —
+*not* L1 tools, which install independently), `templates/`, and `docs/`
+live at top level but hold code/docs, not knowledge.
 
 **Memory curve scoring** (wiki/):
 
@@ -156,7 +173,8 @@ recall, scope, and decay:
 | Procedural Memory | `.claude/skills/{slug}/` | Keyword trigger | None | — |
 | Draft Memory | `drafts/{slug}.md` | N/A | None | N/A |
 
-**Bucket mapping:** The six types map to five buckets + Claude Code skills:
+**Bucket mapping:** The six types map to the four cognitive buckets + Claude Code skills
+(`settings/` and `_meta/` are infrastructure, not memory types):
 - User/Project Memory → `profiles/` (also includes `recipes/` and `goals/`)
 - Episodic Memory → `raw/` (date-based: `{YYYY}/{MM}/{DD}/{source}/`)
 - Semantic Memory → `wiki/`
