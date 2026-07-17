@@ -89,6 +89,14 @@ Agent adapts to each tool's output format.
    - Auto-create today's directory: `mkdir -p raw/{YYYY}/{MM}/{DD}/{source}/`
    - Use atomic write pattern (mkstemp + fsync + os.replace)
 6. **Record** — log source URL/path, modality, tool used in frontmatter
+   - Optional **human metadata** (P3-safe: annotation, not body content):
+     - `note` — the human's verbatim intake comment, e.g.
+       `note: "这个内容很不错，对于记忆管理"`. The LLM must not paraphrase or
+       invent it; only record what the human actually said.
+     - `flagged: true` — set when the human explicitly marks the item as
+       worth promoting. Absent/false means normal triage.
+   - These fields annotate the raw record; the raw **body** stays mechanical
+     (P3). Recording a human's own words is metadata, not LLM authorship.
 
 ### Maximum Fidelity Principle (P3: raw is mechanical)
 
@@ -106,11 +114,18 @@ After intake, scan `raw/` for unprocessed files:
 1. **For each new file, AI-assess:**
    - **Relevance** — relates to active domains?
    - **Quality** — substantial content (≥50 chars)?
-   - **Novelty** — run `oks search <keywords>` to check duplicates
+   - **Novelty** — run `oks search <keywords>` to check wiki duplicates, and
+     `oks recall <keywords>` to catch near-dupes already in `raw/` (same
+     source ingested recently). Skip if it is a clear re-ingest.
+   - **Human signal** — a raw `flagged: true` (or a positive `note`) is a
+     strong push toward A-grade; respect the human's explicit intent.
    - **Grade**: A (→ drafts/), B (→ skip), C (→ skip)
 
 2. **For A-grade items** — Extract concepts, determine type + area,
    write to `drafts/{slug}.md` with source reference.
+   - If the raw file carries a human `note`, copy it **verbatim** into the
+     draft's `source_note` field. On promote it flows to the wiki page's
+     `human_note` (handled automatically by `promote_draft`).
 
 3. **Report** — Summary: X scanned, Y drafted, Z skipped.
 

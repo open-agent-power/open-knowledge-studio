@@ -103,3 +103,74 @@ def test_recall_combined(kb_root):
     assert "knowledge" in result
     assert isinstance(result["episodic"], list)
     assert isinstance(result["knowledge"], list)
+
+
+def _write_goal(root: Path, slug: str, *, status="active", domains=None, keywords=None):
+    gdir = root / "profiles" / "goals"
+    gdir.mkdir(parents=True, exist_ok=True)
+    fm = {
+        "title": slug,
+        "type": "goal",
+        "status": status,
+        "domains": domains or [],
+        "keywords": keywords or [],
+    }
+    fm_str = yaml.dump(fm, default_flow_style=False, allow_unicode=True, sort_keys=False)
+    _atomic_write(gdir / f"{slug}.md", f"---\n{fm_str}---\n\n# {slug}\n")
+
+
+def test_load_active_goals_normalizes(kb_root):
+    from knowledge_studio.store import load_active_goals
+    _write_goal(kb_root, "active-goal", domains=["Computing", "Engineering"],
+                keywords=["Docker", "Kubernetes"])
+    _write_goal(kb_root, "done-goal", status="done", domains=["finance"],
+                keywords=["budget"])
+
+    goals = load_active_goals()
+    assert len(goals) == 1
+    g = goals[0]
+    assert g["domains"] == {"computing", "engineering"}
+    assert g["keywords"] == {"docker", "kubernetes"}
+
+
+def test_goal_boost_lifts_matching_page(kb_root):
+    from knowledge_studio.recall import recall_knowledge
+    _write_goal(kb_root, "g", domains=["computing"], keywords=["docker"])
+
+    off = recall_knowledge("deployment", limit=5, goal_boost=False)
+    on = recall_knowledge("deployment", limit=5, goal_boost=True)
+
+    def rel(results, slug):
+        return next((r["relevance"] for r in results if r["slug"] == slug), None)
+
+    assert rel(on, "docker-deployment") > rel(off, "docker-deployment")
+
+
+def test_goal_boost_noop_without_goals(kb_root):
+    from knowledge_studio.recall import recall_knowledge
+    off = recall_knowledge("deployment", limit=5, goal_boost=False)
+    on = recall_knowledge("deployment", limit=5, goal_boost=True)
+    assert [r["slug"] for r in on] == [r["slug"] for r in off]
+
+
+def test_promote_draft_carries_human_note(kb_root):
+    from knowledge_studio.store import promote_draft, parse_wiki_file
+    drafts = kb_root / "drafts"
+    drafts.mkdir(parents=True, exist_ok=True)
+    fm = {
+        "title": "Memory Management Insight",
+        "draft_type": "concept",
+        "draft_area": "computing",
+        "source_pages": [],
+        "source_note": "这个内容很不错，对于记忆管理",
+        "status": "draft",
+    }
+    fm_str = yaml.dump(fm, default_flow_style=False, allow_unicode=True, sort_keys=False)
+    _atomic_write(drafts / "mem-insight.md", f"---\n{fm_str}---\n\nBody text about memory.")
+
+    promote_draft("mem-insight")
+
+    pages = list((kb_root / "wiki").rglob("*.md"))
+    metas = [parse_wiki_file(p) for p in pages]
+    promoted = next(m for m in metas if m and m.get("title") == "Memory Management Insight")
+    assert promoted.get("human_note") == "这个内容很不错，对于记忆管理"

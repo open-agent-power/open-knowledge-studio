@@ -19,5 +19,7 @@ List drafts in `drafts/`, let user review, promote accepted ones to `wiki/` or r
 ## Rules
 
 - Promoted pages get `status: provisional`, `importance: 0.7`
+- If a draft carries a `source_note` (human intake comment), promote copies it
+  verbatim onto the wiki page as `human_note` — the human's judgement survives.
 - Rejected drafts are deleted permanently
 - Always confirm before rejecting

@@ -3,13 +3,16 @@
 Extracted from autpilot-web/backend/app/services/knowledge_recall.py.
 Removed settings and knowledge_sync dependencies. Uses store.repo_root().
 
-6-factor relevance scoring:
+6+1-factor relevance scoring:
   1. Token overlap (×0.3) — jieba segmentation + intersection
   2. Substring match (+1.0 title / +0.5 body)
   3. Topic trace match (+2.0)
   4. Type boost (anti-pattern=1.5, strategy=0.8, concept=0.6)
   5. Review penalty boost (+2.0 wrong / +1.0 failure)
   6. Memory-curve score (×0.5)
+  7. Goal boost — active goals (profiles/goals/, status=active) lift pages
+     that already matched: area in a goal's domains (+0.8) and page content
+     hits a goal keyword (+0.4). No-op when there are no active goals.
 """
 from __future__ import annotations
 
@@ -19,7 +22,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from knowledge_studio.store import list_wiki_pages, raw_dir, record_access, repo_root
+from knowledge_studio.store import (
+    list_wiki_pages,
+    load_active_goals,
+    raw_dir,
+    record_access,
+    repo_root,
+)
 
 _logger = logging.getLogger(__name__)
 
@@ -32,6 +41,7 @@ def recall(
     topic_id: int | None = None,
     limit: int = DEFAULT_RECALL_LIMIT,
     scope: str | None = None,
+    goal_boost: bool = True,
 ) -> dict[str, list[dict[str, Any]]]:
     """Two-path recall: episodic (search) + knowledge (stability).
 
@@ -40,7 +50,9 @@ def recall(
     """
     return {
         "episodic": recall_episodic(query=query, topic_id=topic_id, limit=limit),
-        "knowledge": recall_knowledge(query=query, topic_id=topic_id, limit=limit, scope=scope),
+        "knowledge": recall_knowledge(
+            query=query, topic_id=topic_id, limit=limit, scope=scope, goal_boost=goal_boost
+        ),
     }
 
 
@@ -124,18 +136,30 @@ def recall_knowledge(
     topic_id: int | None = None,
     limit: int = DEFAULT_RECALL_LIMIT,
     scope: str | None = None,
+    goal_boost: bool = True,
 ) -> list[dict[str, Any]]:
-    """Find wiki pages relevant to the query via 6-factor scoring.
+    """Find wiki pages relevant to the query via 6+1-factor scoring.
 
     scope: optional area name for soft, opt-in narrowing (reuses the `area`
     field). None = global recall across all areas. This is a soft scope, not
     a hard partition — it filters candidates before scoring, nothing more.
+
+    goal_boost: when True (default), pages that already matched are lifted if
+    they fall within an active goal's domains/keywords. No-op when there are
+    no active goals, so it is safe to leave on.
     """
     all_pages = list_wiki_pages()
     if not all_pages:
         return []
 
     scope_lower = scope.lower().strip() if scope else ""
+
+    goal_domains: set[str] = set()
+    goal_keywords: set[str] = set()
+    if goal_boost:
+        for goal in load_active_goals():
+            goal_domains |= goal.get("domains", set())
+            goal_keywords |= goal.get("keywords", set())
 
     query_lower = query.lower().strip() if query else ""
     query_tokens = _tokenize(query_lower)
@@ -148,7 +172,9 @@ def recall_knowledge(
         if scope_lower and str(item.get("area", "")).lower().strip() != scope_lower:
             continue
 
-        relevance = _compute_relevance(item, query_lower, query_tokens, topic_id)
+        relevance = _compute_relevance(
+            item, query_lower, query_tokens, topic_id, goal_domains, goal_keywords
+        )
         if relevance > 0:
             scored.append((relevance, item))
 
@@ -211,6 +237,8 @@ def _compute_relevance(
     query_lower: str,
     query_tokens: set[str],
     topic_id: int | None,
+    goal_domains: set[str] | None = None,
+    goal_keywords: set[str] | None = None,
 ) -> float:
     base = 0.0
 
@@ -261,6 +289,12 @@ def _compute_relevance(
 
     score = item.get("score", 0)
     relevance += score * 0.5
+
+    if relevance > 0 and (goal_domains or goal_keywords):
+        if goal_domains and str(item.get("area", "")).lower().strip() in goal_domains:
+            relevance += 0.8
+        if goal_keywords and any(kw in searchable for kw in goal_keywords):
+            relevance += 0.4
 
     return relevance
 

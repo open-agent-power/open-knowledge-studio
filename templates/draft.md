@@ -3,6 +3,7 @@ title: "{{TITLE}}"
 draft_type: concept
 draft_area: computing
 source_pages: []
+source_note: ""
 drafted_at: "{{DATE}}"
 status: draft
 ---

@@ -50,6 +50,47 @@ def raw_dir() -> Path:
     return repo_root() / "raw"
 
 
+def goals_dir() -> Path:
+    return repo_root() / "profiles" / "goals"
+
+
+def _as_str_set(value) -> set[str]:
+    if isinstance(value, str):
+        items = [v.strip() for v in value.split(",")]
+    elif isinstance(value, (list, tuple, set)):
+        items = [str(v).strip() for v in value]
+    else:
+        return set()
+    return {item.lower() for item in items if item}
+
+
+def load_active_goals() -> list[dict]:
+    """Return active goals (type==goal, status==active) as normalized dicts.
+
+    Each entry has lowercased 'domains' and 'keywords' string sets, used by
+    recall to boost pages that fall within an active goal's scope. Returns an
+    empty list when profiles/goals is absent or holds no active goals.
+    """
+    gd = goals_dir()
+    if not gd.exists():
+        return []
+
+    goals: list[dict] = []
+    for path in sorted(gd.rglob("*.md")):
+        meta = parse_wiki_file(path)
+        if not meta:
+            continue
+        if meta.get("type") != "goal" or meta.get("status") != "active":
+            continue
+        goals.append({
+            "slug": meta.get("slug", path.stem),
+            "title": meta.get("title", path.stem),
+            "domains": _as_str_set(meta.get("domains")),
+            "keywords": _as_str_set(meta.get("keywords")),
+        })
+    return goals
+
+
 def _access_log_path() -> Path:
     log_dir = repo_root() / ".oks"
     log_dir.mkdir(parents=True, exist_ok=True)
@@ -320,6 +361,7 @@ def write_wiki_page(
     supersedes: str | None = None,
     relates_to: str | None = None,
     relationship: str | None = None,
+    human_note: str | None = None,
 ) -> Path:
     fp = _fingerprint(content)
     fp_index = _load_fingerprint_index()
@@ -390,6 +432,8 @@ def write_wiki_page(
         frontmatter["traces"] = traces
     if review:
         frontmatter["review"] = review
+    if human_note:
+        frontmatter["human_note"] = human_note
     if relates_to and relationship:
         frontmatter["relates_to"] = relates_to
         frontmatter["relationship"] = relationship
@@ -491,6 +535,7 @@ def promote_draft(
     final_title = title or meta.get("title", slug)
     final_type = (wiki_type or meta.get("draft_type", "concepts")).rstrip("s") + "s"
     final_area = area or meta.get("draft_area", "computing")
+    human_note = meta.get("source_note") or None
 
     path = write_wiki_page(
         title=final_title,
@@ -499,6 +544,7 @@ def promote_draft(
         area=final_area,
         importance=0.7,
         tags=tags,
+        human_note=human_note,
     )
 
     draft_path.unlink()
