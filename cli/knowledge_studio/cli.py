@@ -38,14 +38,12 @@ app.add_typer(config_app, name="config")
 def search(
     query: str = typer.Argument(help="Search query"),
     limit: int = typer.Option(5, "--limit", "-n", help="Max results"),
-    domain: Optional[str] = typer.Option(None, "--domain", "-d", help="Filter by domain"),
+    scope: Optional[str] = typer.Option(None, "--scope", "--domain", "-d", help="Soft scope: narrow to one area (opt-in, not a hard partition)"),
     type_filter: Optional[str] = typer.Option(None, "--type", "-t", help="Filter by type"),
 ):
     """Search wiki pages using the 6-factor recall engine."""
-    results = recall_knowledge(query=query, limit=limit)
+    results = recall_knowledge(query=query, limit=limit, scope=scope)
 
-    if domain:
-        results = [r for r in results if r.get("area") == domain]
     if type_filter:
         results = [r for r in results if r.get("type") == type_filter]
 
@@ -80,9 +78,10 @@ def recall_cmd(
     query: str = typer.Argument(help="Search query"),
     topic_id: Optional[int] = typer.Option(None, "--topic-id", help="Filter by topic ID"),
     limit: int = typer.Option(5, "--limit", "-n", help="Max results per path"),
+    scope: Optional[str] = typer.Option(None, "--scope", "-s", help="Soft scope: narrow knowledge path to one area (opt-in, not a hard partition)"),
 ):
     """Two-path recall: episodic (raw/) + knowledge (wiki/)."""
-    result = recall(query=query, topic_id=topic_id, limit=limit)
+    result = recall(query=query, topic_id=topic_id, limit=limit, scope=scope)
 
     if result["episodic"]:
         console.print("\n[bold blue]Episodic Memory (raw/ + profiles/)[/bold blue]")

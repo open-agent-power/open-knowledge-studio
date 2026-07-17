@@ -7,7 +7,7 @@
 
 ## Why this exists
 
-Multimodal L1 tools (the independent `oks-connector` / `oks-raw-bundle`
+Multimodal L1 tools (the independent `oks-connector`
 package) emit a **Raw Bundle**: a directory holding a primary Markdown file
 plus a provenance sidecar. See `docs/raw-multimodal-standard.md` for the full
 `raw-multimodal/v0.1` output contract.

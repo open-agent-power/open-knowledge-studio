@@ -50,10 +50,10 @@ Agent uses Bash to run system commands directly:
 
 Output: raw stdout, agent writes to `raw/{YYYY}/{MM}/{DD}/{source}/{slug}.md`
 
-### Level 1 — OKS Protocol CLIs (`oks-raw-bundle`)
+### Level 1 — OKS Protocol CLIs (`oks-connector`)
 
 L1 extractors come from the independently-installed `oks-connector` package
-(console entry `oks-raw-bundle`). They emit a **Raw Bundle** — a directory
+(console entry `oks-connector`). They emit a **Raw Bundle** — a directory
 holding `content.md` (faithful primary text, the recall entry) plus sidecars
 `raw.md`, `metadata.json` (source + hash), `evidence.jsonl` (atomic provenance),
 `quality-report.json`, and `assets/` — conforming to the `raw-multimodal/v0.1`
@@ -61,10 +61,10 @@ contract. The tool writes the bundle directly via `--output`; the agent does
 not reshape it.
 
 ```bash
-oks-raw-bundle watch <file> --output raw/{YYYY}/{MM}/{DD}/videos/{slug}/   # video → transcript + frames + OCR
-oks-raw-bundle watch <file> --output raw/{YYYY}/{MM}/{DD}/audio/{slug}/ --transcript-only   # audio → ASR
-oks-raw-bundle image <file> --output raw/{YYYY}/{MM}/{DD}/misc/{slug}/     # image → OCR + bbox evidence
-oks-raw-bundle validate <bundle_dir>                                       # check against v0.1 before it counts
+oks-connector watch <file> --output raw/{YYYY}/{MM}/{DD}/videos/{slug}/   # video → transcript + frames + OCR
+oks-connector watch <file> --output raw/{YYYY}/{MM}/{DD}/audio/{slug}/ --transcript-only   # audio → ASR
+oks-connector image <file> --output raw/{YYYY}/{MM}/{DD}/misc/{slug}/     # image → OCR + bbox evidence
+oks-connector validate <bundle_dir>                                       # check against v0.1 before it counts
 ```
 
 The bundle **is** the raw record — recall reads `content.md` (type `raw`) and
@@ -92,7 +92,7 @@ Agent adapts to each tool's output format.
 
 ### Maximum Fidelity Principle (P3: raw is mechanical)
 
-- Extraction is **mechanical** — curl/pdftotext (L0), or `oks-raw-bundle`
+- Extraction is **mechanical** — curl/pdftotext (L0), or `oks-connector`
   ASR/OCR/frame sampling (L1). The tool produces the bytes.
 - The **LLM never writes `raw/`** and never injects summaries, corrections, or
   descriptions. Faithful capture only; provenance goes in `evidence.jsonl`.

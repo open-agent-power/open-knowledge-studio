@@ -62,7 +62,7 @@ Agent 读取 `settings/handlers.json` 路由表，按模态选择工具：
 | 级别 | 类型 | 示例 | 输出 |
 |------|------|------|------|
 | L0 | 系统工具 | curl, pdftotext | 原始 stdout |
-| L1 | OKS 协议 CLI (`oks-raw-bundle`) | oks-video, oks-audio, oks-image | Raw Bundle (`raw-multimodal/v0.1`) |
+| L1 | OKS 协议 CLI (`oks-connector`) | oks-video, oks-audio, oks-image | Raw Bundle (`raw-multimodal/v0.1`) |
 | L2 | 独立工具 | agent-reach, yt-dlp | 工具特定格式 |
 
 Agent 直接通过 Bash 调用工具，OKS 不在运行时路径中。

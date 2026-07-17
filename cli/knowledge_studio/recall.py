@@ -31,11 +31,16 @@ def recall(
     query: str = "",
     topic_id: int | None = None,
     limit: int = DEFAULT_RECALL_LIMIT,
+    scope: str | None = None,
 ) -> dict[str, list[dict[str, Any]]]:
-    """Two-path recall: episodic (search) + knowledge (stability)."""
+    """Two-path recall: episodic (search) + knowledge (stability).
+
+    scope narrows only the knowledge path (wiki area); episodic recall stays
+    global since raw/ is time-partitioned and has no area.
+    """
     return {
         "episodic": recall_episodic(query=query, topic_id=topic_id, limit=limit),
-        "knowledge": recall_knowledge(query=query, topic_id=topic_id, limit=limit),
+        "knowledge": recall_knowledge(query=query, topic_id=topic_id, limit=limit, scope=scope),
     }
 
 
@@ -118,11 +123,19 @@ def recall_knowledge(
     query: str = "",
     topic_id: int | None = None,
     limit: int = DEFAULT_RECALL_LIMIT,
+    scope: str | None = None,
 ) -> list[dict[str, Any]]:
-    """Find wiki pages relevant to the query via 6-factor scoring."""
+    """Find wiki pages relevant to the query via 6-factor scoring.
+
+    scope: optional area name for soft, opt-in narrowing (reuses the `area`
+    field). None = global recall across all areas. This is a soft scope, not
+    a hard partition — it filters candidates before scoring, nothing more.
+    """
     all_pages = list_wiki_pages()
     if not all_pages:
         return []
+
+    scope_lower = scope.lower().strip() if scope else ""
 
     query_lower = query.lower().strip() if query else ""
     query_tokens = _tokenize(query_lower)
@@ -130,6 +143,9 @@ def recall_knowledge(
     scored: list[tuple[float, dict]] = []
     for item in all_pages:
         if item.get("status") in ("dropped", "superseded") or item.get("archived"):
+            continue
+
+        if scope_lower and str(item.get("area", "")).lower().strip() != scope_lower:
             continue
 
         relevance = _compute_relevance(item, query_lower, query_tokens, topic_id)

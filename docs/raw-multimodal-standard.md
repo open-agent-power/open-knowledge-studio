@@ -374,10 +374,10 @@ Raw提取包
 
 ## 15. 当前可运行入口
 
-Level-1 能力由**独立安装的** `oks-connector` 包提供，入口为其 `oks-raw-bundle`
-命令行（见该包 README）。它**不在** OKS 主仓库的 `cli/` 或 `scripts/` 内 —— 按
+Level-1 能力由**独立安装的** `oks-connector` 包提供，命令行入口同名
+`oks-connector`（见该包 README）。它**不在** OKS 主仓库的 `cli/` 或 `scripts/` 内 —— 按
 A1/P5，L1 工具是独立版本化、独立安装的能力，而非主仓库脚本。Agent 必须先读取
-`settings/handlers.json`、明确选择模态和子命令，再调用 `oks-raw-bundle`。该 connector
+`settings/handlers.json`、明确选择模态和子命令，再调用 `oks-connector`。该 connector
 本身不承担自动模态探测、跨工具调度、摘要、纠错、评级或知识提升 —— 编排由 Agent 负责。
 
 各模态的隔离解释器路径写入未跟踪的 `settings/raw-tools.json`，格式参考
@@ -385,29 +385,29 @@ A1/P5，L1 工具是独立版本化、独立安装的能力，而非主仓库脚
 
 ```powershell
 # 仅用于开发诊断；正式 /ingest 路由由 Agent 完成
-oks-raw-bundle route "D:\sample\lesson.mp4"
+oks-connector route "D:\sample\lesson.mp4"
 
 # 使用Watch Skill环境执行视频提取并直接生成Raw包
-oks-raw-bundle watch "D:\sample\lesson.mp4" `
+oks-connector watch "D:\sample\lesson.mp4" `
   --source-file "D:\sample\lesson.mp4" `
   --output "raw\2026\07\16\videos\lesson" `
   --max-frames 12
 
 # 运行MarkItDown并生成Office Raw包；也可用--markdown打包已有结果
-oks-raw-bundle markitdown "D:\sample\slides.pptx" `
+oks-connector markitdown "D:\sample\slides.pptx" `
   --output "raw\2026\07\16\papers\slides"
 
 # 打包已有MinerU结果
-oks-raw-bundle mineru "D:\mineru-output" `
+oks-connector mineru "D:\mineru-output" `
   --source "D:\sample\paper.pdf" `
   --output "raw\2026\07\16\papers\paper"
 
 # 使用RapidOCR环境提取独立图片
-oks-raw-bundle image "D:\sample\screenshot.png" `
+oks-connector image "D:\sample\screenshot.png" `
   --output "raw\2026\07\16\misc\screenshot"
 
 # 所有包进入raw/前必须通过结构和证据校验
-oks-raw-bundle validate "raw\2026\07\16\videos\lesson"
+oks-connector validate "raw\2026\07\16\videos\lesson"
 ```
 
 每次成功提取都会向标准输出返回 `raw-multimodal/v0.1` JSON envelope，其中包含 Bundle 路径、`content.md`、元数据和校验结果。`watch` 命令应使用已安装 Watch Skill 的 Python 环境执行；`markitdown` 命令应使用已安装 MarkItDown 的环境执行。提取器缺失时命令返回机器可读错误，不会自动安装或切换到未声明实现。
