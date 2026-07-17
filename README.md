@@ -14,7 +14,7 @@
 Open Knowledge Studio is a knowledge base system designed to work with Claude Code. It provides:
 
 - **5-bucket architecture**: `profiles/`, `raw/`, `wiki/`, `drafts/`, `settings/`
-- **6-factor recall engine**: token overlap + substring + topic trace + type boost + review penalty + memory curve
+- **6+1-factor recall engine**: token overlap + substring + topic trace + type boost + review penalty + memory curve, plus an optional goal boost (active goals lift on-scope pages; no-op without goals)
 - **Dreaming cycle**: AI distills raw materials into draft proposals, humans review and promote to wiki
 - **Decay system**: memory curve scoring with type-specific λ, tier classification (hot/warm/cold/evictable)
 - **22 knowledge domains**: pre-created directory skeleton
@@ -49,7 +49,7 @@ See [`docs/`](docs/) for in-depth design documentation (GitHub Pages ready).
 Open Knowledge Studio 是一个为 Claude Code 设计的文件式知识库系统。提供：
 
 - **4 认知桶 + 2 基础设施层**：认知桶 `profiles/`、`raw/`、`wiki/`、`drafts/`；基础设施 `settings/`（配置）、`_meta/`（schema）
-- **6 因子召回引擎**：token 交集 + 子串匹配 + topic trace + 类型加权 + 审查惩罚 + 记忆曲线
+- **6+1 因子召回引擎**：token 交集 + 子串匹配 + topic trace + 类型加权 + 审查惩罚 + 记忆曲线，外加可选的**目标加权**（active goal 抬升命中域/关键词的页面；无 goal 时不生效）
 - **Dreaming 循环**：AI 将原始材料蒸馏为草稿提案，人工审查后提升为 wiki
 - **衰减系统**：记忆曲线评分，类型特定 λ，tier 分级（hot/warm/cold/evictable）
 - **22 个知识域**：预创建目录骨架

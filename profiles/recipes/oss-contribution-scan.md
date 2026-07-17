@@ -23,6 +23,11 @@ status: active
 把「知识库驱动的开源贡献」循环固化成可复用配方。受 `profiles/goals/oss-contribution.md`
 约束（ODD）。核心原则：**去重前置、人类在环、失败回流**。
 
+> **执行方式**：本配方是给 Agent 读的**自动化契约**，不是被某个 runner 解析的脚本。
+> `trigger` / `schedule` 只是提示——由**外部调度器**（如 Qoder 自带的定时任务）按 cron
+> 触发，唤起一个 Agent 读本文件、按 Steps 执行。OKS 核心**不内置调度器/执行器**，`oks`
+> 只提供 recall / search / drafts 等能力；编排始终由 Agent + 人类在环完成（CONSTITUTION P5）。
+
 ## 前置
 
 - `gh auth status` 通过
@@ -80,4 +85,5 @@ status: active
 ## 关联
 
 - Goal / ODD：`profiles/goals/oss-contribution.md`
+- 五维复盘：`profiles/recipes/eval-contribution.md`
 - 新策略：`wiki/engineering/strategies/`（热门仓库去重前置）

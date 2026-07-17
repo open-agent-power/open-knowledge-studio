@@ -8,7 +8,7 @@ Open Knowledge Studio is a file-based knowledge base system designed for use wit
 
 - **5-bucket architecture**: profiles/ (incl. recipes, goals), raw/, wiki/, drafts/, settings/
 - **Three-level tool protocol**: agent-direct intake (L0 system tools, L1 OKS protocol CLIs, L2 independent tools)
-- **6-factor recall engine**: token overlap + substring + topic trace + type boost + review penalty + memory curve
+- **6+1-factor recall engine**: token overlap + substring + topic trace + type boost + review penalty + memory curve + optional goal boost (active goals lift on-scope pages; no-op without goals)
 - **4 knowledge relationships**: supersedes, enriches, confirms, challenges (CONSTITUTION A4)
 - **Recipes & goals**: executable automation recipes + goal-aware recall boosting
 - **Dreaming cycle**: raw → AI distill → drafts → human review → wiki

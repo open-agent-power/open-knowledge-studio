@@ -40,10 +40,11 @@ keywords:
 
 ## Recall Influence
 
-匹配 domains `computing` / `engineering` 且命中关键词
-`open source` / `pull request` / `rocketmq` / `silent merge` 的
-wiki 页与 project profile 在召回时获得加权，让贡献循环优先看到
-repo-selection / pr-merge-patterns / no-op 陷阱 / apache 约定这些策略。
+本 goal 是 `active` 的，因此召回引擎会真实加权（第 7 因子，见 [召回引擎](../../docs/recall-engine.md)）：
+对**已经命中查询**的 wiki 页，若其 `area` ∈ 本 goal 的 domains（`computing` / `engineering`）
+则 +0.8，若页面命中任一关键词（`open source` / `pull request` / `rocketmq` /
+`silent merge` / `contribution`）再 +0.4。无 active goal 时该因子不生效。
+效果：贡献循环优先看到 repo-selection / pr-merge-patterns / no-op 陷阱 / apache 约定这些策略。
 
 ## 关联
 

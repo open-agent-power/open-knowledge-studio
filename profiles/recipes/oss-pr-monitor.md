@@ -22,6 +22,10 @@ status: active
 `oss-contribution-scan.md` 之后最容易被忘的一环——提交后监控。
 教训来源：RocketMQ #10532 提交后不监控，1 天被 #10422 抢先 merge，17 天后才发现。
 
+> **执行方式**：本配方是给 Agent 读的**自动化契约**，不是被某个 runner 解析的脚本。
+> `trigger` / `schedule` 只是提示——由**外部调度器**（如 Qoder 自带的定时任务）按 cron
+> 触发，唤起一个 Agent 读本文件、按 Steps 执行。OKS 核心**不内置调度器/执行器**（CONSTITUTION P5）。
+
 ## 触发
 
 每 2 天一次（或手动）。受 `profiles/goals/oss-contribution.md` KR
@@ -71,5 +75,6 @@ status: active
 ## 关联
 
 - 扫描配方：`profiles/recipes/oss-contribution-scan.md`
+- 五维复盘：`profiles/recipes/eval-contribution.md`
 - Goal / ODD：`profiles/goals/oss-contribution.md`
 - CI 假阳性排查：`wiki/computing/strategies/ci-triage.md`

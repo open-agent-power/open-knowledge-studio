@@ -27,9 +27,10 @@ parent: 内部机制
 total = (token_overlap×0.3 + substring_bonus + topic_trace_bonus)
         × type_boost + review_penalty
         × memory_curve
+        + goal_boost      # 可选第 7 因子，无 active goal 时为 0
 ```
 
-## 六个因子
+## 六个核心因子（+ 1 个可选目标因子）
 
 ### 1. Token Overlap（×0.3）
 
@@ -93,6 +94,27 @@ curve = importance × e^(-λ × days_old) + 0.5 × ln(1 + access_count) + pin_bo
 - Pinned 页面获得 +0.5 加成
 
 详见 [Decay System](decay-system.md)。
+
+### 7. Goal Boost（+0.8 / +0.4，可选）
+
+召回会读取 `profiles/goals/` 下 `status: active` 的 goal（`load_active_goals()`），
+把当前关注的方向变成一个**加法**加权。它只作用于**已经命中查询**（relevance>0）的页面：
+
+- 页面 `area` ∈ 某 active goal 的 `domains`：**+0.8**
+- 页面命中某 active goal 的任一 `keyword`：**+0.4**
+
+```python
+if relevance > 0 and (goal_domains or goal_keywords):
+    if page.area in goal_domains:
+        relevance += 0.8
+    if any(kw in searchable for kw in goal_keywords):
+        relevance += 0.4
+```
+
+{: .note }
+这是"目标感知召回"的真实实现（不是路线图）。它**默认开启**但**无 active goal 时为 no-op**，
+不会凭空把无关页面顶上来；只是在你设定方向后，让贡献/研究循环优先看到 on-scope 的策略。
+需要关闭时传 `goal_boost=False`（如做无偏基线对比）。
 
 ## 双路召回
 

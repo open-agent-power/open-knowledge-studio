@@ -48,10 +48,23 @@ A/B/C 是 AI 打的，召回分是数学算的，**只有 `/promote` 是人工**
 
 自动化级别之外，还有两个独立的旋钮：
 
-- **触发方式**：手动 `/ingest` · 定时（`settings/input-sources.json`）· 事件驱动。
+- **触发方式**：手动 `/ingest` 等 slash 命令 · **配方定时**（`profiles/recipes/*.md`，由外部调度器按 `schedule` cron 触发）· 事件驱动。
 - **审查粒度**：逐条确认 · 批量通过 · 置信度门控（高置信自动、低置信转人）· 抽样质检。
 
 它们可以和级别自由组合——比如"定时抓取 + 置信度门控"就是一种典型的 L3 配置。
+
+### 配方与调度：谁在跑
+
+{: .note }
+OKS 核心**不内置调度器/执行器**。配方（`profiles/recipes/{slug}.md`）是给 Agent 读的
+**自动化契约**，不是被某个 runner 解析的脚本：
+
+- **`schedule` 字段只是 cron 提示** —— 由**外部调度器**（如 Qoder 自带的定时任务）按点触发，
+  唤起一个 Agent 读该配方、按 Steps 执行。改调度不改 OKS 代码。
+- **`settings/input-sources.json` 是声明式订阅清单** —— 每条 source 用 `"recipe": "..."`
+  绑定到具体配方；配方执行时读取其中 `enabled: true` 的源作为输入。
+- **`oks` CLI 只提供能力**（recall / search / drafts / distill…），编排始终由 Agent +
+  人类在环完成（CONSTITUTION P5）。
 
 ## 现状与设计空间
 

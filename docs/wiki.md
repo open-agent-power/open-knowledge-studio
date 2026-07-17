@@ -47,7 +47,7 @@ wiki/{domain}/{concepts|strategies|anti-patterns}/{slug}.md
 
 分数落入 tier：`hot ≥ 0.7`、`warm ≥ 0.4`、`cold ≥ 0.15`、`evictable < 0.15`。
 
-## 召回：6 因子相关性
+## 召回：6+1 因子相关性
 
 `recall.py` `_compute_relevance` 对每个候选页面累加：
 
@@ -57,8 +57,9 @@ wiki/{domain}/{concepts|strategies|anti-patterns}/{slug}.md
 4. **类型加权** — 乘子：anti-pattern `× 1.5`、strategy `× 0.8`、concept `× 0.6`
 5. **复盘信号** — `decision_correct=false` `+2.0`；`outcome=failure` `+1.0`
 6. **记忆曲线分** — 当前 `score × 0.5`
+7. **目标加权（可选）** — 对已命中页面：`area` ∈ active goal 的 domains `+0.8`、命中 goal 关键词 `+0.4`；无 active goal 时不生效
 
-反模式加权最高：踩过的坑最该被优先想起。
+反模式加权最高：踩过的坑最该被优先想起。目标加权则让你**当前设定的方向**（active goal）优先浮现。
 
 ## 知识演化：4 种关系
 
