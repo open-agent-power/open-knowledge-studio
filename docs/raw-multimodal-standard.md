@@ -374,7 +374,7 @@ Raw提取包
 
 ## 15. 当前可运行入口
 
-Level-1 能力由**独立安装的** `oks-multimodal` 包提供，入口为其 `oks-raw-bundle`
+Level-1 能力由**独立安装的** `oks-connector` 包提供，入口为其 `oks-raw-bundle`
 命令行（见该包 README）。它**不在** OKS 主仓库的 `cli/` 或 `scripts/` 内 —— 按
 A1/P5，L1 工具是独立版本化、独立安装的能力，而非主仓库脚本。Agent 必须先读取
 `settings/handlers.json`、明确选择模态和子命令，再调用该 Adapter。插件不承担自动
