@@ -47,7 +47,7 @@ source: github-profile
 
 ## open-knowledge-studio 贡献
 
-- 知识库架构设计（五桶记忆架构 + 6 因子召回引擎）
+- 知识库架构设计（认知桶记忆架构 + 6 因子召回引擎）
 - CLI 工具 `oks` 开发
 - Claude Code 技能 + Hooks 体系
 - 衰减系统 + Dreaming 蒸馏管线设计

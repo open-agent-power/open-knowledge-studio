@@ -140,7 +140,7 @@ oks recall "your topic"
 
 * [Memories](memories.md) — wiki 页面结构、类型和搜索
 * [Raw Materials](raw-materials.md) — 原始材料、蒸馏工作流和导入格式
-* [架构设计](architecture.md) — 五桶结构和记忆生命周期
+* [架构设计](architecture.md) — 认知桶结构和记忆生命周期
 * [召回引擎](recall-engine.md) — 6 因子评分算法
 * [Dreaming 循环](dreaming-cycle.md) — 知识演化管线
 

@@ -205,7 +205,7 @@ Provisional → Active（access_count ≥ 3）→ Dropped（score < threshold）
 * **[召回引擎](recall-engine.md)**: 6 因子评分算法详解
 * **[Dreaming 循环](dreaming-cycle.md)**: memories 如何演化、连接和合成
 * **[衰减系统](decay-system.md)**: 记忆曲线、类型特定 λ 和 tier 分级
-* **[架构设计](architecture.md)**: 五桶结构和记忆生命周期
+* **[架构设计](architecture.md)**: 认知桶结构和记忆生命周期
 
 ---
 

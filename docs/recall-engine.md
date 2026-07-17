@@ -126,7 +126,7 @@ oks recall "authentication" --limit 5
 
 * **[Memories](memories.md)**：Memory 结构、类型和创建路径
 * **[Decay System](decay-system.md)**：记忆曲线公式和 tier 分级
-* **[Architecture](architecture.md)**：五桶结构
+* **[Architecture](architecture.md)**：认知桶结构
 
 ---
 

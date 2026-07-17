@@ -25,17 +25,18 @@ source: human-maintained
 
 ## 概述
 
-open-knowledge-studio 是一个面向 Claude Code 的知识工程仓库，提供五桶记忆架构、6 因子召回引擎、衰减系统和 Dreaming 蒸馏管线。核心管线：raw → wiki → 检索/召回。
+open-knowledge-studio 是一个面向 Claude Code 的知识工程仓库，提供 4 认知桶 + 2 基础设施层的记忆架构、6 因子召回引擎、衰减系统和 Dreaming 蒸馏管线。核心管线：raw → wiki → 检索/召回。
 
-## 五桶记忆架构
+## 记忆架构（4 认知桶 + 2 基础设施层）
 
-| 桶 | 用途 | 衰减 | 召回 |
-|----|------|------|------|
-| `profiles/` | 团队/用户/项目画像 | 无 | 直接读取 |
-| `raw/` | 原始记录（对话、trace、摘要） | 无 | 关键词 + 新鲜度 |
-| `wiki/` | 策展知识（raw 经 Dreaming 蒸馏） | 类型特定 λ | 6 因子相关性 + 曲线 |
-| `drafts/` | Dreaming 候选（raw → wiki 中间态） | 无 | 人工审查 |
-| `settings/` | 系统配置 | 无 | 直接读取 |
+| 桶 | 类别 | 用途 | 衰减 | 召回 |
+|----|------|------|------|------|
+| `profiles/` | 认知 | 团队/用户/项目画像 | 无 | 直接读取 |
+| `raw/` | 认知 | 原始记录（对话、trace、Bundle） | 无 | 关键词 + 新鲜度 |
+| `wiki/` | 认知 | 策展知识（raw 经 Dreaming 蒸馏） | 类型特定 λ | 6 因子相关性 + 曲线 |
+| `drafts/` | 认知 | Dreaming 候选（raw → wiki 中间态） | 无 | 人工审查 |
+| `settings/` | 基础设施·配置 | 系统配置、handlers 路由表 | 无 | 直接读取 |
+| `_meta/` | 基础设施·schema | 版本化契约（CI 校验） | 无 | 直接读取 |
 
 ## 技术栈
 

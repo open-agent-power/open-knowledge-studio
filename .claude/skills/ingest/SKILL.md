@@ -25,7 +25,7 @@ by modality detection.
 | `*.pdf` | pdf | pdftotext (L0) |
 | `*.mp4 *.mov *.avi *.mkv *.webm` | video | oks-video (L1) |
 | `*.mp3 *.wav *.m4a *.flac *.aac *.ogg` | audio | oks-audio (L1) |
-| `*.png *.jpg *.jpeg *.webp *.gif *.bmp` | image | vision API via agent (L0) |
+| `*.png *.jpg *.jpeg *.webp *.bmp` | image | oks-image (L1) |
 | Directory path | repo | agent scans directly (L0) |
 
 ### Tool Availability Check
@@ -50,17 +50,25 @@ Agent uses Bash to run system commands directly:
 
 Output: raw stdout, agent writes to `raw/{YYYY}/{MM}/{DD}/{source}/{slug}.md`
 
-### Level 1 — OKS Protocol CLIs
+### Level 1 — OKS Protocol CLIs (`oks-raw-bundle`)
 
-Agent calls CLI tools that output standard JSON:
-```json
-{"markdown": "...", "title": "...", "source": "...", "modality": "...", "metadata": {}}
+L1 extractors come from the independently-installed `oks-connector` package
+(console entry `oks-raw-bundle`). They emit a **Raw Bundle** — a directory
+holding `content.md` (faithful primary text, the recall entry) plus sidecars
+`raw.md`, `metadata.json` (source + hash), `evidence.jsonl` (atomic provenance),
+`quality-report.json`, and `assets/` — conforming to the `raw-multimodal/v0.1`
+contract. The tool writes the bundle directly via `--output`; the agent does
+not reshape it.
+
+```bash
+oks-raw-bundle watch <file> --output raw/{YYYY}/{MM}/{DD}/videos/{slug}/   # video → transcript + frames + OCR
+oks-raw-bundle watch <file> --output raw/{YYYY}/{MM}/{DD}/audio/{slug}/ --transcript-only   # audio → ASR
+oks-raw-bundle image <file> --output raw/{YYYY}/{MM}/{DD}/misc/{slug}/     # image → OCR + bbox evidence
+oks-raw-bundle validate <bundle_dir>                                       # check against v0.1 before it counts
 ```
 
-- `oks-video <file>` → JSON with transcript + frame descriptions
-- `oks-audio <file>` → JSON with transcript
-
-Agent writes `markdown` field to `raw/{YYYY}/{MM}/{DD}/{source}/{slug}.md`
+The bundle **is** the raw record — recall reads `content.md` (type `raw`) and
+`evidence.jsonl` lines (type `trace`) generically; no per-format handling in core.
 
 ### Level 2 — Independent Tools
 
@@ -82,11 +90,14 @@ Agent adapts to each tool's output format.
    - Use atomic write pattern (mkstemp + fsync + os.replace)
 6. **Record** — log source URL/path, modality, tool used in frontmatter
 
-### Maximum Fidelity Principle
+### Maximum Fidelity Principle (P3: raw is mechanical)
 
-- Extract original content directly when possible (curl, pdftotext)
-- AI only fills gaps (frame descriptions, audio transcripts)
-- Output is layered: `[原始文本]` + `[AI描述]` + `[元数据]`
+- Extraction is **mechanical** — curl/pdftotext (L0), or `oks-raw-bundle`
+  ASR/OCR/frame sampling (L1). The tool produces the bytes.
+- The **LLM never writes `raw/`** and never injects summaries, corrections, or
+  descriptions. Faithful capture only; provenance goes in `evidence.jsonl`.
+- Semantic understanding (captioning a frame, interpreting a diagram) happens at
+  **conversation time or in Dreaming → drafts**, never at ingest into `raw/`.
 
 ## Phase 2: Triage — A/B/C Grading
 

@@ -128,7 +128,7 @@ RELATIONSHIPS 字段用于建立新旧知识页面之间的关系网络，支持
 ## 下一步
 
 * **[Memories](memories.md)**：frontmatter 字段如何影响记忆结构与召回
-* **[架构设计](architecture.md)**：五桶结构与生命周期
+* **[架构设计](architecture.md)**：认知桶结构与生命周期
 * **[Dreaming 循环](dreaming-cycle.md)**：draft 如何被审查并提升为 wiki
 
 ---

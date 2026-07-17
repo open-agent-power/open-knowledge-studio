@@ -59,7 +59,7 @@ parent: 内部机制
 ## 下一步
 
 * **[召回引擎](recall-engine.md)**：六型记忆如何被评分召回
-* **[架构设计](architecture.md)**：五桶结构
+* **[架构设计](architecture.md)**：认知桶结构
 * **[衰减系统](decay-system.md)**：记忆如何随时间变化
 
 ---

@@ -7,11 +7,11 @@ has_children: true
 
 *OKS 的架构、召回、记忆模型与演化机制——理解系统如何工作。*
 
-Open Knowledge Studio 的设计由一组明确的不变量驱动：五桶架构、六型记忆、人工审查的 Dreaming 循环、类型化衰减。这些页面讲清楚系统内部如何运作。
+Open Knowledge Studio 的设计由一组明确的不变量驱动：认知桶架构、六型记忆、人工审查的 Dreaming 循环、类型化衰减。这些页面讲清楚系统内部如何运作。
 
 | 页面 | 内容 |
 |------|------|
-| **[架构设计](architecture.md)** | 五桶结构 + 记忆生命周期 + 设计原则 |
+| **[架构设计](architecture.md)** | 认知桶结构 + 记忆生命周期 + 设计原则 |
 | **[召回引擎](recall-engine.md)** | 6 因子评分：token overlap + substring + topic trace + type boost + review penalty + memory curve |
 | **[记忆模型](memory-model.md)** | 六型记忆、注入顺序（稳定层在前）、来源标签、冲突优先级 |
 | **[Dreaming 循环](dreaming-cycle.md)** | 知识演化：collect → dream → drafts → review → promote → decay → evolve |

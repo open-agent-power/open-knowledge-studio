@@ -62,7 +62,7 @@ Agent 读取 `settings/handlers.json` 路由表，按模态选择工具：
 | 级别 | 类型 | 示例 | 输出 |
 |------|------|------|------|
 | L0 | 系统工具 | curl, pdftotext | 原始 stdout |
-| L1 | OKS 协议 CLI | oks-video, oks-audio | JSON |
+| L1 | OKS 协议 CLI (`oks-raw-bundle`) | oks-video, oks-audio, oks-image | Raw Bundle (`raw-multimodal/v0.1`) |
 | L2 | 独立工具 | agent-reach, yt-dlp | 工具特定格式 |
 
 Agent 直接通过 Bash 调用工具，OKS 不在运行时路径中。
@@ -303,7 +303,7 @@ wiki/（22 域 × 3 类型，带衰减）
 * **[Memories](memories.md)**：蒸馏后会发生什么 — 结构、类型、搜索
 * **[Dreaming Cycle](dreaming-cycle.md)**：完整演化管线
 * **[Recall Engine](recall-engine.md)**：6 因子搜索评分如何工作
-* **[Architecture](architecture.md)**：五桶结构和生命周期
+* **[Architecture](architecture.md)**：认知桶结构和生命周期
 
 ---
 

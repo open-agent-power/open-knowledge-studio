@@ -51,13 +51,19 @@ between the agent and the tool.
 | Level | Type | Example | Called by | Output |
 |-------|------|---------|-----------|--------|
 | 0 | System tool | curl, pdftotext | Agent via Bash | Raw stdout |
-| 1 | OKS protocol CLI | oks-video | Agent via Bash | JSON to stdout |
+| 1 | OKS protocol CLI | oks-video | Agent via Bash | Raw Bundle (`raw-multimodal/v0.1`) |
 | 2 | Independent tool | agent-reach, yt-dlp | Agent via Bash | Tool-specific |
 
-**Level 1 JSON output protocol:**
+**Level 1 output protocol — Raw Bundle (`raw-multimodal/v0.1`):**
+An L1 tool writes a **bundle directory** — `content.md` (faithful primary
+text, the recall entry) plus sidecars `raw.md`, `metadata.json` (source +
+hash), `evidence.jsonl` (atomic provenance), `quality-report.json`, and
+`assets/` — and prints a JSON envelope to stdout pointing at it:
 ```json
-{"markdown": "...", "title": "...", "source": "...", "modality": "...", "metadata": {}}
+{"contract": "raw-multimodal/v0.1", "bundle": "raw/.../slug/", "content": "content.md", "metadata": {}}
 ```
+See `docs/raw-multimodal-standard.md` for the full spec and
+`_meta/raw-evidence-schema.md` for how the core recalls it generically.
 
 Tools are registered in `settings/handlers.json` with `level`, `check_cmd`,
 `install_hint`, `raw_subdir` fields. The agent checks availability by

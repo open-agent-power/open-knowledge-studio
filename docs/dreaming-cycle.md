@@ -122,7 +122,7 @@ oks drafts promote <slug>
 * **[Memories](memories.md)**：提升后的 memory 长什么样
 * **[Raw Materials](raw-materials.md)**：蒸馏前的 raw material 长什么样
 * **[Decay System](decay-system.md)**：memory 评分如何随时间变化
-* **[Architecture](architecture.md)**：五桶结构
+* **[Architecture](architecture.md)**：认知桶结构
 
 ---
 
