@@ -41,7 +41,7 @@ def search(
     scope: Optional[str] = typer.Option(None, "--scope", "--domain", "-d", help="Soft scope: narrow to one area (opt-in, not a hard partition)"),
     type_filter: Optional[str] = typer.Option(None, "--type", "-t", help="Filter by type"),
 ):
-    """Search wiki pages using the 6-factor recall engine."""
+    """Search wiki pages using the 6+1-factor recall engine (read-only)."""
     results = recall_knowledge(query=query, limit=limit, scope=scope)
 
     if type_filter:
@@ -220,6 +220,26 @@ def wiki_archive(slug: str = typer.Argument(help="Page slug to archive")):
     else:
         console.print(f"[red]Not found:[/red] {slug}")
         raise typer.Exit(1)
+
+
+@wiki_app.command("use")
+def wiki_use(slug: str = typer.Argument(help="Slug of a page that was actually used/injected")):
+    """Record an explicit use of a wiki page — the memory-curve signal.
+
+    Recall and search are read-only: a query does not count as a use. Call
+    this when a page is actually injected or applied so that access_count
+    reflects real usage, not query frequency. Recording also promotes a
+    provisional page to active once it has been used 3+ times.
+    """
+    if not store.get_wiki_page(slug):
+        console.print(f"[red]Not found:[/red] {slug}")
+        raise typer.Exit(1)
+    store.record_access(slug)
+    updated = store.get_wiki_page(slug)
+    console.print(
+        f"[green]Recorded use:[/green] {slug} "
+        f"(access_count={updated.get('access_count', 0)}, status={updated.get('status', 'active')})"
+    )
 
 
 # ── Drafts ───────────────────────────────────────────────────────

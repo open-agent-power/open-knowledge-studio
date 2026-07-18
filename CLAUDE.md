@@ -15,7 +15,7 @@ Open Knowledge Studio is a file-based knowledge base system designed for use wit
 - **Decay system**: memory curve scoring with type-specific λ, tier classification (hot/warm/cold/evictable)
 - **Date-based raw/**: `raw/{YYYY}/{MM}/{DD}/{source}/` — auto-organized by intake date + source category
 - **Global config**: `~/.oks/config.json` enables cross-project access from any directory
-- **CLI tool (`oks`)**: search, recall, wiki CRUD, drafts, distill, lint, status, metrics, sync, config
+- **CLI tool (`oks`)**: search, recall, wiki CRUD (incl. `wiki use` — the explicit usage signal), drafts, distill, lint, status, metrics, sync, config
 
 ## Raw Material vs Memory — The Core Distinction
 
@@ -24,7 +24,7 @@ Open Knowledge Studio is a file-based knowledge base system designed for use wit
 | **What** | Original article, paper, repo note, or conversation | Durable takeaway, distilled and curated |
 | **Who writes** | Human collects, LLM reads only | LLM writes via Dreaming, human approves |
 | **Decay** | None | Type-specific λ |
-| **Recall** | Keyword + freshness | 6-factor relevance + memory curve |
+| **Recall** | Keyword + freshness | 6+1-factor relevance + memory curve |
 | **Advantage** | Date-based ({YYYY}/{MM}/{DD}/{source}/), A/B/C grading, fingerprint dedup | 22-domain structure, decay tiers, 4 relationships |
 
 A strong workflow: save the source into `raw/`, then distill the parts worth keeping into `wiki/` memories.
@@ -47,7 +47,7 @@ raw/ (human-collected or tool-processed materials)
 drafts/ (intermediate proposals)
   ↓ /promote skill — human review
 wiki/ (curated knowledge, with decay)
-  ↓ oks search / /query skill — 6-factor recall
+  ↓ oks search / /query skill — 6+1-factor recall
 injected into Claude Code context
 ```
 
@@ -103,6 +103,7 @@ oks wiki list [--domain] [--type] [--status active]
 oks wiki get <slug>
 oks wiki create --title "..." --type concept --area computing --importance 0.7
 oks wiki pin <slug> | archive <slug>
+oks wiki use <slug>   # explicit "this page was used" signal (search/recall are read-only)
 oks drafts list | promote <slug> | reject <slug>
 oks distill [--dry-run]
 oks lint | status | metrics | decay

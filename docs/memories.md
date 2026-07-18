@@ -46,7 +46,7 @@ Memories 是 Open Knowledge Studio 的核心单元。搜索、衰减、演化和
 | **content** | 知识本身，frontmatter 之后的 Markdown 正文 |
 | **tags** | 用于过滤和组织的标签 |
 | **created** | 时间戳，用于时序搜索和衰减计算 |
-| **access_count** | 被召回的次数，增强 confidence |
+| **access_count** | 被**显式使用**的次数（经 `oks wiki use <slug>` 记录；召回/搜索只读、不计数），增强 confidence 并驱动 provisional→active |
 | **status** | `active`、`provisional`、`archived`、`dropped` 或 `superseded` |
 
 ### Importance 等级

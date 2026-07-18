@@ -174,3 +174,44 @@ def test_promote_draft_carries_human_note(kb_root):
     metas = [parse_wiki_file(p) for p in pages]
     promoted = next(m for m in metas if m and m.get("title") == "Memory Management Insight")
     assert promoted.get("human_note") == "这个内容很不错，对于记忆管理"
+
+
+def test_recall_is_read_only(kb_root):
+    """A search must not count as a use — recall never mutates access state."""
+    from knowledge_studio.recall import recall_knowledge
+    from knowledge_studio.store import get_wiki_page
+
+    results = recall_knowledge("git branching", limit=5)
+    assert any(r["slug"] == "git-branching" for r in results)
+
+    # No access log should be created, and access_count stays 0.
+    assert not (kb_root / ".oks" / "access.json").exists()
+    assert get_wiki_page("git-branching")["access_count"] == 0
+
+
+def test_record_access_promotes_provisional(kb_root, monkeypatch):
+    """The explicit-use signal increments access_count and promotes at 3 uses."""
+    import yaml
+    from knowledge_studio.store import record_access, get_wiki_page, _atomic_write
+
+    prov = kb_root / "wiki" / "computing" / "concepts" / "prov.md"
+    fm = {
+        "title": "Provisional Page",
+        "type": "concept",
+        "area": "computing",
+        "status": "provisional",
+        "importance": 0.6,
+        "confidence": 0.8,
+        "created": "2026-01-15T00:00:00+00:00",
+        "pinned": False,
+        "archived": False,
+    }
+    fm_str = yaml.dump(fm, default_flow_style=False, allow_unicode=True, sort_keys=False)
+    _atomic_write(prov, f"---\n{fm_str}---\n\nProvisional body.")
+
+    for _ in range(3):
+        record_access("prov")
+
+    updated = get_wiki_page("prov")
+    assert updated["access_count"] == 3
+    assert updated["status"] == "active"

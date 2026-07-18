@@ -13,6 +13,11 @@ Removed settings and knowledge_sync dependencies. Uses store.repo_root().
   7. Goal boost — active goals (profiles/goals/, status=active) lift pages
      that already matched: area in a goal's domains (+0.8) and page content
      hits a goal keyword (+0.4). No-op when there are no active goals.
+
+Recall is read-only: a search does NOT count as a use and never mutates
+access counts or page state. Access is recorded only via the explicit
+`store.record_access` signal (exposed as `oks wiki use <slug>`), so the
+memory curve reflects real usage, not query frequency.
 """
 from __future__ import annotations
 
@@ -26,7 +31,6 @@ from knowledge_studio.store import (
     list_wiki_pages,
     load_active_goals,
     raw_dir,
-    record_access,
     repo_root,
 )
 
@@ -201,7 +205,6 @@ def recall_knowledge(
         if review.get("lesson"):
             entry["review_lesson"] = review["lesson"][:200]
         results.append(entry)
-        record_access(item["slug"])
 
     return results
 

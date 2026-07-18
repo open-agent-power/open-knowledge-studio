@@ -121,19 +121,23 @@ if relevance > 0 and (goal_domains or goal_keywords):
 | 路径 | 来源 | 评分 |
 |------|------|------|
 | **Episodic** | `raw/` + `profiles/` | 关键词 + 新鲜度（`0.95^days_old`） |
-| **Knowledge** | `wiki/` | 6 因子相关性 + 记忆曲线 |
+| **Knowledge** | `wiki/` | 6+1 因子相关性 + 记忆曲线 |
 | **合并** | 两者 | `{"episodic": [...], "knowledge": [...]}` |
 
 ```bash
-# 仅 Episodic（raw materials）
-oks search "authentication" --source raw
-
 # 仅 Knowledge（wiki 页面）
-oks search "authentication" --source wiki
+oks search "authentication" --limit 5
 
-# 双路（默认）
+# 双路：Episodic（raw/）+ Knowledge（wiki/）
 oks recall "authentication" --limit 5
+
+# 记录一次“真正使用”（召回/搜索本身只读、不计数）
+oks wiki use <slug>
 ```
+
+> 召回与搜索是**只读**的：一次查询不算一次使用，不会改动 access_count 或页面状态。
+> 只有 `oks wiki use <slug>`（在真正注入/采用某页时调用）才 +1，从而驱动记忆曲线与
+> provisional→active 晋级。这样记忆热度反映的是“真被用上”，而非“被搜过几次”。
 
 ## 实现
 
@@ -141,7 +145,7 @@ oks recall "authentication" --limit 5
 
 核心函数：
 - `recall_episodic(query)` — 按关键词 + 新鲜度搜索 raw/
-- `recall_knowledge(query, topic_id)` — 通过 6 因子评分所有 wiki/ 页面
+- `recall_knowledge(query, topic_id)` — 通过 6+1 因子评分所有 wiki/ 页面
 - `recall(query, topic_id)` — 合并双路
 
 ## 下一步

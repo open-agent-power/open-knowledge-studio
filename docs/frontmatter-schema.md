@@ -72,7 +72,7 @@ challenged_by: "<slug>"        # 被哪个页面挑战（旧页面字段）
 | TRUST | `confidence` | 置信度 0.0-1.0，随访问增强提升 |
 | ACCESS | `pinned` | 是否固定，pinned 页面获得 +0.5 加成 |
 | ACCESS | `archived` | 是否归档 |
-| ACCESS | `access_count` | 被召回命中的次数 |
+| ACCESS | `access_count` | 被显式使用的次数（`oks wiki use`；召回只读、不计数） |
 | PROVENANCE | `created` | 创建时间 |
 | PROVENANCE | `source_type` | 来源类型：auto（AI 生成）、manual（手写） |
 | PROVENANCE | `fingerprint` | 内容指纹，前 16 位 sha256，用于去重 |
