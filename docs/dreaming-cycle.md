@@ -81,11 +81,11 @@ oks drafts reject <slug>  # 丢弃
 
 ### 8. Git Commit（提交）
 
-`oks sync` 提交所有变更 — 新 wiki 页面、更新的 drafts、衰减后的评分。
+`git` 提交所有变更 — 新 wiki 页面、更新的 drafts、衰减后的评分。实例就是普通 git 仓，OKS 不再提供 `sync` 命令。
 
 ```bash
-oks sync           # commit + push
-oks sync --pull    # 先 pull，再 commit + push
+git add -A && git commit -m "dream cycle"   # 提交记忆变更
+git push                                     # 同步到你自己的 remote
 ```
 
 ## 完整循环命令

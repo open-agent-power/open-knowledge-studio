@@ -25,7 +25,7 @@ pip install "open-knowledge-studio[connector]"
 - **Dreaming cycle** — distill raw materials into draft proposals; humans review and
   promote them to the wiki.
 - **Decay system** — memory-curve scoring with type-specific λ and hot/warm/cold/evictable tiers.
-- **`oks` CLI** — search, recall, wiki CRUD, drafts, distill, lint, status, metrics, sync.
+- **`oks` CLI** — search, recall, wiki CRUD, drafts, distill, lint, status, metrics.
 
 The CLI core is dependency-light and calls no external network APIs; agents and humans
 orchestrate the pipeline around it.

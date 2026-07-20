@@ -433,20 +433,6 @@ def distill(
         console.print("[dim]No new draft proposals generated.[/dim]")
 
 
-@app.command()
-def sync(
-    pull: bool = typer.Option(False, "--pull", help="Pull from remote"),
-):
-    """Git sync the knowledge repo."""
-    from knowledge_studio.sync import sync_repo
-    ok = sync_repo(pull=pull)
-    if ok:
-        console.print("[green]Sync complete.[/green]")
-    else:
-        console.print("[red]Sync failed.[/red]")
-        raise typer.Exit(1)
-
-
 # ── Config ───────────────────────────────────────────────────────
 
 @config_app.command("init")

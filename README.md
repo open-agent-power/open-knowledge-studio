@@ -17,8 +17,8 @@ Open Knowledge Studio is a knowledge base system designed to work with Claude Co
 - **6+1-factor recall engine**: token overlap + substring + topic trace + type boost + review penalty + memory curve, plus an optional goal boost (active goals lift on-scope pages; no-op without goals)
 - **Dreaming cycle**: AI distills raw materials into draft proposals, humans review and promote to wiki
 - **Decay system**: memory curve scoring with type-specific λ, tier classification (hot/warm/cold/evictable)
-- **22 knowledge domains**: pre-created directory skeleton
-- **CLI tool (`oks`)**: search, recall, wiki CRUD, drafts, distill, lint, status, metrics, sync
+- **22 knowledge domains**: soft convention — directories created on demand
+- **CLI tool (`oks`)**: search, recall, wiki CRUD, drafts, distill, lint, status, metrics
 - **8 Claude Code skills**: start, ingest, query, lint, compile, status, archive, promote
 - **3 hooks**: pre-compact snapshot, session-start loading, wiki-write validation
 

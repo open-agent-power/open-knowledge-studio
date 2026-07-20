@@ -15,7 +15,7 @@ Open Knowledge Studio is a file-based knowledge base system designed for use wit
 - **Decay system**: memory curve scoring with type-specific λ, tier classification (hot/warm/cold/evictable)
 - **Date-based raw/**: `raw/{YYYY}/{MM}/{DD}/{source}/` — auto-organized by intake date + source category
 - **Global config**: `~/.oks/config.json` enables cross-project access from any directory
-- **CLI tool (`oks`)**: search, recall, wiki CRUD (incl. `wiki use` — the explicit usage signal), drafts, distill, lint, status, metrics, sync, config
+- **CLI tool (`oks`)**: search, recall, wiki CRUD (incl. `wiki use` — the explicit usage signal), drafts, distill, lint, status, metrics, config
 
 ## Raw Material vs Memory — The Core Distinction
 
@@ -108,7 +108,6 @@ oks wiki use <slug>   # explicit "this page was used" signal (search/recall are 
 oks drafts list | promote <slug> | reject <slug>
 oks distill [--dry-run]
 oks lint | status | metrics | decay
-oks sync [--pull]
 oks config init | show | set <key> <value>
 ```
 

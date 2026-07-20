@@ -51,7 +51,6 @@ open-knowledge-studio/
 │   └── {domain}/{type}/{slug}.md
 ├── drafts/            # ④ Dreaming 候选
 ├── settings/          # ⑤ 配置层
-│   ├── decay-config.yaml
 │   ├── handlers.json          # 三级工具注册表
 │   └── input-sources.json
 └── _meta/             # ⑥ Schema 层

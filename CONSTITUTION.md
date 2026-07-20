@@ -97,7 +97,7 @@ as knowledge. Config and schema do not decay and are not recalled by relevance.
 | Cognitive | `raw/` | Original records, date-based by source | None | Keyword + freshness (rglob any structure) |
 | Cognitive | `wiki/` | Curated knowledge (from raw via Dreaming) | Type-specific λ | 6-factor relevance + curve |
 | Cognitive | `drafts/` | Dreaming candidates (raw → wiki intermediate) | None | N/A (human review) |
-| Config | `settings/` | Runtime knobs: handlers.json, input-sources, decay-config | None | Direct read (agent reads routing table at runtime) |
+| Config | `settings/` | Runtime knobs: handlers.json, input-sources.json, raw-tools | None | Direct read (agent reads routing table at runtime) |
 | Schema | `_meta/` | Data-shape contracts: frontmatter-schema, learning-schema | None | Applied on read; CI-enforced |
 
 `settings/` answers *"what should happen"* (config, changes per deployment);
@@ -126,7 +126,6 @@ open-knowledge-studio/
 ├── drafts/                       # ④ Dreaming candidates
 │   └── {slug}.md
 ├── settings/                     # ⑤ Config layer
-│   ├── decay-config.yaml
 │   ├── handlers.json             # 3-level tool registry
 │   └── input-sources.json        # Scheduled intake sources
 └── _meta/                        # ⑥ Schema layer

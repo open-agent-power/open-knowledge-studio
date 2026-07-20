@@ -57,7 +57,7 @@ Provisional → Active（access_count ≥ 3）→ Dropped（score < threshold）
 
 ## 访问增强
 
-每次页面被召回命中时，confidence 提升：
+每次页面被**显式使用**时（`oks wiki use <slug>`；召回/搜索只读、不计数），confidence 提升：
 
 ```python
 new_confidence = min(1.0, current + 0.1 × (1 - current))
@@ -67,17 +67,16 @@ new_confidence = min(1.0, current + 0.1 × (1 - current))
 
 ## 配置
 
-`settings/decay-config.yaml`:
+衰减参数是 `cli/knowledge_studio/store.py` 里的代码默认值，可通过 `~/.oks/config.json` 的 `decay` 段覆盖（不存在独立的 yaml 配置文件）：
 
-```yaml
-archive_threshold: 0.3
-pin_bonus: 0.5
+```json
+{ "decay": { "archive_threshold": 0.3, "pin_bonus": 0.5 } }
 ```
 
 - **archive_threshold** — 低于此分数的页面成为归档候选
 - **pin_bonus** — Pinned 页面获得的额外分数
 
-源码：`cli/knowledge_studio/store.py`
+源码：`cli/knowledge_studio/store.py`（`DECAY_LAMBDA` + 默认 config）
 
 ## 下一步
 
