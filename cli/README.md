@@ -33,10 +33,15 @@ orchestrate the pipeline around it.
 ## Quick start
 
 ```bash
-oks status
+pip install open-knowledge-studio   # 1. install the CLI
+oks init my-knowledge-base          # 2. scaffold an instance (skills + buckets)
+cd my-knowledge-base
+oks status                          # 3. use it
 oks search "git branch"
-oks recall "authentication"
 ```
+
+`oks init` materializes the shareable layer (Claude Code skills, templates, schema,
+settings) and a git-tracked memory instance. No repo clone required.
 
 ## Documentation
 

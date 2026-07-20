@@ -53,9 +53,9 @@ wiki/（策展知识，带衰减）
 ## 准备开始？
 
 ```bash
-git clone <repo-url> open-knowledge-studio
-cd open-knowledge-studio
-./setup.sh
+pip install open-knowledge-studio
+oks init my-knowledge-base
+cd my-knowledge-base
 oks status
 oks search "your query"
 ```

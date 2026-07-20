@@ -14,7 +14,7 @@ Open Knowledge Studio 最容易理解的方式是一个循环：
 * 让 Agent 用它
 
 {: .note }
-本页是这个循环的最短路径。如果还没安装，先运行 `./setup.sh`。
+本页是这个循环的最短路径。如果还没安装，先运行 `pip install open-knowledge-studio && oks init my-knowledge-base`。
 
 ## Studio 是什么
 

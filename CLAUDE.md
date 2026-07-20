@@ -32,9 +32,9 @@ A strong workflow: save the source into `raw/`, then distill the parts worth kee
 ## Quick Start
 
 ```bash
-git clone <repo-url> open-knowledge-studio
-cd open-knowledge-studio
-./setup.sh
+pip install open-knowledge-studio
+oks init my-knowledge-base
+cd my-knowledge-base
 oks status
 oks search "git branch"
 ```
@@ -77,8 +77,7 @@ open-knowledge-studio/
 ├── scripts/          # Repo maintenance/bootstrap helpers (not L1 tools)
 ├── docs/             # GitHub Pages design documentation
 ├── CONSTITUTION.md   # Memory architecture design
-├── CLAUDE.md         # This file
-└── setup.sh          # One-command setup
+└── CLAUDE.md         # This file
 ```
 
 ## Claude Code Skills

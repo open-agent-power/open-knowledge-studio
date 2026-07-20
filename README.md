@@ -25,12 +25,16 @@ Open Knowledge Studio is a knowledge base system designed to work with Claude Co
 ### Quick Start
 
 ```bash
-git clone <repo-url> open-knowledge-studio
-cd open-knowledge-studio
-./setup.sh
-oks status
+pip install open-knowledge-studio   # 1. install the CLI
+oks init my-knowledge-base          # 2. scaffold your instance
+cd my-knowledge-base
+oks status                          # 3. use it
 oks search "git branch"
 ```
+
+`oks init` materializes the shareable layer (Claude Code skills, templates, schema,
+settings) and a git-tracked memory instance — no repo clone required. This repo is
+the **code/template** source; your knowledge lives in the instance you create.
 
 ### Architecture
 
@@ -52,20 +56,23 @@ Open Knowledge Studio 是一个为 Claude Code 设计的文件式知识库系统
 - **6+1 因子召回引擎**：token 交集 + 子串匹配 + topic trace + 类型加权 + 审查惩罚 + 记忆曲线，外加可选的**目标加权**（active goal 抬升命中域/关键词的页面；无 goal 时不生效）
 - **Dreaming 循环**：AI 将原始材料蒸馏为草稿提案，人工审查后提升为 wiki
 - **衰减系统**：记忆曲线评分，类型特定 λ，tier 分级（hot/warm/cold/evictable）
-- **22 个知识域**：预创建目录骨架
-- **CLI 工具（`oks`）**：搜索、召回、wiki CRUD、草稿、蒸馏、健康检查、状态、指标、同步
+- **22 个知识域**：软约定——目录按需创建，不预建骨架
+- **CLI 工具（`oks`）**：搜索、召回、wiki CRUD、草稿、蒸馏、健康检查、状态、指标
 - **8 个 Claude Code 技能**：start, ingest, query, lint, compile, status, archive, promote
 - **3 个钩子**：压缩前快照、会话加载、写入验证
 
 ### 快速开始
 
 ```bash
-git clone <repo-url> open-knowledge-studio
-cd open-knowledge-studio
-./setup.sh
-oks status
+pip install open-knowledge-studio   # 1. 安装 CLI
+oks init my-knowledge-base          # 2. 初始化你的知识库实例
+cd my-knowledge-base
+oks status                          # 3. 开始使用
 oks search "git branch"
 ```
+
+`oks init` 会物化可共享层（Claude Code 技能、模板、schema、配置）并生成一个用 git
+跟踪记忆的实例——无需 clone 本仓库。本仓库是**代码/模板**源，你的知识存在你创建的实例里。
 
 ### 设计文档
 
