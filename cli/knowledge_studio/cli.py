@@ -27,9 +27,11 @@ console = Console()
 wiki_app = typer.Typer(help="Wiki page management.")
 drafts_app = typer.Typer(help="Draft proposal management.")
 config_app = typer.Typer(help="Global configuration (~/.oks/config.json).")
+hook_app = typer.Typer(help="Optional editor hooks (opt-in auto-recall injection).")
 app.add_typer(wiki_app, name="wiki")
 app.add_typer(drafts_app, name="drafts")
 app.add_typer(config_app, name="config")
+app.add_typer(hook_app, name="hook")
 
 
 # ── Search / Recall ──────────────────────────────────────────────
@@ -652,6 +654,145 @@ def init(
         f"  oks status\n"
         f"  oks wiki create --title \"...\" --type concept --area computing"
     )
+
+
+# ── Optional editor hooks (opt-in auto-recall) ───────────────────
+
+_RECALL_HOOK_CMD = ".claude/hooks/user-prompt-recall.sh"
+_RECALL_HOOK_SCRIPTS = ("user-prompt-recall.py", "user-prompt-recall.sh")
+_HOOK_EDITORS = {
+    "claude": ".claude/settings.json",
+    "qoder": ".qoder/settings.json",
+}
+
+
+def _instance_root(path: str | None) -> Path:
+    if path:
+        return Path(path).expanduser().resolve()
+    from knowledge_studio.config import get_kb_root
+    return get_kb_root()
+
+
+def _ensure_recall_scripts(root: Path) -> list[str]:
+    """Copy the recall hook scripts into <root>/.claude/hooks/ if missing."""
+    import shutil
+    import stat
+
+    hooks_dir = root / ".claude" / "hooks"
+    hooks_dir.mkdir(parents=True, exist_ok=True)
+
+    base, is_packaged = _asset_source()
+    src_dir = None
+    if base is not None:
+        src_dir = base / ("claude/hooks" if is_packaged else ".claude/hooks")
+
+    created: list[str] = []
+    for name in _RECALL_HOOK_SCRIPTS:
+        dest = hooks_dir / name
+        if dest.exists():
+            continue
+        if src_dir is None or not (src_dir / name).is_file():
+            raise FileNotFoundError(
+                f"bundled hook script not found: {name} (asset source: {src_dir})"
+            )
+        shutil.copy2(src_dir / name, dest)
+        dest.chmod(dest.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+        created.append(name)
+    return created
+
+
+def _wire_userpromptsubmit(settings_path: Path, command: str) -> str:
+    """Idempotently add a UserPromptSubmit command hook. Returns 'wired'|'exists'."""
+    data: dict = {}
+    if settings_path.exists():
+        try:
+            data = json.loads(settings_path.read_text(encoding="utf-8")) or {}
+        except json.JSONDecodeError as e:
+            raise ValueError(f"{settings_path} is not valid JSON: {e}") from e
+    hooks = data.setdefault("hooks", {})
+    ups = hooks.setdefault("UserPromptSubmit", [])
+    for group in ups:
+        for h in group.get("hooks", []):
+            if h.get("command") == command:
+                return "exists"
+    ups.append({"hooks": [{"type": "command", "command": command}]})
+    settings_path.parent.mkdir(parents=True, exist_ok=True)
+    settings_path.write_text(
+        json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
+    return "wired"
+
+
+def _hook_is_wired(settings_path: Path, command: str) -> bool:
+    if not settings_path.exists():
+        return False
+    try:
+        data = json.loads(settings_path.read_text(encoding="utf-8")) or {}
+    except json.JSONDecodeError:
+        return False
+    for group in data.get("hooks", {}).get("UserPromptSubmit", []):
+        for h in group.get("hooks", []):
+            if h.get("command") == command:
+                return True
+    return False
+
+
+@hook_app.command("install")
+def hook_install(
+    editor: str = typer.Option(
+        "both", "--editor", "-e", help="Which editor(s) to wire: claude | qoder | both"
+    ),
+    path: Optional[str] = typer.Option(
+        None, "--path", help="Instance root (default: active KB from ~/.oks/config.json)"
+    ),
+):
+    """Wire the auto-recall UserPromptSubmit hook into your editor settings (opt-in).
+
+    Copies the recall hook script into .claude/hooks/ (if missing) and adds a
+    UserPromptSubmit entry to the chosen editor's settings. Idempotent and
+    non-destructive: existing settings and hooks are preserved.
+    """
+    editor = editor.lower().strip()
+    if editor not in ("claude", "qoder", "both"):
+        console.print("[red]--editor must be one of: claude, qoder, both[/red]")
+        raise typer.Exit(1)
+
+    root = _instance_root(path)
+    if not root.is_dir():
+        console.print(f"[red]Instance root not found:[/red] {root}")
+        raise typer.Exit(1)
+
+    created = _ensure_recall_scripts(root)
+    if created:
+        console.print(f"[green]Installed hook script:[/green] {', '.join(created)}")
+
+    editors = ("claude", "qoder") if editor == "both" else (editor,)
+    for name in editors:
+        settings_path = root / _HOOK_EDITORS[name]
+        result = _wire_userpromptsubmit(settings_path, _RECALL_HOOK_CMD)
+        label = "[green]wired[/green]" if result == "wired" else "[dim]already wired[/dim]"
+        console.print(f"  {name}: {label} → {settings_path}")
+
+    console.print(
+        "\n[bold]Auto-recall enabled.[/bold] New prompts will inject relevant memory.\n"
+        "Tune via env: OKS_RECALL_FLOOR (0.7), OKS_RECALL_TOPN (3), OKS_RECALL_MINLEN (6)."
+    )
+
+
+@hook_app.command("status")
+def hook_status(
+    path: Optional[str] = typer.Option(None, "--path", help="Instance root (default: active KB)"),
+):
+    """Show whether the auto-recall hook is installed for each editor."""
+    root = _instance_root(path)
+    script = root / ".claude" / "hooks" / "user-prompt-recall.sh"
+    console.print(f"[bold]Instance:[/bold] {root}")
+    console.print(f"  script: {'present' if script.is_file() else 'missing'} ({script})")
+    for name, rel in _HOOK_EDITORS.items():
+        settings_path = root / rel
+        wired = _hook_is_wired(settings_path, _RECALL_HOOK_CMD)
+        state = "[green]wired[/green]" if wired else "[dim]not wired[/dim]"
+        console.print(f"  {name}: {state}")
 
 
 if __name__ == "__main__":
