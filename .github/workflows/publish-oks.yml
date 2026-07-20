@@ -24,6 +24,9 @@ jobs:
       - name: Install build backend
         run: python -m pip install --upgrade build
 
+      - name: Bundle shareable assets into package
+        run: python cli/scripts/bundle_assets.py
+
       - name: Build sdist and wheel
         working-directory: cli
         run: python -m build --outdir ../dist

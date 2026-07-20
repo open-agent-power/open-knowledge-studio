@@ -97,6 +97,7 @@ open-knowledge-studio/
 ## CLI Commands
 
 ```bash
+oks init <path>   # scaffold a personal knowledge instance (buckets + memory-tracking .gitignore + register as active KB)
 oks search <query> [--limit 5] [--domain computing] [--type strategy]
 oks recall <query> [--topic-id ID] [--limit 5]
 oks wiki list [--domain] [--type] [--status active]
@@ -116,7 +117,8 @@ oks config init | show | set <key> <value>
 - **raw/** is human-collected or tool-processed. Tools preserve maximum fidelity — they convert format, not knowledge. LLM does not write knowledge to raw/.
 - **wiki/** is LLM-written, human-approved via drafts/ review.
 - **Intake is agent-direct** — OKS does not wrap tool calls. Agent checks tool availability via Bash (`which curl`, etc.).
-- **Global config** (`~/.oks/config.json`) enables cross-project access — `oks recall` works from any directory.
+- **Global config** (`~/.oks/config.json`) enables cross-project access — `oks recall` works from any directory (resolution: `OKS_ROOT` env → config `knowledge_base_path` → cwd).
+- **Code repo vs instance repo** — THIS repo is the reusable tool/template: it ships clean (wiki/ & drafts/ gitignored) so others can use it. Your personal knowledge lives in a separate instance created by `oks init <path>`, which TRACKS memory in git. Practices proven in an instance flow back here as PRs.
 - **Git IS the migration** — no database, schema changes versioned through _meta/.
 - **Atomic writes** — all persistent writes use mkstemp + fsync + os.replace.
 - **Never auto-promote** raw content to wiki/ without human review.

@@ -35,7 +35,18 @@ DEFAULT_CONFIG: dict = {
 
 
 def repo_root() -> Path:
-    return Path(os.environ.get("OKS_ROOT", os.getcwd()))
+    env_root = os.environ.get("OKS_ROOT")
+    if env_root:
+        return Path(env_root)
+    try:
+        from knowledge_studio.config import load_config
+
+        kb_path = load_config().get("knowledge_base_path")
+        if kb_path:
+            return Path(kb_path)
+    except Exception:
+        pass
+    return Path(os.getcwd())
 
 
 def wiki_dir() -> Path:

@@ -518,5 +518,155 @@ def config_set(
     console.print(f"[green]Set:[/green] {key} = {value}")
 
 
+# ── Instance scaffolding ─────────────────────────────────────────
+
+_INSTANCE_DIRS = [
+    "profiles/users",
+    "profiles/projects",
+    "profiles/recipes",
+    "profiles/goals",
+    "raw",
+    "wiki",
+    "drafts",
+]
+
+_INSTANCE_GITIGNORE = """\
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Virtual env
+.venv/
+venv/
+env/
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# OKS local per-machine state (access counts, fingerprints) — NOT synced
+.oks/
+
+# NOTE: wiki/, drafts/, profiles/ are intentionally TRACKED — they ARE your
+# memory. Unlike the open-knowledge-studio code repo (which ignores wiki/ &
+# drafts/ so it ships clean), an instance commits its knowledge to git.
+"""
+
+
+_ASSET_MAP = [
+    ("claude", ".claude"),
+    ("templates", "templates"),
+    ("_meta", "_meta"),
+    ("settings", "settings"),
+]
+
+
+def _asset_source() -> tuple[Path | None, bool]:
+    """Locate the shareable asset layer. Returns (base, is_packaged).
+
+    Priority: bundled `_assets/` inside the installed package (release build),
+    else the dev repo root (walk up for a dir containing .claude + templates).
+    """
+    packaged = Path(__file__).resolve().parent / "_assets"
+    if packaged.is_dir() and any(packaged.iterdir()):
+        return packaged, True
+    for parent in Path(__file__).resolve().parents:
+        if (parent / ".claude").is_dir() and (parent / "templates").is_dir():
+            return parent, False
+    return None, False
+
+
+def _materialize_assets(root: Path, base: Path, is_packaged: bool, overwrite: bool) -> list[str]:
+    import shutil
+
+    done: list[str] = []
+    for pkg_name, dest_name in _ASSET_MAP:
+        src = base / (pkg_name if is_packaged else dest_name)
+        if not src.is_dir():
+            continue
+        dest = root / dest_name
+        if dest.exists():
+            if not overwrite:
+                continue
+            shutil.rmtree(dest)
+        shutil.copytree(src, dest)
+        done.append(dest_name)
+    return done
+
+
+@app.command()
+def init(
+    path: str = typer.Argument(".", help="Target directory for the new knowledge instance"),
+    set_default: bool = typer.Option(
+        True, "--set-default/--no-set-default",
+        help="Register this folder as the active KB in ~/.oks/config.json",
+    ),
+    git: bool = typer.Option(
+        True, "--git/--no-git", help="Run `git init` in the instance folder",
+    ),
+    upgrade: bool = typer.Option(
+        False, "--upgrade",
+        help="Re-copy bundled assets (skills/templates/_meta/settings), overwriting them; your memory (wiki/drafts/profiles) is untouched",
+    ),
+):
+    """Scaffold a new knowledge INSTANCE folder (e.g. your personal artboy-knowledge-studio).
+
+    Creates the bucket structure and a .gitignore that TRACKS your memory
+    (wiki/, drafts/, profiles/) while ignoring only per-machine state (.oks/).
+    By default points ~/.oks/config.json at the new folder so `oks` targets it
+    from anywhere.
+    """
+    root = Path(path).expanduser().resolve()
+    root.mkdir(parents=True, exist_ok=True)
+
+    for d in _INSTANCE_DIRS:
+        p = root / d
+        p.mkdir(parents=True, exist_ok=True)
+        (p / ".gitkeep").touch()
+
+    base, is_packaged = _asset_source()
+    if base is None:
+        console.print("[yellow]No bundled assets found — skills/templates not materialized.[/yellow]")
+    else:
+        copied = _materialize_assets(root, base, is_packaged, overwrite=upgrade)
+        if copied:
+            console.print(f"[green]Materialized assets:[/green] {', '.join(copied)}")
+        else:
+            console.print("[dim]Assets already present (use --upgrade to refresh).[/dim]")
+
+    gitignore = root / ".gitignore"
+    if gitignore.exists():
+        console.print(f"[yellow]Kept existing[/yellow] .gitignore ({gitignore})")
+    else:
+        gitignore.write_text(_INSTANCE_GITIGNORE, encoding="utf-8")
+        console.print(f"[green]Wrote[/green] {gitignore}")
+
+    if git and not (root / ".git").exists():
+        import subprocess
+        try:
+            subprocess.run(
+                ["git", "init"], cwd=str(root),
+                check=True, capture_output=True, text=True,
+            )
+            console.print(f"[green]git init[/green] {root}")
+        except (subprocess.CalledProcessError, FileNotFoundError) as e:
+            console.print(f"[yellow]Skipped git init:[/yellow] {e}")
+
+    if set_default:
+        from knowledge_studio.config import init_config
+        init_config(str(root))
+        console.print(f"[green]Active KB set:[/green] {root}")
+
+    console.print(
+        f"\n[bold]Instance ready.[/bold] Next:\n"
+        f"  cd {root}\n"
+        f"  oks status\n"
+        f"  oks wiki create --title \"...\" --type concept --area computing"
+    )
+
+
 if __name__ == "__main__":
     app()

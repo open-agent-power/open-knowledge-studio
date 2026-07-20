@@ -47,3 +47,6 @@ oks = "knowledge_studio.cli:app"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["knowledge_studio*"]
+
+[tool.setuptools.package-data]
+knowledge_studio = ["_assets/**/*"]
