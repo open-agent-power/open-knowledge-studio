@@ -27,6 +27,7 @@ from knowledge_studio.store import (
     apply_decay,
     compute_score,
     drafts_dir,
+    make_slug,
     parse_wiki_file,
     wiki_dir,
 )
@@ -50,9 +51,7 @@ def write_digest(
     date_dir = rd / now.strftime("%Y") / now.strftime("%m") / now.strftime("%d")
     date_dir.mkdir(parents=True, exist_ok=True)
 
-    slug = re.sub(r"[^a-z0-9]+", "-", title.lower())[:60].strip("-")
-    if not slug:
-        slug = "digest"
+    slug = make_slug(title, fallback="digest")
     slug = f"{now.strftime('%Y%m%d')}-{slug}"
 
     file_path = date_dir / f"{slug}.md"

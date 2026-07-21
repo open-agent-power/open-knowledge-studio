@@ -181,10 +181,10 @@ wiki/（策展知识，带衰减 + 演化）
 ### 运行蒸馏
 
 ```bash
-# 预览蒸馏结果（不写入）
+# 预览（只统计将被评估的 wiki 页数，不写入）
 oks distill --dry-run
 
-# 运行完整循环：分级 raw → 写 drafts → 应用衰减 → 演化
+# 运行维护循环：应用衰减 + wiki 聚类演化（raw → drafts 的分级蒸馏由 /ingest 技能完成）
 oks distill
 
 # 列出待人工审查的 drafts
@@ -249,7 +249,7 @@ oks distill            # 执行
 ### 按关键词
 
 ```bash
-oks search "authentication" --source raw
+oks recall "authentication"   # 双路召回，episodic 路覆盖 raw 蒸馏出的 digests
 ```
 
 ### 按新鲜度

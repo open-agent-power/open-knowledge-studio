@@ -43,10 +43,10 @@ EOF
 
 ### Step 2: 蒸馏为草稿
 
-用 `/ingest` 技能（三级工具协议路由），或运行 CLI：
+用 `/ingest` 技能（三级工具协议路由）完成 raw → drafts 分级蒸馏；CLI 侧可预览维护循环：
 
 ```bash
-oks distill --dry-run  # 预览蒸馏结果（不写入）
+oks distill --dry-run  # 统计将被评估的 wiki 页数（不写入）
 ```
 
 系统扫描 `raw/`，按 A/B/C 分级，将 A 级材料写入 `drafts/`。

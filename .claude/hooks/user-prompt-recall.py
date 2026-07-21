@@ -8,14 +8,17 @@ adds to the model's context). Fails open: any error or empty result prints nothi
 and exits 0, so it never blocks a prompt.
 
 Tunables via env:
-  OKS_RECALL_FLOOR   min knowledge relevance to inject (default 0.7)
-  OKS_RECALL_TOPN    max memories injected (default 3)
-  OKS_RECALL_MINLEN  skip prompts shorter than this many chars (default 6)
+  OKS_RECALL_FLOOR     min knowledge relevance to inject (default 0.7)
+  OKS_RECALL_TOPN      max memories injected (default 3)
+  OKS_RECALL_MINLEN    skip prompts shorter than this many chars (default 6)
+  OKS_RECALL_COOLDOWN  turns before the same slug may be re-injected (default 10)
 """
 import json
 import os
 import re
 import sys
+import tempfile
+from pathlib import Path
 
 _TRIVIAL = {
     "你好", "谢谢", "多谢", "ok", "okay", "好", "好的", "嗯", "行", "继续",
@@ -23,18 +26,39 @@ _TRIVIAL = {
 }
 
 
-def _load_prompt() -> str:
+def _load_payload() -> dict:
     try:
         payload = json.load(sys.stdin)
     except Exception:
-        return ""
-    if isinstance(payload, dict):
-        return str(payload.get("prompt", "") or "")
-    return ""
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _state_path(session_id: str) -> Path:
+    safe = re.sub(r"[^A-Za-z0-9_-]", "_", session_id)[:80] or "default"
+    return Path(tempfile.gettempdir()) / f"oks-recall-{safe}.json"
+
+
+def _load_state(path: Path) -> dict:
+    try:
+        state = json.loads(path.read_text(encoding="utf-8"))
+        if isinstance(state, dict):
+            return {"n": int(state.get("n", 0)), "seen": dict(state.get("seen", {}))}
+    except Exception:
+        pass
+    return {"n": 0, "seen": {}}
+
+
+def _save_state(path: Path, state: dict) -> None:
+    try:
+        path.write_text(json.dumps(state), encoding="utf-8")
+    except Exception:
+        pass  # state is best-effort; dedup degrades gracefully
 
 
 def main() -> int:
-    prompt = _load_prompt().strip()
+    payload = _load_payload()
+    prompt = str(payload.get("prompt", "") or "").strip()
     if not prompt:
         return 0
 
@@ -55,14 +79,38 @@ def main() -> int:
     except Exception:
         return 0
 
-    picked = [h for h in hits if float(h.get("relevance", 0)) >= floor][:topn]
+    cooldown = int(os.environ.get("OKS_RECALL_COOLDOWN", "10"))
+    session_id = str(payload.get("session_id", "") or "")
+    state_file = _state_path(session_id)
+    state = _load_state(state_file)
+    state["n"] += 1
+    turn = state["n"]
+
+    picked = []
+    for h in hits:
+        if float(h.get("relevance", 0)) < floor:
+            continue
+        slug = str(h.get("slug", "")).strip()
+        last = state["seen"].get(slug)
+        if slug and last is not None and turn - int(last) < cooldown:
+            continue
+        picked.append(h)
+        if len(picked) >= topn:
+            break
+
     if not picked:
+        _save_state(state_file, state)
         return 0
+
+    for h in picked:
+        slug = str(h.get("slug", "")).strip()
+        if slug:
+            state["seen"][slug] = turn
+    _save_state(state_file, state)
 
     lines = [
         "<recalled-memory source=\"oks\">",
-        "知识库中与本次输入相关的已沉淀记忆（按相关度排序）。回答时优先参考并按 slug 引用；"
-        "若与当前事实冲突以最新为准；学到值得留存的新知识时用 oks 写入 drafts/wiki。",
+        "相关已沉淀记忆（引用时用 slug；与当前事实冲突以最新为准）：",
     ]
     for h in picked:
         title = str(h.get("title", h.get("slug", ""))).strip()

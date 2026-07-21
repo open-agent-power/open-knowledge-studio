@@ -3,11 +3,11 @@ title: 召回引擎
 nav_order: 12
 parent: 内部机制
 ---
-# 6-Factor Recall Engine（六因子召回引擎）
+# 6+1 Factor Recall Engine（六加一因子召回引擎）
 
-*六个因子如何为 wiki 页面评分，找到最相关知识。*
+*六个核心因子 + 一个可选目标因子，为 wiki 页面评分，找到最相关知识。*
 
-使用六个因子对 wiki 页面评分，找到最相关的知识。引擎将语义搜索、关键词匹配和图谱关联融合在一次统一的评分过程中。
+使用六个核心因子（外加可选的 goal boost）对 wiki 页面评分，找到最相关的知识。引擎将语义搜索、关键词匹配和图谱关联融合在一次统一的评分过程中。
 
 ## 三种搜索模式合一
 
@@ -15,29 +15,32 @@ parent: 内部机制
 |------|--------|----------|
 | **Semantic（语义）** | 按含义查找，不只是精确匹配 | Token overlap |
 | **Keyword（关键词）** | 精确匹配特定术语 | Substring match |
-| **Graph（图谱）** | 通过主题关联和类型加权查找 | Topic trace + type boost + review penalty |
+| **Graph（图谱）** | 通过主题关联和类型加权查找 | Topic trace + type boost + review bonus |
 
 <img src="assets/recall-engine.svg" alt="Recall Engine" style="max-width:100%;height:auto;" />
 
-三种模式在每次查询时自动运行。6 因子引擎将它们与记忆曲线乘数结合，生成最终相关性评分。
+三种模式在每次查询时自动运行。引擎把它们与记忆分数、review 加成结合，生成最终相关性评分。
 
 ## 评分公式
 
 ```
-total = (token_overlap×0.3 + substring_bonus + topic_trace_bonus)
-        × type_boost + review_penalty
-        × memory_curve
+base  = token_overlap_count × 0.3 + substring_bonus + topic_trace_bonus
+total = base × type_boost
+        + review_bonus
+        + memory_score × 0.5
         + goal_boost      # 可选第 7 因子，无 active goal 时为 0
 ```
+
+注意：`base == 0` 时页面直接出局；review 与记忆分数是**加法**项，不是乘数。
 
 ## 六个核心因子（+ 1 个可选目标因子）
 
 ### 1. Token Overlap（×0.3）
 
-jieba 分词将查询和页面内容拆分为 token。重叠率衡量查询 token 中有多少出现在页面中。
+jieba 分词将查询拆分为 token，统计出现在页面（标题+正文+标签）中的个数。
 
 ```
-overlap = len(query_tokens ∩ page_tokens) / len(query_tokens) × 0.3
+overlap = count(query_tokens 出现在 title+body+tags 中) × 0.3
 ```
 
 这是**语义层** — 搜索"design patterns"时能找到关于"architectural approaches"的页面，因为 token 重叠捕捉到了共享概念。
@@ -56,8 +59,9 @@ overlap = len(query_tokens ∩ page_tokens) / len(query_tokens) × 0.3
 如果页面是从特定对话主题创建的，而你用同一个 `topic_id` 查询，页面获得 **+2.0** 加成。这是**图谱关联** — 将 memory 关联回产生它的对话。
 
 ```python
-if page.get("trace_id") == topic_id:
-    relevance += 2.0
+for trace in page.get("traces", []):
+    if trace["kind"] == "discuss" and str(trace["id"]) == str(topic_id):
+        base += 2.0
 ```
 
 ### 4. Type Boost（×1.5 / ×0.8 / ×0.6）
@@ -70,7 +74,7 @@ if page.get("trace_id") == topic_id:
 | `strategy` | ×0.8 | 策略有用但不如错误紧迫 |
 | `concept` | ×0.6 | 概念是背景知识 — 优先级最低 |
 
-### 5. Review Penalty（+2.0 / +1.0）
+### 5. Review Bonus（+2.0 / +1.0）
 
 来自失败决策或负面结果的页面获得加成，因为你需要回忆出了什么问题：
 
@@ -80,12 +84,12 @@ if page.get("trace_id") == topic_id:
 {: .note }
 这看似反直觉 — 为什么加成"坏"知识？因为最有价值的知识往往是"我们试了 X 但没用"。回忆失败可以防止重蹈覆辙。
 
-### 6. Memory Curve（×0.5）
+### 6. Memory Score（+score×0.5）
 
-记忆曲线应用基于页面年龄、访问次数和重要性的时间衰减乘数：
+页面的记忆分数（由记忆曲线计算：年龄衰减、访问次数、重要性、pin）以 **加法**方式进入相关性：`relevance += score × 0.5`。
 
 ```
-curve = importance × e^(-λ × days_old) + 0.5 × ln(1 + access_count) + pin_bonus
+score = importance × e^(-λ × days_old) + 0.5 × ln(1 + access_count) + pin_bonus
 ```
 
 - Active 页面获得 ×1.2 乘数

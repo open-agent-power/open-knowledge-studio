@@ -20,7 +20,7 @@ Open Knowledge Studio is a knowledge base system designed to work with Claude Co
 - **22 knowledge domains**: soft convention — directories created on demand
 - **CLI tool (`oks`)**: search, recall, wiki CRUD, drafts, distill, lint, status, metrics
 - **8 Claude Code skills**: start, ingest, query, lint, compile, status, archive, promote
-- **3 hooks**: pre-compact snapshot, session-start loading, wiki-write validation
+- **4 hooks**: pre-compact snapshot, session-start loading, wiki-write validation, opt-in auto-recall on prompt (`oks hook install`)
 
 ### Quick Start
 
@@ -59,7 +59,7 @@ Open Knowledge Studio 是一个为 Claude Code 设计的文件式知识库系统
 - **22 个知识域**：软约定——目录按需创建，不预建骨架
 - **CLI 工具（`oks`）**：搜索、召回、wiki CRUD、草稿、蒸馏、健康检查、状态、指标
 - **8 个 Claude Code 技能**：start, ingest, query, lint, compile, status, archive, promote
-- **3 个钩子**：压缩前快照、会话加载、写入验证
+- **4 个钩子**：压缩前快照、会话加载、写入验证、可选的提问自动召回（`oks hook install`）
 
 ### 快速开始
 

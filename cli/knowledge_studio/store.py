@@ -218,23 +218,25 @@ def compute_tier(score: float) -> str:
 
 
 def compute_quality(meta: dict) -> int:
+    # Content factors (55) are reachable by any well-written page;
+    # traces/review (40) are earned bonuses, not the baseline.
     score = 0
-    if meta.get("traces"):
-        score += 25
-    if meta.get("review"):
-        score += 25
-    if meta.get("options"):
-        score += 15
     if len(meta.get("body", "")) >= 50:
-        score += 15
+        score += 25
     if meta.get("importance", 0) >= 0.7:
-        score += 10
+        score += 15
     tags = meta.get("tags", "")
     if isinstance(tags, list):
         if tags:
-            score += 10
+            score += 15
     elif isinstance(tags, str) and tags.strip():
-        score += 10
+        score += 15
+    if meta.get("traces"):
+        score += 20
+    if meta.get("review"):
+        score += 20
+    if meta.get("options"):
+        score += 5
     return score
 
 
@@ -326,9 +328,6 @@ def list_wiki_pages(config: dict | None = None) -> list[dict]:
         meta["quality_score"] = compute_quality(meta)
         if "status" not in meta:
             meta["status"] = "active"
-        if "type" in meta and "category" not in meta:
-            type_to_cat = {"concept": "insight", "strategy": "pattern", "anti-pattern": "mistake"}
-            meta["category"] = type_to_cat.get(meta["type"], meta["type"])
         pages.append(meta)
 
     pages.sort(key=lambda x: (-x["score"], x["slug"]))
@@ -356,6 +355,12 @@ def record_access(slug: str) -> None:
     counts[slug] = counts.get(slug, 0) + 1
     _save_access_counts(counts)
     _reinforce_confidence(slug)
+
+
+def make_slug(title: str, fallback: str = "untitled") -> str:
+    # Keep CJK characters so Chinese titles don't degrade to the fallback.
+    slug = re.sub(r"[^a-z0-9\u4e00-\u9fff]+", "-", title.lower())[:60].strip("-")
+    return slug or fallback
 
 
 def write_wiki_page(
@@ -389,9 +394,7 @@ def write_wiki_page(
     type_dir = wd / area / wiki_type
     type_dir.mkdir(parents=True, exist_ok=True)
 
-    slug = re.sub(r"[^a-z0-9]+", "-", title.lower())[:60].strip("-")
-    if not slug:
-        slug = "untitled"
+    slug = make_slug(title, fallback="untitled")
     slug = f"{date_str}-{slug}"
 
     file_path = type_dir / f"{slug}.md"

@@ -116,29 +116,3 @@ def get_kb_root() -> Path:
         return Path(kb_path)
 
     return Path.cwd()
-
-
-def get_handler_config(handler_name: str) -> dict[str, Any]:
-    """Get handler-specific config from global config."""
-    config = load_config()
-    return config.get("handlers", {}).get(handler_name, {})
-
-
-def get_api_key(provider: str = "openai") -> str:
-    """Get API key for a provider.
-
-    Priority:
-    1. Environment variable (OPENAI_API_KEY, ANTHROPIC_API_KEY)
-    2. ~/.oks/config.json → api_keys.<provider>
-    """
-    env_map = {
-        "openai": "OPENAI_API_KEY",
-        "anthropic": "ANTHROPIC_API_KEY",
-    }
-    env_var = env_map.get(provider, f"{provider.upper()}_API_KEY")
-    env_val = os.environ.get(env_var)
-    if env_val:
-        return env_val
-
-    config = load_config()
-    return config.get("api_keys", {}).get(provider, "")

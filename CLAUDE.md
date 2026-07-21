@@ -107,6 +107,8 @@ oks wiki use <slug>   # explicit "this page was used" signal (search/recall are 
 oks drafts list | promote <slug> | reject <slug>
 oks distill [--dry-run]
 oks lint | status | metrics | decay
+oks hook install [--editor claude|qoder|both] [--path DIR]   # opt-in auto-recall on prompt
+oks hook status
 oks config init | show | set <key> <value>
 ```
 
