@@ -24,6 +24,27 @@ app = typer.Typer(
 )
 console = Console()
 
+
+def _version_callback(value: bool):
+    if value:
+        from importlib.metadata import version, PackageNotFoundError
+        try:
+            console.print(f"oks {version('open-knowledge-studio')}")
+        except PackageNotFoundError:
+            console.print("oks (development, not installed as a package)")
+        raise typer.Exit()
+
+
+@app.callback()
+def _main(
+    version: bool = typer.Option(
+        False, "--version", "-V", callback=_version_callback, is_eager=True,
+        help="Show the oks version and exit.",
+    ),
+):
+    pass
+
+
 wiki_app = typer.Typer(help="Wiki page management.")
 drafts_app = typer.Typer(help="Draft proposal management.")
 config_app = typer.Typer(help="Global configuration (~/.oks/config.json).")
@@ -191,8 +212,18 @@ def wiki_create(
     if not content and not sys.stdin.isatty():
         content = sys.stdin.read()
 
-    type_map = {"concept": "concepts", "strategy": "strategies", "anti-pattern": "anti-patterns"}
-    wiki_type = type_map.get(page_type, "concepts")
+    type_map = {
+        "concept": "concepts", "concepts": "concepts",
+        "strategy": "strategies", "strategies": "strategies",
+        "anti-pattern": "anti-patterns", "anti-patterns": "anti-patterns",
+    }
+    wiki_type = type_map.get(page_type)
+    if wiki_type is None:
+        console.print(
+            f"[yellow]Unknown --type '{page_type}' — using 'concept'. "
+            f"Valid: concept, strategy, anti-pattern.[/yellow]"
+        )
+        wiki_type = "concepts"
 
     path = store.write_wiki_page(
         title=title,
@@ -700,6 +731,12 @@ def _ensure_recall_scripts(root: Path) -> list[str]:
                 f"bundled hook script not found: {name} (asset source: {src_dir})"
             )
         shutil.copy2(src_dir / name, dest)
+        if name.endswith(".sh"):
+            import sys
+            text = dest.read_text(encoding="utf-8").replace(
+                '"${OKS_PYTHON:-python3}"', f'"${{OKS_PYTHON:-{sys.executable}}}"'
+            )
+            dest.write_text(text, encoding="utf-8")
         dest.chmod(dest.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
         created.append(name)
     return created
@@ -761,6 +798,13 @@ def hook_install(
         console.print("[red]--editor must be one of: claude, qoder, both[/red]")
         raise typer.Exit(1)
 
+    import platform
+    if platform.system() == "Windows":
+        console.print(
+            "[yellow]Warning: hooks are bash scripts and will not run on native Windows.[/yellow]\n"
+            "  Use WSL (or Git Bash configured as the hook shell) for auto-recall to work."
+        )
+
     root = _instance_root(path)
     if not root.is_dir():
         console.print(f"[red]Instance root not found:[/red] {root}")
@@ -802,6 +846,22 @@ def hook_status(
     script = root / ".claude" / "hooks" / "user-prompt-recall.sh"
     console.print(f"[bold]Instance:[/bold] {root}")
     console.print(f"  script: {'present' if script.is_file() else 'missing'} ({script})")
+    if script.is_file():
+        import os
+        import re
+        import subprocess
+        m = re.search(r"\$\{OKS_PYTHON:-([^}]+)\}", script.read_text(encoding="utf-8"))
+        py = os.environ.get("OKS_PYTHON") or (m.group(1) if m else "python3")
+        try:
+            ok = subprocess.run(
+                [py, "-c", "import knowledge_studio"],
+                capture_output=True, timeout=15,
+            ).returncode == 0
+        except (OSError, subprocess.TimeoutExpired):
+            ok = False
+        state = ("[green]importable[/green]" if ok
+                 else "[red]NOT importable — hook will silently no-op; re-run oks hook install[/red]")
+        console.print(f"  engine: {state} (python: {py})")
     for name, rel in _HOOK_EDITORS.items():
         settings_path = root / rel
         wired = _hook_is_wired(settings_path, _RECALL_HOOK_CMD)

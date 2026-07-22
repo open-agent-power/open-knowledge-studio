@@ -61,8 +61,14 @@ def load_config() -> dict[str, Any]:
     path = config_path()
     if not path.exists():
         return dict(DEFAULT_CONFIG)
-    with open(path) as f:
-        return json.load(f)
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except json.JSONDecodeError as e:
+        raise ValueError(
+            f"{path} is corrupt ({e}). Fix the JSON manually, or delete it and "
+            f"re-run `oks config init` / `oks init <path>`."
+        ) from e
 
 
 def save_config(config: dict[str, Any]) -> None:
@@ -70,6 +76,7 @@ def save_config(config: dict[str, Any]) -> None:
     path = config_path()
     path.parent.mkdir(parents=True, exist_ok=True)
 
+    import contextlib
     import tempfile
     fd, tmp = tempfile.mkstemp(dir=str(path.parent), suffix=".tmp")
     try:
@@ -77,7 +84,8 @@ def save_config(config: dict[str, Any]) -> None:
             json.dump(config, f, indent=2, ensure_ascii=False)
         os.replace(tmp, path)
     except Exception:
-        os.unlink(tmp)
+        with contextlib.suppress(OSError):
+            os.unlink(tmp)
         raise
 
 

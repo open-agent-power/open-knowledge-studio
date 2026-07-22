@@ -5,7 +5,7 @@ Removed KnowledgeStore dependency. Uses store functions.
 """
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 from knowledge_studio.store import list_wiki_pages, repo_root, wiki_dir
 
@@ -86,11 +86,15 @@ def _compute_credibility(pages: list[dict], ninety_days_ago: datetime) -> dict:
     }
 
 
-def _parse_date(value: str | None) -> datetime:
+def _parse_date(value) -> datetime:
     if not value:
         return datetime.min.replace(tzinfo=UTC)
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=UTC)
+    if isinstance(value, date):
+        return datetime(value.year, value.month, value.day, tzinfo=UTC)
     try:
-        dt = datetime.fromisoformat(value)
+        dt = datetime.fromisoformat(str(value))
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=UTC)
         return dt

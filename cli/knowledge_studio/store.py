@@ -13,7 +13,7 @@ import math
 import os
 import re
 import tempfile
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 import yaml
@@ -44,8 +44,13 @@ def repo_root() -> Path:
         kb_path = load_config().get("knowledge_base_path")
         if kb_path:
             return Path(kb_path)
-    except Exception:
-        pass
+    except Exception as e:
+        import sys
+        print(
+            f"oks: warning: could not read ~/.oks/config.json ({e}); "
+            f"falling back to current directory as KB root",
+            file=sys.stderr,
+        )
     return Path(os.getcwd())
 
 
@@ -187,11 +192,16 @@ def compute_score(meta: dict, access_count: int = 0, config: dict | None = None)
     if archived or status == "dropped":
         return 0.0
 
-    created_str = meta.get("created", "")
-    try:
-        created = datetime.fromisoformat(created_str)
-    except (ValueError, TypeError):
-        created = datetime.now(UTC)
+    created_raw = meta.get("created", "")
+    if isinstance(created_raw, datetime):
+        created = created_raw
+    elif isinstance(created_raw, date):
+        created = datetime(created_raw.year, created_raw.month, created_raw.day)
+    else:
+        try:
+            created = datetime.fromisoformat(str(created_raw))
+        except (ValueError, TypeError):
+            created = datetime.now(UTC)
 
     tz = UTC if not created.tzinfo else created.tzinfo
     days_old = max(0, (datetime.now(UTC) - created.replace(tzinfo=tz)).days)
