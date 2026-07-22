@@ -274,18 +274,19 @@ def _find_file_by_slug(slug: str) -> Path | None:
     return None
 
 
-def _update_frontmatter_field(file_path: Path, field: str, value) -> None:
+def _update_frontmatter_field(file_path: Path, field: str, value) -> bool:
     text = file_path.read_text(encoding="utf-8")
     parts = text.split("---", 2)
     if len(parts) < 3:
-        return
+        return False
     try:
         meta = yaml.safe_load(parts[1].strip()) or {}
     except yaml.YAMLError:
-        return
+        return False
     meta[field] = value
     new_fm = yaml.dump(meta, default_flow_style=False, allow_unicode=True, sort_keys=False)
     _atomic_write(file_path, f"---\n{new_fm}---\n{parts[2]}")
+    return True
 
 
 def _reinforce_confidence(slug: str) -> None:
@@ -493,17 +494,16 @@ def pin_page(slug: str) -> bool:
     f = _find_file_by_slug(slug)
     if not f:
         return False
-    _update_frontmatter_field(f, "pinned", True)
-    return True
+    return _update_frontmatter_field(f, "pinned", True)
 
 
 def archive_page(slug: str) -> bool:
     f = _find_file_by_slug(slug)
     if not f:
         return False
-    _update_frontmatter_field(f, "status", "dropped")
-    _update_frontmatter_field(f, "archived", True)
-    return True
+    dropped = _update_frontmatter_field(f, "status", "dropped")
+    archived = _update_frontmatter_field(f, "archived", True)
+    return dropped and archived
 
 
 def list_drafts() -> list[dict]:
@@ -547,7 +547,12 @@ def promote_draft(
     body = meta.get("body", "")
 
     final_title = title or meta.get("title", slug)
-    final_type = (wiki_type or meta.get("draft_type", "concepts")).rstrip("s") + "s"
+    _type_dirs = {
+        "concept": "concepts", "concepts": "concepts",
+        "strategy": "strategies", "strategies": "strategies",
+        "anti-pattern": "anti-patterns", "anti-patterns": "anti-patterns",
+    }
+    final_type = _type_dirs.get(wiki_type or meta.get("draft_type", "concept"), "concepts")
     final_area = area or meta.get("draft_area", "computing")
     human_note = meta.get("source_note") or None
 

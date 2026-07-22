@@ -617,7 +617,11 @@ def init(
 
     base, is_packaged = _asset_source()
     if base is None:
-        console.print("[yellow]No bundled assets found — skills/templates not materialized.[/yellow]")
+        console.print(
+            "[yellow]No bundled assets found — skills/templates not materialized.[/yellow]\n"
+            "  Source installs lack the asset bundle. Fix: pip install open-knowledge-studio,\n"
+            "  or run python cli/scripts/bundle_assets.py in the repo before installing."
+        )
     else:
         copied = _materialize_assets(root, base, is_packaged, overwrite=upgrade)
         if copied:
@@ -762,7 +766,17 @@ def hook_install(
         console.print(f"[red]Instance root not found:[/red] {root}")
         raise typer.Exit(1)
 
-    created = _ensure_recall_scripts(root)
+    try:
+        created = _ensure_recall_scripts(root)
+    except FileNotFoundError as e:
+        console.print(
+            f"[red]Cannot install hook — bundled assets missing.[/red]\n"
+            f"  {e}\n"
+            f"  This happens when oks was installed from source without the asset bundle.\n"
+            f"  Fix: [bold]pip install open-knowledge-studio[/bold] (PyPI wheel includes assets),\n"
+            f"  or run [bold]python cli/scripts/bundle_assets.py[/bold] in the repo before installing."
+        )
+        raise typer.Exit(1)
     if created:
         console.print(f"[green]Installed hook script:[/green] {', '.join(created)}")
 

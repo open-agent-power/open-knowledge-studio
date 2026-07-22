@@ -95,7 +95,7 @@ as knowledge. Config and schema do not decay and are not recalled by relevance.
 |-------|-----|----------|-------|--------|
 | Cognitive | `profiles/` | Team/user/project portraits, recipes, goals | None | Direct read (goals influence recall relevance) |
 | Cognitive | `raw/` | Original records, date-based by source | None | Keyword + freshness (rglob any structure) |
-| Cognitive | `wiki/` | Curated knowledge (from raw via Dreaming) | Type-specific λ | 6-factor relevance + curve |
+| Cognitive | `wiki/` | Curated knowledge (from raw via Dreaming) | Type-specific λ | 6+1-factor relevance + curve |
 | Cognitive | `drafts/` | Dreaming candidates (raw → wiki intermediate) | None | N/A (human review) |
 | Config | `settings/` | Runtime knobs: handlers.json, input-sources.json, raw-tools | None | Direct read (agent reads routing table at runtime) |
 | Schema | `_meta/` | Data-shape contracts: frontmatter-schema, learning-schema | None | Applied on read; CI-enforced |
@@ -122,7 +122,7 @@ open-knowledge-studio/
 │           ├── {slug}.md
 │           └── {slug}.jsonl
 ├── wiki/                         # ③ Curated knowledge
-│   └── {domain}/{type}/{slug}.md  # concept | strategy | anti-pattern
+│   └── {domain}/{type}/{slug}.md  # concepts/ | strategies/ | anti-patterns/
 ├── drafts/                       # ④ Dreaming candidates
 │   └── {slug}.md
 ├── settings/                     # ⑤ Config layer
@@ -172,7 +172,7 @@ recall, scope, and decay:
 | User Memory | `profiles/users/{id}.md` | Direct read | None | `user_id` |
 | Project Memory | `profiles/projects/{slug}.md` | Direct read | None | `project_slug` |
 | Episodic Memory | `raw/{YYYY}/{MM}/{DD}/{source}/` | Keyword + freshness | None | `source`, `date` |
-| Semantic Memory | `wiki/{domain}/{type}/{slug}.md` | 6-factor relevance + curve | Type-specific λ | `domain` |
+| Semantic Memory | `wiki/{domain}/{type}/{slug}.md` | 6+1-factor relevance + curve | Type-specific λ | `domain` |
 | Procedural Memory | `.claude/skills/{slug}/` | Keyword trigger | None | — |
 | Draft Memory | `drafts/{slug}.md` | N/A | None | N/A |
 

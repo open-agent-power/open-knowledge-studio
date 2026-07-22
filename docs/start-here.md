@@ -14,7 +14,7 @@ Open Knowledge Studio 最容易理解的方式是一个循环：
 * 让 Agent 用它
 
 {: .note }
-本页是这个循环的最短路径。如果还没安装，先运行 `pip install open-knowledge-studio && oks init my-knowledge-base`。
+本页是这个循环的最短路径。**前置条件**：Python ≥ 3.10、git；Claude Code（或兼容 Agent）为可选，但 `/ingest`、`/query` 等技能依赖它——没有 Agent 时走下文标注的"纯 CLI 路径"。安装：`pip install open-knowledge-studio && oks init my-knowledge-base && cd my-knowledge-base`。
 
 ## Studio 是什么
 
@@ -30,10 +30,11 @@ Open Knowledge Studio 最容易理解的方式是一个循环：
 
 ### Step 1: 保存一条真实知识
 
-写一条你想保留的真实内容：一个决策、一个工作洞察、一个你反复使用的模式。放进 `raw/` 目录：
+写一条你想保留的真实内容：一个决策、一个工作洞察、一个你反复使用的模式。放进 `raw/` 目录（`oks init` 只创建空的 `raw/`，日期子目录需自建）：
 
 ```bash
-cat > raw/misc/my-first-note.md << 'EOF'
+mkdir -p raw/$(date +%Y/%m/%d)/misc
+cat > raw/$(date +%Y/%m/%d)/misc/my-first-note.md << 'EOF'
 ## Decision: Use Typer for CLI
 
 We chose Typer over Click because Typer has native type hint support
@@ -43,13 +44,14 @@ EOF
 
 ### Step 2: 蒸馏为草稿
 
-用 `/ingest` 技能（三级工具协议路由）完成 raw → drafts 分级蒸馏；CLI 侧可预览维护循环：
+raw → drafts 的 A/B/C 分级蒸馏由 **Claude Code 的 `/ingest` 技能**完成（AI 判断质量分级）——在 Agent 会话中运行 `/ingest`，系统扫描 `raw/`，将 A 级材料写入 `drafts/`。CLI 的 `oks distill --dry-run` 只预览维护循环统计，**不做**这个蒸馏。
 
+{: .note }
+**纯 CLI 路径**（没有 Claude Code 时）：跳过 drafts，直接把知识写成 wiki 页，然后跳到 Step 4——
 ```bash
-oks distill --dry-run  # 统计将被评估的 wiki 页数（不写入）
+oks wiki create --title "CLI framework decision" --type strategy --area computing \
+  --content "Chose Typer over Click: native type hints + Rich integration."
 ```
-
-系统扫描 `raw/`，按 A/B/C 分级，将 A 级材料写入 `drafts/`。
 
 ### Step 3: 提升到 wiki
 
@@ -141,7 +143,7 @@ oks recall "your topic"
 * [Memories](memories.md) — wiki 页面结构、类型和搜索
 * [Raw Materials](raw-materials.md) — 原始材料、蒸馏工作流和导入格式
 * [架构设计](architecture.md) — 认知桶结构和记忆生命周期
-* [召回引擎](recall-engine.md) — 6 因子评分算法
+* [召回引擎](recall-engine.md) — 6+1 因子评分算法
 * [Dreaming 循环](dreaming-cycle.md) — 知识演化管线
 
 ---

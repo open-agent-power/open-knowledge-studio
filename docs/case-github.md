@@ -50,10 +50,13 @@ oks search "为什么 选型 消息队列"
 
 *这不是设想，是 2026-07-16 真跑通的一轮：从召回策略到提出 Apache RocketMQ [PR #10619](https://github.com/apache/rocketmq/pull/10619)，全程由知识库驱动。*
 
-托管到位之后，知识库里攒下的贡献策略（选仓库、静默 merge、CI 排查）和项目教训，就能反过来驱动一次贡献。这条循环被固化在配方 `recipes/oss-contribution-scan.md`，边界由 `goals/oss-contribution.md` 划定：
+托管到位之后，知识库里攒下的贡献策略（选仓库、静默 merge、CI 排查）和项目教训，就能反过来驱动一次贡献。这条循环被固化在配方 `profiles/recipes/oss-contribution-scan.md`，边界由 `profiles/goals/oss-contribution.md` 划定：
+
+{: .note }
+下文的召回输出、项目画像（`rocketmq.md`）和 wiki 策略页来自作者的**私有知识实例**——个人知识不随本公开仓库分发。公开仓库附带的是可复用的骨架：4 个配方 + 2 个 goal 模板。你跑通自己的循环后，会攒出自己的这些页面。
 
 ```
-召回策略 → repo 体检 → 拉 issue → Gate1 去重 → 判合法性
+召回策略 → repo 体检 → 拉 issue → Gate 1 去重 → 判合法性
    → 打分 → 产出候选 → ⛔人类确认 → 提 PR → 监控 → 复盘回流
 ```
 
@@ -65,7 +68,7 @@ oks search "为什么 选型 消息队列"
 oks recall "开源贡献 PR 选仓库 issue 筛选 merge"
 ```
 
-召回一次性端出积累下来的策略：**选仓库标准**、**静默 merge 模式**（≤40 行 / 1 文件 / 1 issue，实测 75% 直接 merge）、**CI 假阳性排查**，还有项目画像 `rocketmq.md` 里两条血泪教训——
+召回一次性端出积累下来的策略：**选仓库标准**、**静默 merge 模式**（≤40 行 / 1 文件 / 1 issue，作者实测样本 n=8 中 75% 直接 merge）、**CI 假阳性排查**，还有项目画像 `rocketmq.md` 里两条血泪教训——都来自作者本人此前真实提交的 PR：
 
 - #10531：没查竞争 PR，提了重复的，被关。
 - #10532：提交后不监控，1 天被别人抢先 merge，17 天后才发现。
@@ -95,7 +98,7 @@ oks recall "开源贡献 PR 选仓库 issue 筛选 merge"
 唯一活候选 #10617 恰好是最高 ROI 的一类：
 
 - **维护者已确认**（评论 "Confirmed, verified against the current codebase"）——合法性 100%。
-- **issue 即规范**：正文直接给出修法——`.github/workflows/coverage.yml` 里把明文 Codecov token 换成 `${{ secrets.CODECOV_TOKEN }}`，与仓库内其它凭据写法一致。
+- **issue 即规范**：正文直接给出修法——`.github/workflows/coverage.yml` 里把明文 Codecov token 换成 {% raw %}`${{ secrets.CODECOV_TOKEN }}`{% endraw %}，与仓库内其它凭据写法一致。
 - **规模**：1 文件、1 行。完美命中静默 merge 模式。
 
 ### 人类确认闸门 ⛔
@@ -104,29 +107,33 @@ oks recall "开源贡献 PR 选仓库 issue 筛选 merge"
 
 ### 提 PR（确认后）
 
-按 `apache-project-contribution.md` 约定执行：目标分支 `develop`（不是 main）、标题带 `[ISSUE #NNN]` 前缀、单行改动。最终 diff：
+按 `apache-project-contribution.md` 约定执行：目标分支 `develop`（不是 main）、标题带 `[ISSUE #NNN]` 前缀、单行改动。最终 diff（token 已打码）：
 
+{% raw %}
 ```diff
--          token: cf0cba0a-22f8-4580-89ab-4f1dec3bda6f
+-          token: cf0c****-****-****-****-********da6f
 +          token: ${{ secrets.CODECOV_TOKEN }}
 ```
+{% endraw %}
 
-产出 → [apache/rocketmq#10619](https://github.com/apache/rocketmq/pull/10619)（OPEN / MERGEABLE / +1 -1）。
+产出 → [apache/rocketmq#10619](https://github.com/apache/rocketmq/pull/10619)（提交当日 OPEN / MERGEABLE / +1 -1）。
 
 {: .warning }
 安全类修复有边界感：真正 rotate 泄露的 token、添加 repo secret 是**维护者**的事，贡献者的 PR 只改工作流引用。PR 正文里把这点写清楚，避免越权。
 
 ### 监控 + 复盘回流
 
-PR 不是终点。配方 `recipes/oss-pr-monitor.md` 每 2 天查一次状态，防止重蹈 #10532 被抢的覆辙。收敛后跑五维复盘，把新教训沉淀回 wiki，更新 `rocketmq.md` 的 PR 记录表。
+PR 不是终点。配方 `profiles/recipes/oss-pr-monitor.md` 每 2 天查一次状态，防止重蹈 #10532 被抢的覆辙。收敛后跑五维复盘，把新教训沉淀回 wiki，更新 `rocketmq.md` 的 PR 记录表。
+
+**这一轮的真实收敛**：监控环随后发现同 issue 的竞争 PR #10618——由 issue 原报告人本人提交、早 2 天、已获 2 次 approve。按"report-then-fix 所有权"判断胜负已定，主动关闭 #10619 礼让，并转为 reviewer 参与 #10618。教训（"原报告人自带修复时，外人必输"）当场回流知识库，Gate 1 查重从此增加 in:body 与 timeline 交叉核对。**监控环的价值恰恰在此：1 天内发现，而不是 17 天后。**
 
 ### 这一轮沉淀了什么
 
 | 产物 | 类型 | 作用 |
 |---|---|---|
-| `goals/oss-contribution.md` | goal | 划定循环边界（ODD） |
-| `recipes/oss-contribution-scan.md` | 配方 | 11 步可复用扫描循环 |
-| `recipes/oss-pr-monitor.md` | 配方 | 提交后监控环 |
+| `profiles/goals/oss-contribution.md` | goal | 划定循环边界（ODD） |
+| `profiles/recipes/oss-contribution-scan.md` | 配方 | 11 步可复用扫描循环 |
+| `profiles/recipes/oss-pr-monitor.md` | 配方 | 提交后监控环 |
 | wiki: 热门仓库去重前置 | strategy | 把本轮教训固化 |
 | rocketmq.md #10619 记录 | 项目记忆 | 下一轮召回可见 |
 
@@ -140,7 +147,7 @@ PR 不是终点。配方 `recipes/oss-pr-monitor.md` 每 2 天查一次状态，
 
 ## 接下来读哪里
 
-* **[自动驾驶](autonomous.md)**：上面这轮属于 L2——AI 触发、人类逐条确认；看看 L0-L5 各是什么。
+* **[自动驾驶](autonomous.md)**：上面这轮属于 L2——AI 起草、人类逐条确认；看看 L0-L5 各是什么。
 * **[托管你的科研](case-research.md)**：论文与实验的沉淀方式。
 * **[召回引擎](recall-engine.md)**：为什么失败经验会被优先召回。
 

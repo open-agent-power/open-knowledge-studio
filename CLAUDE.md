@@ -6,9 +6,9 @@
 
 Open Knowledge Studio is a file-based knowledge base system designed for use with Claude Code. It provides:
 
-- **5-bucket architecture**: profiles/ (incl. recipes, goals), raw/, wiki/, drafts/, settings/
+- **4 cognitive buckets (profiles/, raw/, wiki/, drafts/) + 2 infrastructure layers (settings/, _meta/)**: profiles/ incl. recipes, goals
 - **Three-level tool protocol**: agent-direct intake (L0 system tools, L1 OKS protocol CLIs, L2 independent tools)
-- **6+1-factor recall engine**: token overlap + substring + topic trace + type boost + review penalty + memory curve + optional goal boost (active goals lift on-scope pages; no-op without goals)
+- **6+1-factor recall engine**: token overlap + substring + topic trace + type boost + review bonus (failure lessons rank higher) + memory curve + optional goal boost (active goals lift on-scope pages; no-op without goals)
 - **4 knowledge relationships**: supersedes, enriches, confirms, challenges (CONSTITUTION A4)
 - **Recipes & goals**: executable automation recipes + goal-aware recall boosting
 - **Dreaming cycle**: raw → AI distill → drafts → human review → wiki
@@ -65,7 +65,7 @@ See `CONSTITUTION.md` for the full memory design (A1-A5):
 
 ```
 open-knowledge-studio/
-├── .claude/          # Claude Code skills (8) + hooks (3) + rules (2)
+├── .claude/          # Claude Code skills (8) + hooks (4) + rules (2)
 ├── profiles/         # ① Portraits — team, users, projects, recipes, goals
 ├── raw/              # ② Raw materials — date-based: {YYYY}/{MM}/{DD}/{source}/
 ├── wiki/             # ③ Curated knowledge — 22 domains × 3 types
@@ -74,7 +74,6 @@ open-knowledge-studio/
 ├── _meta/            # ⑥ Schema layer — frontmatter/learning contracts (CI-enforced)
 ├── templates/        # concept, strategy, anti-pattern, draft
 ├── cli/              # Python CLI tool (oks) — API-free core
-├── scripts/          # Repo maintenance/bootstrap helpers (not L1 tools)
 ├── docs/             # GitHub Pages design documentation
 ├── CONSTITUTION.md   # Memory architecture design
 └── CLAUDE.md         # This file
@@ -86,11 +85,11 @@ open-knowledge-studio/
 |-------|---------|
 | `/start` | First-time setup: choose domain, build structure, scan raw/ |
 | `/ingest` | Multi-modal intake: 3-level routing → raw/, then A/B/C triage → drafts/ |
-| `/query` | 6-factor recall → inject into context → AI answers with citations |
+| `/query` | 6+1-factor recall → inject into context → AI answers with citations |
 | `/lint` | Scan wiki/: frontmatter, orphans, broken links, stale |
 | `/compile` | Re-compile concept pages from sources → drafts/ |
 | `/status` | Overview: wiki count, tier distribution, drafts, quality |
-| `/archive` | Extract conversation Q&A → AI summarize → wiki/queries/ |
+| `/archive` | Extract conversation Q&A → AI summarize → drafts/ (never writes wiki directly) |
 | `/promote` | Review drafts/ → promote/reject/edit |
 
 ## CLI Commands

@@ -19,7 +19,7 @@ has_children: true
 | **每日循环** | 收集 → 入料 → 分级 → 审查 → 沉淀 → 召回的训练闭环 | [每日循环 →](daily-loop.md) |
 | **Memory** | 从原始材料蒸馏出的持久知识——一个 concept、strategy 或 anti-pattern | [Memories →](memories.md) |
 | **Raw Material** | 蒸馏前的入料层——文章、论文、仓库笔记、对话 | [Raw Materials →](raw-materials.md) |
-| **召回引擎** | 六因子评分找到最相关知识：token overlap + substring + topic trace + type boost + review penalty + memory curve | [召回引擎 →](recall-engine.md) |
+| **召回引擎** | 6+1 因子评分找到最相关知识：token overlap + substring + topic trace + type boost + 审查加分 + memory curve | [召回引擎 →](recall-engine.md) |
 | **Dreaming 循环** | 人工审查的知识演化：raw → AI 蒸馏 → drafts → 人工审查 → wiki | [Dreaming 循环 →](dreaming-cycle.md) |
 
 ## 核心管线
@@ -30,7 +30,7 @@ raw/（人类收集的原始材料）
 drafts/（中间态草稿）
   ↓ /promote — 人工审查
 wiki/（策展知识，带衰减）
-  ↓ oks search / /query — 6 因子召回
+  ↓ oks search / /query — 6+1 因子召回
 注入 Agent 上下文
 ```
 
