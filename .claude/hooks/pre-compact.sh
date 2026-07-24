@@ -4,7 +4,17 @@
 
 set -euo pipefail
 
-REPO_ROOT="${OKS_ROOT:-$(pwd)}"
+REPO_ROOT="${OKS_ROOT:-}"
+if [ -z "$REPO_ROOT" ]; then
+    REPO_ROOT="$(python3 -c "import json,os;print(json.load(open(os.path.expanduser('~/.oks/config.json'))).get('knowledge_base_path',''))" 2>/dev/null || true)"
+fi
+if [ -z "$REPO_ROOT" ]; then
+    REPO_ROOT="$(pwd)"
+fi
+
+# Only snapshot inside a real knowledge base — never litter other dirs.
+[ -d "$REPO_ROOT/wiki" ] || exit 0
+
 SNAPSHOT_DIR="$REPO_ROOT/.oks/snapshots"
 mkdir -p "$SNAPSHOT_DIR"
 

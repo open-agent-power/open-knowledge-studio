@@ -8,15 +8,22 @@ a file-based knowledge base that turns raw material into a recallable, self-deca
 ## Install
 
 ```bash
-pip install open-knowledge-studio
+pipx install open-knowledge-studio && pipx ensurepath
 ```
+
+We recommend pipx because modern Linux (Ubuntu 24.04+) and macOS Homebrew Pythons are
+PEP 668 externally-managed, so a bare `pip install` fails. If your mirror lags behind
+PyPI, add `--pip-args="-i https://pypi.org/simple"`.
 
 Optional multimodal ingest (PDF / audio / video / formula extraction) lives in a
 separate, heavier package that you can pull in on demand:
 
 ```bash
-pip install "open-knowledge-studio[connector]"
+pipx inject open-knowledge-studio oks-connector
 ```
+
+(pipx apps share one venv without a standalone pip executable — `pipx inject` is how
+you add extras. In a plain venv, use `pip install "open-knowledge-studio[connector]"`.)
 
 ## What you get
 
@@ -33,7 +40,7 @@ orchestrate the pipeline around it.
 ## Quick start
 
 ```bash
-pip install open-knowledge-studio   # 1. install the CLI
+pipx install open-knowledge-studio && pipx ensurepath   # 1. install the CLI
 oks init my-knowledge-base          # 2. scaffold an instance (skills + buckets)
 cd my-knowledge-base
 oks status                          # 3. use it

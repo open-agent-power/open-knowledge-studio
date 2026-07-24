@@ -14,7 +14,7 @@ Open Knowledge Studio 最容易理解的方式是一个循环：
 * 让 Agent 用它
 
 {: .note }
-本页是这个循环的最短路径。**前置条件**：Python ≥ 3.10、git；Claude Code（或兼容 Agent）为可选，但 `/ingest`、`/query` 等技能依赖它——没有 Agent 时走下文标注的"纯 CLI 路径"。安装：`pip install open-knowledge-studio && oks init my-knowledge-base && cd my-knowledge-base`。
+本页是这个循环的最短路径。**前置条件**：Python ≥ 3.10、git；Claude Code（或兼容 Agent）为可选，但 `/ingest`、`/query` 等技能依赖它——没有 Agent 时走下文标注的"纯 CLI 路径"。安装：`pipx install open-knowledge-studio && pipx ensurepath && oks init my-knowledge-base && cd my-knowledge-base`（pipx 本身：Ubuntu 用 `sudo apt install pipx`，macOS 用 `brew install pipx`，Windows 用 `py -m pip install --user pipx && py -m pipx ensurepath`；Ubuntu 24.04 / Homebrew Python 受 PEP 668 保护，直接 `pip install` 会报 externally-managed-environment）。
 
 ## Studio 是什么
 
@@ -33,6 +33,7 @@ Open Knowledge Studio 最容易理解的方式是一个循环：
 写一条你想保留的真实内容：一个决策、一个工作洞察、一个你反复使用的模式。放进 `raw/` 目录（`oks init` 只创建空的 `raw/`，日期子目录需自建）：
 
 ```bash
+cd <你的实例目录>   # 例如 my-knowledge-base，以下命令都在实例目录内执行
 mkdir -p raw/$(date +%Y/%m/%d)/misc
 cat > raw/$(date +%Y/%m/%d)/misc/my-first-note.md << 'EOF'
 ## Decision: Use Typer for CLI
@@ -49,6 +50,7 @@ raw → drafts 的 A/B/C 分级蒸馏由 **Claude Code 的 `/ingest` 技能**完
 {: .note }
 **纯 CLI 路径**（没有 Claude Code 时）：跳过 drafts，直接把知识写成 wiki 页，然后跳到 Step 4——
 ```bash
+cd <你的实例目录>
 oks wiki create --title "CLI framework decision" --type strategy --area computing \
   --content "Chose Typer over Click: native type hints + Rich integration."
 ```
@@ -58,6 +60,7 @@ oks wiki create --title "CLI framework decision" --type strategy --area computin
 审查草稿并提升：
 
 ```bash
+cd <你的实例目录>
 oks drafts list           # 查看候选
 oks drafts promote <slug> # 提升到 wiki/
 ```
@@ -67,6 +70,7 @@ oks drafts promote <slug> # 提升到 wiki/
 ### Step 4: 确认搜索能找到它
 
 ```bash
+cd <你的实例目录>
 oks search "CLI framework decision"
 ```
 

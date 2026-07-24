@@ -35,23 +35,10 @@ DEFAULT_CONFIG: dict = {
 
 
 def repo_root() -> Path:
-    env_root = os.environ.get("OKS_ROOT")
-    if env_root:
-        return Path(env_root)
-    try:
-        from knowledge_studio.config import load_config
+    """Thin delegate — config.get_kb_root() is the single root resolver."""
+    from knowledge_studio.config import get_kb_root
 
-        kb_path = load_config().get("knowledge_base_path")
-        if kb_path:
-            return Path(kb_path)
-    except Exception as e:
-        import sys
-        print(
-            f"oks: warning: could not read ~/.oks/config.json ({e}); "
-            f"falling back to current directory as KB root",
-            file=sys.stderr,
-        )
-    return Path(os.getcwd())
+    return get_kb_root()
 
 
 def wiki_dir() -> Path:
@@ -108,9 +95,9 @@ def load_active_goals() -> list[dict]:
 
 
 def _access_log_path() -> Path:
-    log_dir = repo_root() / ".oks"
-    log_dir.mkdir(parents=True, exist_ok=True)
-    return log_dir / "access.json"
+    # Read-only: no mkdir here. Writers go through _atomic_write, which
+    # creates the parent directory.
+    return repo_root() / ".oks" / "access.json"
 
 
 def _load_access_counts() -> dict[str, int]:
@@ -255,9 +242,9 @@ def _fingerprint(content: str) -> str:
 
 
 def _fingerprint_index_path() -> Path:
-    d = repo_root() / ".oks"
-    d.mkdir(parents=True, exist_ok=True)
-    return d / "fingerprints.json"
+    # Read-only: no mkdir here. Writers go through _atomic_write, which
+    # creates the parent directory.
+    return repo_root() / ".oks" / "fingerprints.json"
 
 
 def _load_fingerprint_index() -> dict[str, str]:

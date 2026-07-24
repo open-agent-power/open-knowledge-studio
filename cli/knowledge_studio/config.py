@@ -90,37 +90,75 @@ def save_config(config: dict[str, Any]) -> None:
 
 
 def init_config(kb_path: str | None = None) -> Path:
-    """Initialize global config. Returns the config path."""
+    """Initialize global config. Returns the config path.
+
+    Raises ValueError when no kb_path is given and the existing config has
+    no knowledge_base_path — we never silently default to cwd.
+    """
     config = load_config()
 
     if kb_path:
-        config["knowledge_base_path"] = kb_path
+        config["knowledge_base_path"] = str(Path(kb_path).expanduser().resolve())
     elif not config.get("knowledge_base_path"):
-        try:
-            from knowledge_studio.store import repo_root
-            config["knowledge_base_path"] = str(repo_root())
-        except Exception:
-            config["knowledge_base_path"] = str(Path.cwd())
+        raise ValueError(
+            "knowledge_base_path required: pass --kb-path or run `oks init <path>`"
+        )
 
     save_config(config)
     return config_path()
 
 
+# Warn at most once per process when the configured root lacks wiki/.
+_warned_missing_wiki = False
+
+
+def _warn_if_not_kb(root: Path) -> None:
+    global _warned_missing_wiki
+    if _warned_missing_wiki:
+        return
+    if not (root / "wiki").is_dir():
+        _warned_missing_wiki = True
+        import sys
+        print(
+            f"oks: warning: configured KB path {root} does not look like a "
+            f"knowledge base (missing wiki/); run `oks init <path>` or "
+            f"`oks config set knowledge_base_path <path>`",
+            file=sys.stderr,
+        )
+
+
 def get_kb_root() -> Path:
-    """Get the knowledge base root path.
+    """Get the knowledge base root path (single source of truth).
 
     Priority:
     1. OKS_ROOT env var
     2. ~/.oks/config.json → knowledge_base_path
     3. Current working directory
+
+    A corrupt config warns on stderr and falls back to cwd instead of
+    raising, matching the historical store.repo_root() behavior.
     """
     env_root = os.environ.get("OKS_ROOT")
     if env_root:
-        return Path(env_root)
+        root = Path(env_root).expanduser().resolve()
+        _warn_if_not_kb(root)
+        return root
 
-    config = load_config()
+    try:
+        config = load_config()
+    except Exception as e:
+        import sys
+        print(
+            f"oks: warning: could not read {config_path()} ({e}); "
+            f"falling back to current directory as KB root",
+            file=sys.stderr,
+        )
+        return Path.cwd()
+
     kb_path = config.get("knowledge_base_path")
     if kb_path:
-        return Path(kb_path)
+        root = Path(kb_path).expanduser().resolve()
+        _warn_if_not_kb(root)
+        return root
 
     return Path.cwd()

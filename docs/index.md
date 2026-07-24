@@ -53,12 +53,14 @@ wiki/（策展知识，带衰减）
 ## 准备开始？
 
 ```bash
-pip install open-knowledge-studio
+pipx install open-knowledge-studio && pipx ensurepath
 oks init my-knowledge-base
 cd my-knowledge-base
 oks status
 oks search "your query"
 ```
+
+（pipx 本身：Ubuntu 用 `sudo apt install pipx`，macOS 用 `brew install pipx`，Windows 用 `py -m pip install --user pipx && py -m pipx ensurepath`。Ubuntu 24.04 / Homebrew Python 受 PEP 668 保护，直接 `pip install` 会报 externally-managed-environment；镜像滞后时加 `--pip-args="-i https://pypi.org/simple"`。）
 
 - **[快速开始](start-here.md)** — 最短可用路径：保存一条 → 搜索到它 → 验证工作
 - **[理念](philosophy.md)** — 为什么说知识库就是你在训练的模型

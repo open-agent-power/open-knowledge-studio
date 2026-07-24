@@ -475,7 +475,11 @@ def config_init(
     """Initialize global config at ~/.oks/config.json."""
     from knowledge_studio.config import init_config
 
-    path = init_config(kb_path)
+    try:
+        path = init_config(kb_path)
+    except ValueError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1)
     console.print(f"[green]Config created:[/green] {path}")
 
     from knowledge_studio.config import load_config
@@ -526,7 +530,15 @@ def config_set(
             target[k] = {}
         target = target[k]
 
-    if value.lower() in ("true", "false"):
+    if key == "knowledge_base_path":
+        resolved = Path(value).expanduser().resolve()
+        if not resolved.is_dir():
+            console.print(
+                f"[yellow]Warning:[/yellow] directory does not exist: {resolved}"
+            )
+        value = str(resolved)
+        target[keys[-1]] = value
+    elif value.lower() in ("true", "false"):
         target[keys[-1]] = value.lower() == "true"
     elif value.isdigit():
         target[keys[-1]] = int(value)
@@ -607,18 +619,17 @@ def _materialize_assets(root: Path, base: Path, is_packaged: bool, overwrite: bo
         if not src.is_dir():
             continue
         dest = root / dest_name
-        if dest.exists():
-            if not overwrite:
-                continue
-            shutil.rmtree(dest)
-        shutil.copytree(src, dest)
+        if dest.exists() and not overwrite:
+            continue
+        # Merge-copy: refresh bundled files in place, keep user-owned files.
+        shutil.copytree(src, dest, dirs_exist_ok=True)
         done.append(dest_name)
     return done
 
 
 @app.command()
 def init(
-    path: str = typer.Argument(".", help="Target directory for the new knowledge instance"),
+    path: str = typer.Argument(..., help="Target directory for the new knowledge instance"),
     set_default: bool = typer.Option(
         True, "--set-default/--no-set-default",
         help="Register this folder as the active KB in ~/.oks/config.json",
@@ -630,6 +641,10 @@ def init(
         False, "--upgrade",
         help="Re-copy bundled assets (skills/templates/_meta/settings), overwriting them; your memory (wiki/drafts/profiles) is untouched",
     ),
+    force: bool = typer.Option(
+        False, "--force",
+        help="Scaffold into a non-empty directory that is not already a knowledge base",
+    ),
 ):
     """Scaffold a new knowledge INSTANCE folder (e.g. your personal artboy-knowledge-studio).
 
@@ -639,6 +654,26 @@ def init(
     from anywhere.
     """
     root = Path(path).expanduser().resolve()
+
+    # Refuse to scaffold into an existing non-empty directory that is not
+    # already a KB (missing wiki/) — protects arbitrary folders from being
+    # hijacked. Re-running on an existing KB is idempotent and allowed.
+    if (
+        root.is_dir()
+        and any(root.iterdir())
+        and not (root / "wiki").is_dir()
+        and not force
+    ):
+        console.print(
+            f"[red]Refusing to scaffold into non-empty directory:[/red] {root}\n"
+            f"It does not look like a knowledge base (no wiki/). Init would create:\n"
+            + "\n".join(f"  - {d}/" for d in _INSTANCE_DIRS)
+            + "\n  - .claude/ templates/ _meta/ settings/ (bundled assets)"
+            + "\n  - .gitignore"
+            + "\n\nRe-run with [bold]--force[/bold] to proceed anyway."
+        )
+        raise typer.Exit(1)
+
     root.mkdir(parents=True, exist_ok=True)
 
     for d in _INSTANCE_DIRS:
@@ -693,7 +728,10 @@ def init(
 
 # ── Optional editor hooks (opt-in auto-recall) ───────────────────
 
-_RECALL_HOOK_CMD = ".claude/hooks/user-prompt-recall.sh"
+# Hook commands are written as absolute paths (see hook_install). Old
+# installs wired the relative path below; matching is done by script name
+# so both forms are recognized.
+_RECALL_HOOK_SCRIPT_NAME = "user-prompt-recall.sh"
 _RECALL_HOOK_SCRIPTS = ("user-prompt-recall.py", "user-prompt-recall.sh")
 _HOOK_EDITORS = {
     "claude": ".claude/settings.json",
@@ -709,9 +747,16 @@ def _instance_root(path: str | None) -> Path:
 
 
 def _ensure_recall_scripts(root: Path) -> list[str]:
-    """Copy the recall hook scripts into <root>/.claude/hooks/ if missing."""
+    """Copy/refresh the recall hook scripts in <root>/.claude/hooks/.
+
+    The .sh wrapper gets the current interpreter baked into its OKS_PYTHON
+    fallback. If an existing .sh lacks the current bake (fresh copy still on
+    `python3`, or baked against a stale interpreter), it is re-copied from
+    the asset source and re-baked. The .py engine is only copied if missing.
+    """
     import shutil
     import stat
+    import sys
 
     hooks_dir = root / ".claude" / "hooks"
     hooks_dir.mkdir(parents=True, exist_ok=True)
@@ -721,20 +766,27 @@ def _ensure_recall_scripts(root: Path) -> list[str]:
     if base is not None:
         src_dir = base / ("claude/hooks" if is_packaged else ".claude/hooks")
 
+    baked = f'"${{OKS_PYTHON:-{sys.executable}}}"'
     created: list[str] = []
     for name in _RECALL_HOOK_SCRIPTS:
         dest = hooks_dir / name
         if dest.exists():
-            continue
+            if not name.endswith(".sh"):
+                continue
+            try:
+                if baked in dest.read_text(encoding="utf-8"):
+                    continue
+            except OSError:
+                pass
+            # Stale interpreter bake — fall through to re-copy + re-bake.
         if src_dir is None or not (src_dir / name).is_file():
             raise FileNotFoundError(
                 f"bundled hook script not found: {name} (asset source: {src_dir})"
             )
         shutil.copy2(src_dir / name, dest)
         if name.endswith(".sh"):
-            import sys
             text = dest.read_text(encoding="utf-8").replace(
-                '"${OKS_PYTHON:-python3}"', f'"${{OKS_PYTHON:-{sys.executable}}}"'
+                '"${OKS_PYTHON:-python3}"', baked
             )
             dest.write_text(text, encoding="utf-8")
         dest.chmod(dest.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
@@ -743,7 +795,11 @@ def _ensure_recall_scripts(root: Path) -> list[str]:
 
 
 def _wire_userpromptsubmit(settings_path: Path, command: str) -> str:
-    """Idempotently add a UserPromptSubmit command hook. Returns 'wired'|'exists'."""
+    """Idempotently add a UserPromptSubmit command hook. Returns 'wired'|'exists'.
+
+    Recognizes previously wired entries (old relative or stale absolute
+    paths) by script name and rewrites them in place instead of duplicating.
+    """
     data: dict = {}
     if settings_path.exists():
         try:
@@ -752,11 +808,18 @@ def _wire_userpromptsubmit(settings_path: Path, command: str) -> str:
             raise ValueError(f"{settings_path} is not valid JSON: {e}") from e
     hooks = data.setdefault("hooks", {})
     ups = hooks.setdefault("UserPromptSubmit", [])
+    stale: dict | None = None
     for group in ups:
         for h in group.get("hooks", []):
-            if h.get("command") == command:
+            cmd = h.get("command", "")
+            if cmd == command:
                 return "exists"
-    ups.append({"hooks": [{"type": "command", "command": command}]})
+            if cmd.endswith(_RECALL_HOOK_SCRIPT_NAME):
+                stale = h
+    if stale is not None:
+        stale["command"] = command
+    else:
+        ups.append({"hooks": [{"type": "command", "command": command}]})
     settings_path.parent.mkdir(parents=True, exist_ok=True)
     settings_path.write_text(
         json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
@@ -764,7 +827,7 @@ def _wire_userpromptsubmit(settings_path: Path, command: str) -> str:
     return "wired"
 
 
-def _hook_is_wired(settings_path: Path, command: str) -> bool:
+def _hook_is_wired(settings_path: Path) -> bool:
     if not settings_path.exists():
         return False
     try:
@@ -773,7 +836,7 @@ def _hook_is_wired(settings_path: Path, command: str) -> bool:
         return False
     for group in data.get("hooks", {}).get("UserPromptSubmit", []):
         for h in group.get("hooks", []):
-            if h.get("command") == command:
+            if h.get("command", "").endswith(_RECALL_HOOK_SCRIPT_NAME):
                 return True
     return False
 
@@ -824,10 +887,11 @@ def hook_install(
     if created:
         console.print(f"[green]Installed hook script:[/green] {', '.join(created)}")
 
+    hook_cmd = (root / ".claude" / "hooks" / _RECALL_HOOK_SCRIPT_NAME).resolve().as_posix()
     editors = ("claude", "qoder") if editor == "both" else (editor,)
     for name in editors:
         settings_path = root / _HOOK_EDITORS[name]
-        result = _wire_userpromptsubmit(settings_path, _RECALL_HOOK_CMD)
+        result = _wire_userpromptsubmit(settings_path, hook_cmd)
         label = "[green]wired[/green]" if result == "wired" else "[dim]already wired[/dim]"
         console.print(f"  {name}: {label} → {settings_path}")
 
@@ -860,11 +924,12 @@ def hook_status(
         except (OSError, subprocess.TimeoutExpired):
             ok = False
         state = ("[green]importable[/green]" if ok
-                 else "[red]NOT importable — hook will silently no-op; re-run oks hook install[/red]")
+                 else "[red]hook script has stale interpreter — "
+                      "run `oks hook install` to re-bake[/red]")
         console.print(f"  engine: {state} (python: {py})")
     for name, rel in _HOOK_EDITORS.items():
         settings_path = root / rel
-        wired = _hook_is_wired(settings_path, _RECALL_HOOK_CMD)
+        wired = _hook_is_wired(settings_path)
         state = "[green]wired[/green]" if wired else "[dim]not wired[/dim]"
         console.print(f"  {name}: {state}")
 

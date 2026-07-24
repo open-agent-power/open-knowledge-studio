@@ -221,6 +221,8 @@ def _tokenize(text: str) -> set[str]:
     try:
         import jieba
 
+        import logging as _logging
+        jieba.setLogLevel(_logging.WARNING)  # silence "Building prefix dict" chatter
         raw_words = list(jieba.cut_for_search(text))
     except Exception:
         raw_words = text.split()

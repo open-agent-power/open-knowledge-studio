@@ -32,12 +32,16 @@ A strong workflow: save the source into `raw/`, then distill the parts worth kee
 ## Quick Start
 
 ```bash
-pip install open-knowledge-studio
+pipx install open-knowledge-studio && pipx ensurepath
 oks init my-knowledge-base
 cd my-knowledge-base
 oks status
 oks search "git branch"
 ```
+
+pipx avoids PEP 668 `externally-managed-environment` errors on Ubuntu 24.04+ and
+macOS Homebrew Python (get pipx: `sudo apt install pipx` / `brew install pipx` /
+Windows `py -m pip install --user pipx && py -m pipx ensurepath`).
 
 ## Core Pipeline
 
