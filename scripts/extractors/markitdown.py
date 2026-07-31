@@ -56,14 +56,23 @@ def markitdown_text(source: Path, markdown: Path | None) -> str:
             "MarkItDown is not installed in this interpreter; install it or pass --markdown"
         ) from exc
     stream_info = None
-    if source.suffix.lower() in {".html", ".htm"}:
+    suffix = source.suffix.lower()
+    if suffix in {".txt", ".md", ".csv"}:
+        stream_info = StreamInfo(
+            mimetype="text/plain",
+            extension=suffix,
+            charset="utf-8",
+            filename=source.name,
+            local_path=str(source),
+        )
+    elif suffix in {".html", ".htm"}:
         header = source.read_bytes()[:8192].decode("ascii", errors="ignore")
         charset_match = re.search(
             r"charset\s*=\s*[\"']?([a-zA-Z0-9._-]+)", header, re.IGNORECASE
         )
         stream_info = StreamInfo(
             mimetype="text/html",
-            extension=source.suffix.lower(),
+            extension=suffix,
             charset=charset_match.group(1) if charset_match else "utf-8",
             filename=source.name,
             local_path=str(source),

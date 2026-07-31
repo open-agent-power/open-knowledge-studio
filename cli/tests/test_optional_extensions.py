@@ -4,6 +4,7 @@ import json
 import tomllib
 
 from typer.testing import CliRunner
+import subprocess
 
 from knowledge_studio import cli
 
@@ -11,30 +12,20 @@ from knowledge_studio import cli
 runner = CliRunner()
 
 
-def test_handler_install_hints_point_at_real_channels():
-    """handlers.json ships to every user; a hint for a nonexistent package is a dead end.
+def test_capability_registry_entries_are_valid():
+    """Capability install hints are code-based (_CAPABILITIES dict); validate them.
 
-    The old hints said `pip install 'oks-connector[watch]'`, but no such
-    distribution exists on PyPI — agents following the routing table failed
-    every install attempt.
+    The old handlers.json had pip hints referencing nonexistent packages.
+    Now the registry lives in cli._CAPABILITIES and each entry declares
+    deps that pip can install directly.
     """
-    handlers_path = Path(__file__).parents[2] / "settings" / "handlers.json"
-    handlers = json.loads(handlers_path.read_text(encoding="utf-8"))
-
-    text = handlers_path.read_text(encoding="utf-8")
-    assert "oks-connector[" not in text, "install_hint references a package that is not on PyPI"
-
-    for handler in handlers:
-        if handler.get("level") != 1:
-            continue
-        hint = handler["install_hint"]
-        assert hint.startswith("oks capability install "), (
-            f"{handler['name']}: L1 capabilities install via `oks capability install`, got {hint!r}"
-        )
-        capability = hint.split()[3]
-        assert capability in cli._CAPABILITIES, (
-            f"{handler['name']}: hint names unknown capability {capability!r}"
-        )
+    for name, entry in cli._CAPABILITIES.items():
+        assert "deps" in entry, f"{name}: capability entry missing 'deps'"
+        assert "purpose" in entry, f"{name}: capability entry missing 'purpose'"
+        for dep in entry["deps"]:
+            assert "oks-connector[" not in dep, (
+                f"{name}: dependency must not reference oks-connector extras: {dep!r}"
+            )
 
 
 def test_ingest_missing_connector_shows_explicit_action(monkeypatch):
@@ -44,7 +35,6 @@ def test_ingest_missing_connector_shows_explicit_action(monkeypatch):
 
     assert result.exit_code == 2
     assert "Connector" in result.output  # appears in both zh/en
-    assert result.exit_code == 2
 
 
 def test_ingest_recommends_capability_install(monkeypatch):
@@ -117,6 +107,29 @@ def test_capability_install_is_explicit_by_default():
     assert result.exit_code == 0, result.output
     assert "pip" in result.output  # pip install command shown (may wrap in panel)
     assert "--yes" in result.output
+
+
+def test_capability_install_document_runs_pip_and_reports_success(monkeypatch):
+    received = {}
+    def fake_run(command):
+        received["command"] = command
+        return subprocess.CompletedProcess(command, 0)
+    monkeypatch.setattr(cli, "_capability_already_installed", lambda _name: False)
+    monkeypatch.setattr(cli.subprocess, "run", fake_run)
+
+    result = runner.invoke(cli.app, ["capability", "install", "document", "--yes"])
+
+    assert result.exit_code == 0, result.output
+    assert "markitdown" in " ".join(received["command"])
+
+
+def test_capability_install_skips_when_already_installed(monkeypatch):
+    monkeypatch.setattr(cli, "_capability_already_installed", lambda _name: True)
+
+    result = runner.invoke(cli.app, ["capability", "install", "document"])
+
+    assert result.exit_code == 0, result.output
+    assert "already" in result.output
 
 
 def test_formula_capability_pins_mineru_compatible_tokenizers():

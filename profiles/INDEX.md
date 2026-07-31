@@ -13,7 +13,7 @@
 
 ## Frontmatter 字段规范
 
-**完整 schema 见 `_meta/frontmatter-schema.md` §2.2 (team.md) + §2.3 (users/<id>.md)**。
+**完整 schema 见 `docs/frontmatter-schema.md` (team + user profiles)**。
 
 本层差异（profile 层特定）：
 - `type` 必须是 `profile`

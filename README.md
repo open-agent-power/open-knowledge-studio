@@ -1,144 +1,196 @@
 # Open Knowledge Studio
 
-> A file-based knowledge engineering workspace for Claude Code.
-> Core pipeline: **raw → wiki → recall**.
+A file-based knowledge workspace for Claude Code and compatible Agents.
 
-[English](#english) | [中文](#中文)
+OKS helps Agents turn sources into reviewed, traceable and recallable knowledge.
+
+```text
+Source -> Raw -> Candidate -> Human Review -> Wiki -> Search / Recall -> Agent Output
+```
+
+[English](#english) | [中文](#chinese)
 
 ---
+
+<a id="english"></a>
 
 ## English
 
 ### What is this?
 
-Open Knowledge Studio is a knowledge base system designed to work with Claude Code. It provides:
+Open Knowledge Studio is a lightweight knowledge engineering workspace for AI Agents.
 
-- **4 cognitive buckets + 2 infrastructure layers**: buckets `profiles/`, `raw/`, `wiki/`, `drafts/`; infrastructure `settings/` (config), `_meta/` (schema)
-- **6+1-factor recall engine**: token overlap + substring + topic trace + type boost + review bonus (failure lessons rank higher) + memory curve, plus an optional goal boost (active goals lift on-scope pages; no-op without goals)
-- **Dreaming cycle**: AI distills raw materials into draft proposals, humans review and promote to wiki
-- **Decay system**: memory curve scoring with type-specific λ, tier classification (hot/warm/cold/evictable)
-- **22 knowledge domains**: soft convention — directories created on demand
-- **CLI tool (`oks`)**: search, recall, offline evaluation, execution traces, wiki CRUD, drafts, distill, lint, status, metrics
-- **8 Claude Code skills**: start, ingest, query, lint, compile, status, archive, promote
-- **4 hooks**: pre-compact snapshot, session-start loading, wiki-write validation, opt-in auto-recall on prompt (`oks hook install`)
+It gives Agents a stable file-based memory layer, so project knowledge, source materials, failure lessons and human decisions can be reused across sessions instead of being explained from scratch every time.
+
+The core idea is simple:
+
+* `Raw` keeps original materials and evidence.
+* `Candidate` is knowledge proposed by an Agent.
+* `Human Review` decides whether the Candidate is accepted.
+* `Wiki` stores reviewed knowledge.
+* `Search / Recall` brings that knowledge back into future Agent work.
+
+Agents may write Candidates. Humans approve Wiki.
 
 ### Quick Start
 
-Prerequisites: Python ≥ 3.12, git. Claude Code (or a compatible agent) is optional
-but required for the skills-driven workflow — the CLI alone covers the full loop.
+Requirements:
+
+* Python >= 3.12
+* Git
+* pipx
+
+Install:
 
 ```bash
-pipx install open-knowledge-studio && pipx ensurepath   # 1. install the CLI (core + connector)
-oks init my-knowledge-base          # 2. scaffold your instance
-cd my-knowledge-base
-oks status                          # 3. use it
-oks search "git branch"             # (empty on a fresh instance — add knowledge first)
-oks recall "git branch" --goal none --format json --explain  # reproducible, inspectable output
-oks eval recall eval/datasets/team-v1.yaml --output eval/runs/baseline.json
+# Normal users — from PyPI
+pipx install open-knowledge-studio
 
-# 按需安装能力
-oks capability install watch     # 视频/音频提取
-oks capability install document  # Office/HTML 提取
-oks capability install pdf       # PDF 提取
+# Developers — from local checkout
+pipx install ./cli --force
 
-# 采集（Agent 或用户直接调用）
-oks ingest "https://www.youtube.com/watch?v=..." --mode quick --progress
+# From Git (anyone)
+pipx install "git+https://github.com/open-agent-power/open-knowledge-studio.git#subdirectory=cli" --force
 
-# 飞书（可选组件）
-oks feishu setup                 # 自动创建 Base + 表 + 表单
-oks feishu submit "https://..."  # 提交采集
-oks feishu run-once              # 处理一条待办
-oks feishu listen                # 监听审核回复
+oks --version
 ```
 
-`oks-connector` 已内置，不再需要 `pipx inject`。重型依赖（faster-whisper、MinerU、PaddleOCR）
-通过 `oks capability install` 按需安装，每次安装前提示用户确认。
+Create a workspace:
 
-The connector is included in the package; `oks ingest` checks the required
-optional capability and prints the exact installation command when it is
-missing. Feishu Base is an optional extension: `oks feishu auth`,
-`oks feishu form --url <form-url>`, `oks feishu run-once`, and bounded
-`oks feishu listen` retain user-controlled login and review. See
-`docs/handoff-cli-feishu-loop-20260724.md` for setup and operational boundaries.
+```bash
+oks init ./my-knowledge-base
+export OKS_ROOT=./my-knowledge-base
+oks status
+```
 
-| OS | Get pipx | Note |
-|----|----------|------|
-| Linux (Debian/Ubuntu) | `sudo apt install pipx` | System pip is PEP 668 protected — bare `pip install` errors with `externally-managed-environment` |
-| macOS | `brew install pipx` | Homebrew Python is PEP 668 protected too |
-| Windows | `py -m pip install --user pipx && py -m pipx ensurepath` (or scoop) | Auto-recall hooks are bash scripts — native Windows needs WSL |
+Ingest a source:
 
-Troubleshooting:
-- Run `oks --version` to confirm the install landed on your PATH.
-- If your mirror lags behind PyPI: `pipx install open-knowledge-studio --pip-args="-i https://pypi.org/simple"`.
+```bash
+oks ingest ./sample.md --mode quick --progress
+oks drafts list
+```
 
-Prefer a plain venv? `python3 -m venv ~/.oks-venv && ~/.oks-venv/bin/pip install open-knowledge-studio`
+After human approval:
 
-`oks init` materializes the shareable layer (Claude Code skills, templates, schema,
-settings) and a git-tracked memory instance — no repo clone required. This repo is
-the **code/template** source; your knowledge lives in the instance you create.
+```bash
+oks drafts promote <slug>
+oks search "agent memory"
+oks recall "how should agent memory be managed?" --goal none --format table
+oks lint
+```
 
-### Architecture
+### Core CLI
 
-See [CONSTITUTION.md](CONSTITUTION.md) for the full memory design.
+```text
+oks init
+oks ingest
+oks drafts
+oks wiki
+oks search
+oks recall --goal --format --explain
+oks eval
+oks trace
+oks lint
+oks status
+oks capability
+```
+
+### Optional Capabilities
+
+OKS keeps the core lightweight. Heavy capabilities are installed only when needed.
+
+| Capability | Purpose |
+|---|---|
+| `document` | Office (docx/pptx/xlsx), HTML, CSV — .md/.txt 开箱可用，无需安装 |
+| `pdf` | PDF extraction |
+| `formula` | Formula and OCR-related extraction |
+| `watch` | Video, audio and subtitle extraction |
+| `feishu` | Optional Feishu Base / form / review workflow |
+
+Feishu and heavy extractors are optional. They are not required for the core knowledge loop.
+
+### Agent Philosophy
+
+OKS is Claude Code-first, but not Claude Code-only.
+
+It should work with any Agent that can read files, run commands and follow project rules.
+
+Before adding new infrastructure, reuse existing capabilities:
+
+* Claude Code Skills
+* Claude Code Marketplace
+* OpenClaw Skill Hub
+* mature extractors and CLI tools
+
+Do not build a new platform when an existing Agent tool can already do the job.
 
 ### Documentation
 
-See [`docs/`](docs/) for in-depth design documentation (GitHub Pages ready).
+* [Core Architecture](docs/architecture/oks-core-architecture.md)
+* [Agent One-Prompt Installation](docs/deployment/agent-one-prompt-installation.md)
+* [Clean Server Deployment Report](docs/acceptance/clean-server-deployment-report.md)
+* [Feishu E2E Status](docs/acceptance/feishu-e2e-status.md)
+* [Platform Anti-bot and Lightweight Deployment Research](docs/research/platform-antibot-and-lightweight-deployment.md)
+* [Kimi K3 Case Study](docs/cases/kimi-k3-deep-analysis.md)
+
+### License
+
+MIT
 
 ---
 
+<a id="chinese"></a>
+
 ## 中文
 
-### 这是什么？
+Open Knowledge Studio 是一个面向 Claude Code 和兼容 Agent 的文件式知识工作区。
 
-Open Knowledge Studio 是一个为 Claude Code 设计的文件式知识库系统。提供：
+它让 Agent 把外部资料、项目经验、失败教训和人工判断沉淀成可追溯、可审核、可召回的长期知识，而不是每次新会话都重新解释上下文。
 
-- **4 认知桶 + 2 基础设施层**：认知桶 `profiles/`、`raw/`、`wiki/`、`drafts/`；基础设施 `settings/`（配置）、`_meta/`（schema）
-- **6+1 因子召回引擎**：token 交集 + 子串匹配 + topic trace + 类型加权 + 审查加分（失败教训优先召回）+ 记忆曲线，外加可选的**目标加权**（active goal 抬升命中域/关键词的页面；无 goal 时不生效）
-- **Dreaming 循环**：AI 将原始材料蒸馏为草稿提案，人工审查后提升为 wiki
-- **衰减系统**：记忆曲线评分，类型特定 λ，tier 分级（hot/warm/cold/evictable）
-- **22 个知识域**：软约定——目录按需创建，不预建骨架
-- **CLI 工具（`oks`）**：搜索、召回、离线评测、执行轨迹、wiki CRUD、草稿、蒸馏、健康检查、状态、指标
-- **8 个 Claude Code 技能**：start, ingest, query, lint, compile, status, archive, promote
-- **4 个钩子**：压缩前快照、会话加载、写入验证、可选的提问自动召回（`oks hook install`）
+核心链路：
+
+```text
+Source -> Raw -> Candidate -> Human Review -> Wiki -> Search / Recall -> Agent Output
+```
+
+核心规则：
+
+* `Raw` 保存原始材料和证据；
+* `Candidate` 是 Agent 提出的知识草稿；
+* `Human Review` 是人工审核门禁；
+* `Wiki` 只保存审核后的知识；
+* `Search / Recall` 让后续 Agent 重新使用这些知识。
+
+Agent 可以写 Candidate，但不能绕过人工审核直接写 Wiki。
 
 ### 快速开始
 
-前置条件：Python ≥ 3.12、git。Claude Code（或兼容 Agent）可选，但技能工作流
-（`/ingest`、`/query`、`/promote`）依赖它——纯 CLI 覆盖搜索/召回/wiki CRUD。
-
 ```bash
-pipx install open-knowledge-studio && pipx ensurepath   # 1. 安装 CLI
-oks init my-knowledge-base          # 2. 初始化你的知识库实例
-cd my-knowledge-base
-oks status                          # 3. 开始使用
-oks search "git branch"             # （新实例为空——先写入知识再搜）
-oks recall "git branch" --goal none --format json --explain  # 可复现、可解释输出
-oks eval recall eval/datasets/team-v1.yaml --output eval/runs/baseline.json
+pipx install ./cli --force
+oks --version
+
+oks init ./my-knowledge-base
+export OKS_ROOT=./my-knowledge-base
+oks status
+
+oks ingest ./sample.md --mode quick --progress
+oks drafts list
 ```
 
-为什么用 pipx？新版系统的 Python 普遍启用 PEP 668「外部管理」保护，直接
-`pip install` 会失败。各系统安装 pipx：
+人工批准后：
 
-| 系统 | 安装 pipx | 说明 |
-|------|-----------|------|
-| Linux (Debian/Ubuntu) | `sudo apt install pipx` | 系统 pip 受 PEP 668 保护，直接 `pip install` 会报 `externally-managed-environment` |
-| macOS | `brew install pipx` | Homebrew Python 同样受 PEP 668 保护 |
-| Windows | `py -m pip install --user pipx && py -m pipx ensurepath`（或 scoop） | 注意：自动召回 hooks 是 bash 脚本，原生 Windows 需 WSL |
+```bash
+oks drafts promote <slug>
+oks search "agent memory"
+oks recall "how should agent memory be managed?"
+oks lint
+```
 
-排障：
-- 运行 `oks --version` 确认安装已生效、命令在 PATH 上。
-- 镜像同步滞后时：`pipx install open-knowledge-studio --pip-args="-i https://pypi.org/simple"`。
+### 详细文档
 
-习惯传统 venv？`python3 -m venv ~/.oks-venv && ~/.oks-venv/bin/pip install open-knowledge-studio`
-
-`oks init` 会物化可共享层（Claude Code 技能、模板、schema、配置）并生成一个用 git
-跟踪记忆的实例——无需 clone 本仓库。本仓库是**代码/模板**源，你的知识存在你创建的实例里。
-
-### 设计文档
-
-详见 [`docs/`](docs/) 目录（支持 GitHub Pages）和 [`CONSTITUTION.md`](CONSTITUTION.md)。
-
-## License
-
-MIT
+* [核心架构](docs/architecture/oks-core-architecture.md)
+* [Agent 一键部署与接管提示词](docs/deployment/agent-one-prompt-installation.md)
+* [干净服务器部署报告](docs/acceptance/clean-server-deployment-report.md)
+* [飞书 E2E 状态](docs/acceptance/feishu-e2e-status.md)
+* [平台反爬与轻量化部署研究](docs/research/platform-antibot-and-lightweight-deployment.md)
+* [Kimi K3 案例](docs/cases/kimi-k3-deep-analysis.md)

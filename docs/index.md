@@ -17,8 +17,8 @@ has_children: true
 |------|--------|----------|
 | **理念** | 知识库即模型，你每天用反馈训练它，人人都是标注师 | [理念 →](philosophy.md) |
 | **每日循环** | 收集 → 入料 → 分级 → 审查 → 沉淀 → 召回的训练闭环 | [每日循环 →](daily-loop.md) |
-| **Memory** | 从原始材料蒸馏出的持久知识——一个 concept、strategy 或 anti-pattern | [Memories →](memories.md) |
-| **Raw Material** | 蒸馏前的入料层——文章、论文、仓库笔记、对话 | [Raw Materials →](raw-materials.md) |
+| **Memory** | 从原始材料蒸馏出的持久知识——一个 concept、strategy 或 anti-pattern | [Wiki →](wiki.md) |
+| **Raw Material** | 蒸馏前的入料层——文章、论文、仓库笔记、对话 | [Raw 标准 →](raw-multimodal-standard.md) |
 | **召回引擎** | 6+1 因子评分找到最相关知识：token overlap + substring + topic trace + type boost + 审查加分 + memory curve | [召回引擎 →](recall-engine.md) |
 | **Dreaming 循环** | 人工审查的知识演化：raw → AI 蒸馏 → drafts → 人工审查 → wiki | [Dreaming 循环 →](dreaming-cycle.md) |
 
@@ -34,20 +34,23 @@ wiki/（策展知识，带衰减）
 注入 Agent 上下文
 ```
 
-## 当前真实 POC
+## 当前架构与进度
 
-Studio 当前以飞书多维表格作为 Capture、状态与人工审核控制面，真实运行证据和待办集中在两份文档中：
+Studio 以核心知识闭环为主线，飞书多维表格仅作为可选 Capture/状态/审核控制面。
+架构事实源和本轮工程记录见：
 
-- **[自进化学习主 Loop](core-learning-loop-poc.md)** — 当前唯一实施清单与验收门；
-- **[阶段历史与验收简报](phase-history-summary.md)** — Capture → Raw → Candidate → 个人审核 → Wiki → Recall 的真实结果与限制。
+- **[核心架构](architecture/oks-core-architecture.md)** — 当前主事实源，区分已验证/部分验证/尚未验证
+- **[工程轮次 2-3](engineering-rounds-2-3.md)** — v0.3.0 合并后的架构加固与安全修复
 
-多模态 Raw 协议的机器事实源位于独立 `oks-connector` 仓库的 `schemas/` 与 `capabilities/`；Studio 只保留生命周期和调用入口，不复制第二套 Schema。
+多模态 Raw 协议的机器事实源位于本仓库 `schemas/`；Studio 只保留生命周期和调用入口。
 
 ## 架构总览
 
-<img src="assets/architecture-overview.svg" alt="Architecture Overview" style="max-width:100%;height:auto;" />
+当前主架构图以核心知识闭环为准，并显式区分已验证、部分验证、尚未验证、人工门禁和外部能力来源：
 
-<img src="assets/pipeline.svg" alt="Pipeline" style="max-width:100%;height:auto;" />
+[OKS Core Architecture](architecture/oks-core-architecture.md)
+
+旧 SVG 主架构图已移除，避免把“设计存在”误读成“真实环境已全部验收通过”。
 
 ## 独特之处
 
@@ -76,8 +79,8 @@ oks search "your query"
 - **[每日循环](daily-loop.md)** — 把训练闭环变成每天都能跑的流程
 - **[自动驾驶](autonomous.md)** — 人类判断随自动化程度如何分级（L0→L5）
 - **[案例](cases.md)** — 托管你的简历 / GitHub / 科研，看循环怎么落地
-- **[使用你的知识](memories.md)** — wiki 页面结构、类型和搜索
-- **[Raw Materials](raw-materials.md)** — 原始材料、A/B/C 分级、蒸馏工作流
+- **[使用你的知识](wiki.md)** — wiki 页面结构、类型和搜索
+- **[Raw Materials](raw-multimodal-standard.md)** — 原始材料、证据和 Raw Bundle 边界
 
 ---
 

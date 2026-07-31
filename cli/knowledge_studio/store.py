@@ -397,6 +397,11 @@ def write_wiki_page(
     human_note: str | None = None,
     slug_hint: str | None = None,
 ) -> Path:
+    if not re.fullmatch(r"[a-z][a-z0-9-]*", area):
+        raise ValueError(
+            f"Invalid area name: {area!r}. "
+            "Area must be a lowercase identifier (letters, digits, hyphens only)."
+        )
     fp = _fingerprint(content)
     fp_index = _load_fingerprint_index()
     existing_slug = fp_index.get(fp)
@@ -562,6 +567,8 @@ def promote_draft(
     meta = parse_wiki_file(draft_path)
     if not meta:
         meta = {}
+    if meta.get("status") == "rejected":
+        raise ValueError(f"Draft '{slug}' was explicitly rejected and cannot be promoted.")
     body = meta.get("body", "")
 
     final_title = title or meta.get("title", slug)

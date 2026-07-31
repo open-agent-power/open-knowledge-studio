@@ -20,9 +20,15 @@ parent: 内部机制
 
 推荐工作流：将来源保存到 `raw/`，然后将有价值的部分蒸馏为 `wiki/` memory。
 
-## 4 认知桶 + 2 基础设施层
+## 主闭环架构
 
-<img src="assets/architecture-overview.svg" alt="Architecture Overview" style="max-width:100%;height:auto;" />
+当前主架构图不再使用旧的静态 SVG 作为事实源。新的架构图位于：
+
+[OKS Core Architecture](architecture/oks-core-architecture.md)
+
+该图优先表达 `Source -> Raw -> Candidate -> Human Review -> Wiki -> Search / Recall -> Agent Output -> Evaluation`，并区分已验证、部分验证、尚未验证、人工边界、可选飞书控制面、Agent 执行层和外部插件/Skill 来源。
+
+## 4 认知桶 + 2 基础设施层
 
 四个**认知桶**是 Agent 观察、写入、召回、遗忘的知识；两个**基础设施层**（配置 + schema）是 Agent 读取来决定"怎么运转"、但从不作为知识写入的东西 —— 它们不衰减、不按相关性召回。
 
@@ -33,32 +39,34 @@ parent: 内部机制
 | 认知 | `wiki/` | 策划知识（memories） | 类型特定 λ | 6+1 因子召回 |
 | 认知 | `drafts/` | Dreaming 候选 | 无 | N/A（人工审查） |
 | 配置 | `settings/` | 运行时旋钮：路由表、衰减、intake | 无 | 直接读取（运行时读路由表） |
-| Schema | `_meta/` | 数据形状契约：frontmatter/learning | 无 | 读时应用；CI 强制 |
+| Schema | `_meta/` | 数据形状契约：raw evidence / trace / eval | 无 | 读时应用；CI 强制 |
 
-## 目录结构
+## 当前仓库结构
 
 ```
 open-knowledge-studio/
-├── profiles/          # ① 画像
-│   ├── team.md
-│   ├── users/{id}.md
-│   ├── projects/{slug}.md
-│   ├── recipes/{slug}.md     # 自动化配方
-│   └── goals/{slug}.md       # 目标（影响召回）
-├── raw/               # ② Raw materials
-│   └── {YYYY}/{MM}/{DD}/{source}/   # articles|papers|videos|audio|repos|misc
-├── wiki/              # ③ 策展知识
-│   └── {domain}/{type}/{slug}.md
-├── drafts/            # ④ Dreaming 候选
-├── settings/          # ⑤ 配置层
-│   ├── handlers.json          # 三级工具注册表
-│   └── input-sources.json
-└── _meta/             # ⑥ Schema 层
-    ├── frontmatter-schema.md  # wiki/ frontmatter 契约
-    └── learning-schema.json   # CI 强制的 learning schema
+├── .agents/          # Agent skill 副本
+├── .claude/          # Claude Code skills
+├── .codex/           # Codex 本地配置、hooks
+├── cli/              # Python 包；提供 oks 与 oks-connector 入口
+├── docs/             # GitHub Pages 文档
+├── drafts/           # 仓库内示例/工作草稿；知识实例中也有 drafts/
+├── profiles/         # 画像、目标、配方
+├── raw/              # Raw materials
+├── schemas/          # Raw/capture 协议 schema
+├── scripts/          # connector、extractors、worker、validator
+├── settings/         # 路由、输入源、衰减等配置
+├── templates/        # Wiki / draft 模板
+├── wiki/             # 策展知识
+├── _meta/            # frontmatter 与学习 schema
+├── AGENTS.md         # Agent 操作规则
+├── CONSTITUTION.md   # 记忆系统设计
+└── README.md
 ```
 
-**基础设施（非桶）**：`cli/`（API-free 的 `oks` 核心）、`templates/`、`docs/` 同样位于顶层，但装的是代码/文档，不是知识。
+运行时目录如 `.oks/`、`.codex-tmp/`、`output/`、`tmp/` 可能出现在本地工作树中，但它们是实验或运行产物，不是公开知识结构的核心层。
+
+**基础设施（非桶）**：`cli/`、`scripts/`、`schemas/`、`templates/`、`docs/` 位于顶层，但装的是代码、协议、模板或文档，不是知识本体。
 
 ## 22 个知识域
 

@@ -74,6 +74,10 @@ _TEXTS: dict[str, dict[str, str]] = {
         "zh": "{name} 安装失败（exit {code}）",
         "en": "{name} installation failed (exit {code})",
     },
+    "capability_verify_failed": {
+        "zh": "{name} 安装后仍不可用：目标 Python 无法导入所需模块。",
+        "en": "{name} remains unavailable after installation: the target Python cannot import the required module.",
+    },
     "capability_already": {
         "zh": "{name} 已安装，无需重复操作。",
         "en": "{name} is already installed.",

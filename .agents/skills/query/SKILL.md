@@ -1,5 +1,6 @@
 ---
-description: Search knowledge via 6-factor recall engine, answer with citations
+name: query
+description: Search knowledge via 6-factor recall engine, answer with citations and locators
 ---
 
 # /query — Knowledge Recall & Answer
@@ -13,7 +14,14 @@ Use the 6-factor recall engine to find relevant wiki pages and episodic memory, 
 1. **Run recall** — Execute `oks recall "<user question>" --limit 5`
 2. **Parse results** — Extract wiki pages (semantic) and raw/profile matches (episodic)
 3. **Inject context** — Load recalled content with source labels: `[verified]`, `[inferred]`, `[stale]`
-4. **Answer** — Synthesize answer using recalled knowledge. Cite sources by slug.
+4. **Answer** — Synthesize answer using recalled knowledge. Cite sources by slug and locator.
+   Every factual claim that comes from recalled context must include the most
+   specific locator available in that context, such as section, source lines,
+   Raw lines, page, timestamp, asset, or evidence id. If a recalled item lacks
+   a usable locator, write `[locator unavailable]` instead of omitting the
+   citation. Do not attach a locator to a claim that the locator does not
+   directly support, and do not merge facts from different recalled bullets
+   under one citation. Keep `[inferred]` analysis separate from source facts.
 5. **Record access** — Mention which wiki pages were used
 
 ## Recall Factors

@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__tavily__tavily-search",
+      "WebSearch",
+      "mcp__tavily__tavily-extract",
+      "WebFetch(domain:mem0.ai)",
+      "WebFetch(domain:cloud.tencent.cn)"
+    ]
+  }
+}

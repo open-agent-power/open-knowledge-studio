@@ -251,7 +251,35 @@ def default_ingest_output(source: str) -> Path:
     slug = re.sub(r"[^a-zA-Z0-9._-]+", "-", label).strip("-._").lower() or "source"
     digest = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:8]
     timestamp = f"{datetime.now():%Y%m%d-%H%M%S-%f}-{uuid.uuid4().hex[:8]}"
-    return (Path.cwd() / "raw" / f"{timestamp}-{slug[:64]}-{digest}").resolve()
+    return (default_raw_root() / f"{timestamp}-{slug[:64]}-{digest}").resolve()
+
+
+def default_raw_root() -> Path:
+    """Resolve the active KB raw/ directory for connector-managed ingest.
+
+    Keep this local instead of importing knowledge_studio.config: the connector
+    is also exposed as a standalone console script and should not gain review or
+    Wiki behavior. It only needs the same root resolution contract.
+    """
+    env_root = os.environ.get("OKS_ROOT")
+    if env_root:
+        return Path(env_root).expanduser().resolve() / "raw"
+
+    cwd = Path.cwd()
+    if (cwd / "wiki").is_dir():
+        return cwd.resolve() / "raw"
+
+    config_path = Path.home() / ".oks" / "config.json"
+    if config_path.is_file():
+        try:
+            config = json.loads(config_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            config = {}
+        kb_path = config.get("knowledge_base_path")
+        if kb_path:
+            return Path(kb_path).expanduser().resolve() / "raw"
+
+    return (cwd / "raw").resolve()
 
 
 def _extractor_python(extractor: str) -> Path:

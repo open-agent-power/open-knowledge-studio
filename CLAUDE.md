@@ -43,6 +43,9 @@ pipx avoids PEP 668 `externally-managed-environment` errors on Ubuntu 24.04+ and
 macOS Homebrew Python (get pipx: `sudo apt install pipx` / `brew install pipx` /
 Windows `py -m pip install --user pipx && py -m pipx ensurepath`).
 
+Developers working from source: `pipx install ./cli --force` to install the
+local checkout directly.
+
 ## Core Pipeline
 
 ```
@@ -75,7 +78,7 @@ open-knowledge-studio/
 ├── wiki/             # ③ Curated knowledge — 22 domains × 3 types
 ├── drafts/           # ④ Dreaming candidates
 ├── settings/         # ⑤ Config layer — decay, tool registry, input sources
-├── _meta/            # ⑥ Schema layer — frontmatter/learning contracts (CI-enforced)
+├── _meta/            # ⑥ Schema layer — raw evidence shape contract
 ├── templates/        # concept, strategy, anti-pattern, draft
 ├── cli/              # Python CLI tool (oks) — API-free core
 ├── docs/             # GitHub Pages design documentation
@@ -95,7 +98,7 @@ open-knowledge-studio/
 | `/status` | Overview: wiki count, tier distribution, drafts, quality |
 | `/archive` | Extract conversation Q&A → AI summarize → drafts/ (never writes wiki directly) |
 | `/promote` | Review drafts/ → promote/reject/edit |
-| `/media-ingest` | Experimental compatibility adapter; current protocol baseline: `oks-connector/schemas/` and `oks-connector/capabilities/` |
+| `/media-ingest` | Experimental compatibility adapter; current protocol baseline: `schemas/` |
 
 ## CLI Commands
 

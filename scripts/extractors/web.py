@@ -14,8 +14,36 @@ import requests
 from trafilatura import extract
 from trafilatura.metadata import extract_metadata
 
+from network import assert_public_network_target, ProbeError
+
 
 SCHEMA_VERSION = "raw-multimodal/v0.1"
+
+
+def _safe_fetch(url: str, timeout: float) -> requests.Response:
+    """Fetch a URL with SSRF protection on the initial target and every redirect hop."""
+    assert_public_network_target(url)
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 Chrome/126 Safari/537.36"
+        ),
+    }
+    max_redirects = 5
+    for _hop in range(max_redirects + 1):
+        response = requests.get(
+            url, headers=headers, timeout=timeout, allow_redirects=False,
+        )
+        if response.status_code >= 400:
+            response.raise_for_status()
+        location = response.headers.get("Location") or response.headers.get("location")
+        if response.status_code in (301, 302, 303, 307, 308) and location:
+            from urllib.parse import urljoin as _urljoin
+            url = _urljoin(url, location)
+            assert_public_network_target(url)
+            continue
+        return response
+    raise ProbeError("REDIRECT_LOOP", "redirect limit exceeded")
 
 
 def markdown_units(markdown: str, url: str) -> list[dict[str, object]]:
@@ -77,17 +105,7 @@ def package_web(
     assets = output / "assets"
     assets.mkdir(parents=True)
 
-    response = requests.get(
-        url,
-        headers={
-            "User-Agent": (
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 Chrome/126 Safari/537.36"
-            )
-        },
-        timeout=45,
-        allow_redirects=True,
-    )
+    response = _safe_fetch(url, timeout=45)
     response.raise_for_status()
     html = response.text
     (assets / "page.html").write_text(html, encoding="utf-8")

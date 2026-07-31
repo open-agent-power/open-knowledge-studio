@@ -981,12 +981,15 @@ def drafts_list():
     table.add_column("Drafted", max_width=12)
 
     for d in drafts:
+        drafted = d.get("drafted_at", "")
+        if not isinstance(drafted, str):
+            drafted = str(drafted)
         table.add_row(
             d["slug"],
             d.get("title", d["slug"]),
             d.get("draft_type", ""),
             d.get("draft_area", ""),
-            d.get("drafted_at", ""),
+            drafted,
         )
 
     console.print(table)

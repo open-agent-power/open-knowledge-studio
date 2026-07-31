@@ -75,4 +75,4 @@ desired.
   schema and key core logic off the declared generic shape (`*.md` primary,
   `*.jsonl` sidecar with `text`), never off a specific filename.
 - **Do not** let the core import the L1 adapter. Tools are spawned by the Agent
-  via Bash per `settings/handlers.json`; the core only reads the files they wrote.
+  via Bash per the capability check layer (`scripts/capability_check.py`); the core only reads the files they wrote.

@@ -23,7 +23,7 @@ parent: 案例
 - 冒出的想法 → 立刻记，哪怕只有一句。
 - 组会/讨论的结论 → 存下来。
 
-保真为先，不急着下结论——这是 [Raw Materials](raw-materials.md) 的原则。
+保真为先，不急着下结论——这是 [Raw Materials](raw-multimodal-standard.md) 的原则。
 
 ## 审查沉淀 wiki/
 

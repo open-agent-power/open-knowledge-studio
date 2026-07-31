@@ -103,4 +103,6 @@ class sdist_with_assets(sdist):
         super().run()
 
 
+_sync_from_checkout()
+
 setup(cmdclass={"build_py": build_py_with_assets, "sdist": sdist_with_assets})

@@ -4,6 +4,7 @@ import json
 import sys
 import tomllib
 import zipfile
+import subprocess
 from argparse import Namespace
 from dataclasses import dataclass
 from email.message import Message
@@ -106,6 +107,71 @@ _VAL_SPEC = importlib.util.spec_from_file_location("validator", VAL_PATH)
 assert _VAL_SPEC and _VAL_SPEC.loader
 validator_module = importlib.util.module_from_spec(_VAL_SPEC)
 _VAL_SPEC.loader.exec_module(validator_module)
+
+
+def test_default_ingest_output_uses_oks_root_raw(tmp_path, monkeypatch):
+    kb = tmp_path / "kb"
+    (kb / "wiki").mkdir(parents=True)
+    source = tmp_path / "source.txt"
+    source.write_text("hello", encoding="utf-8")
+    monkeypatch.setenv("OKS_ROOT", str(kb))
+    monkeypatch.chdir(tmp_path)
+
+    output = adapter.default_ingest_output(str(source))
+
+    assert output.parent == (kb / "raw").resolve()
+
+
+def test_default_ingest_output_prefers_current_kb_before_config(tmp_path, monkeypatch):
+    configured = tmp_path / "configured"
+    current = tmp_path / "current"
+    (configured / "wiki").mkdir(parents=True)
+    (current / "wiki").mkdir(parents=True)
+    config_dir = tmp_path / "home" / ".oks"
+    config_dir.mkdir(parents=True)
+    (config_dir / "config.json").write_text(
+        json.dumps({"knowledge_base_path": str(configured)}),
+        encoding="utf-8",
+    )
+    monkeypatch.delenv("OKS_ROOT", raising=False)
+    monkeypatch.setattr(adapter.Path, "home", lambda: tmp_path / "home")
+    monkeypatch.chdir(current)
+
+    output = adapter.default_ingest_output("note.txt")
+
+    assert output.parent == (current / "raw").resolve()
+
+
+def test_capability_env_python_must_import_required_module(tmp_path, monkeypatch):
+    import capability_check
+
+    fake_python = tmp_path / ("python.exe" if os.name == "nt" else "python")
+    fake_python.write_text("", encoding="utf-8")
+    monkeypatch.setenv("OKS_DOCUMENT_PYTHON", str(fake_python))
+    monkeypatch.setattr(capability_check.importlib.util, "find_spec", lambda _module: None)
+    monkeypatch.setattr(
+        capability_check.subprocess,
+        "run",
+        lambda *_args, **_kwargs: subprocess.CompletedProcess(_args[0], 1),
+    )
+
+    assert capability_check.is_capability_available("document") == (False, None)
+
+
+def test_capability_env_python_is_available_only_after_import_probe(tmp_path, monkeypatch):
+    import capability_check
+
+    fake_python = tmp_path / ("python.exe" if os.name == "nt" else "python")
+    fake_python.write_text("", encoding="utf-8")
+    monkeypatch.setenv("OKS_DOCUMENT_PYTHON", str(fake_python))
+    monkeypatch.setattr(capability_check.importlib.util, "find_spec", lambda _module: None)
+    monkeypatch.setattr(
+        capability_check.subprocess,
+        "run",
+        lambda *_args, **_kwargs: subprocess.CompletedProcess(_args[0], 0),
+    )
+
+    assert capability_check.is_capability_available("document") == (True, fake_python.resolve())
 
 
 class FakeProbeResponse:
@@ -318,6 +384,15 @@ def test_document_extra_declares_docx_and_pptx_dependencies():
     assert "markitdown[docx,pptx]" in requirements.lower()
 
 
+def test_markitdown_text_reads_utf8_plain_text(tmp_path):
+    source = tmp_path / "chapter.txt"
+    source.write_text("Chapter 20\nMental labour: caf\u00e9.\n", encoding="utf-8")
+
+    text = markitdown_module.markitdown_text(source, None)
+
+    assert "Mental labour: caf\u00e9." in text
+
+
 def test_pdf_extra_declares_pipeline_backend_dependencies():
     pyproject = MODULE_PATH.parents[1] / "cli" / "pyproject.toml"
     config = tomllib.loads(pyproject.read_text(encoding="utf-8"))
@@ -416,6 +491,8 @@ def test_route_plan_selects_mature_extractors():
 
 
 def test_ingest_defaults_to_quick_tier_and_unique_run_output(monkeypatch, tmp_path):
+    monkeypatch.delenv("OKS_ROOT", raising=False)
+    monkeypatch.setattr(adapter.Path, "home", lambda: tmp_path / "home")
     monkeypatch.chdir(tmp_path)
     args = adapter.build_parser().parse_args(
         ["ingest", "https://www.youtube.com/watch?v=abc123"]

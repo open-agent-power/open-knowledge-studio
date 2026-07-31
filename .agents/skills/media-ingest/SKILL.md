@@ -28,4 +28,4 @@ Convert a user-provided local video into a reviewable evidence bundle without ch
 6. Run `python scripts/media_ingest.py approve <capture-id> --confirm-human-review --review-note "..."`.
 7. Hand the resulting `raw/misc/*.md` file to the existing `/ingest` skill.
 
-This local-video command is an experimental adapter, not the canonical multimodal pipeline. The canonical contract and capability manifests live in the independent `oks-connector` repository under `schemas/` and `capabilities/`.
+This local-video command is an experimental adapter, not the canonical multimodal pipeline. The canonical contract lives in this repository under `schemas/`.
