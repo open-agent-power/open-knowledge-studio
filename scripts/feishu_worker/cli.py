@@ -61,4 +61,9 @@ def parse_args() -> argparse.Namespace:
     )
     reconcile.add_argument("--prompt-message-id", required=True)
     reconcile.add_argument("--reply-message-id", required=True)
+    pending = subcommands.add_parser(
+        "pending",
+        help="List pending Inbox records (Pull-mode entry point).",
+    )
+    pending.add_argument("--limit", type=int, default=200)
     return parser.parse_args()

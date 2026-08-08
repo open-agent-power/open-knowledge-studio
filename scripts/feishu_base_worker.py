@@ -116,7 +116,7 @@ from feishu_worker.review_events import (
     REVIEW_ACTION_RE,
 )
 
-# ── Legacy wrappers: supply ROOT so callers keep one-argument API ──
+# ?? Legacy wrappers: supply ROOT so callers keep one-argument API ??
 
 
 def load_config(args: argparse.Namespace) -> WorkerConfig:
@@ -129,34 +129,37 @@ def configured_knowledge_root(config: WorkerConfig) -> Path:
 
 ROOT = Path(__file__).resolve().parents[1]
 CANDIDATE_FIELDS = [
-    "运行状态",
-    "运行ID",
+    "????",
+    "??ID",
     "Raw Bundle",
-    "Wiki状态",
-    "候选ID",
-    "候选内容",
-    "审核动作",
-    "审核意见",
-    "修改类型",
-    "审核时间",
-    "Wiki路径",
+    "Wiki??",
+    "??ID",
+    "????",
+    "????",
+    "????",
+    "????",
+    "????",
+    "Wiki??",
 ]
 CAPTURE_FIELDS = [
-    "内容",
-    "思考",
-    "希望解决的问题",
-    "附件",
-    "运行状态",
-    "运行ID",
-    "来源哈希",
-    "重试",
-    "租约所有者",
-    "租约到期",
+    "??",
+    "??",
+    "???????",
+    "??",
+    "????",
+    "??ID",
+    "????",
+    "??",
+    "?????",
+    "????",
+    "????",
+    "Wiki??",
+    "????",
 ]
 # REVIEW_ACTIONS and REVIEW_ACTION_RE are re-exported from feishu_worker.review_events
 
 
-# ── Backward-compatible wrappers (supply ROOT / default projections) ──
+# ?? Backward-compatible wrappers (supply ROOT / default projections) ??
 
 
 def lark_json(config: WorkerConfig, *arguments: str) -> dict[str, Any]:
@@ -222,12 +225,12 @@ def list_records(config: WorkerConfig, limit: int = 100) -> list[dict[str, Any]]
     for field in CAPTURE_FIELDS:
         command.extend(["--field-id", field])
     # Fetch every claimable status: is_candidate() also accepts retry-flagged
-    # records and 已领取 records with an expired lease. Filtering to 待处理 here
+    # records and ??? records with an expired lease. Filtering to ??? here
     # would make retries and crash recovery unreachable.
     command.extend([
         "--filter-json",
         json.dumps(
-            {"logic": "and", "conditions": [["运行状态", "intersects", list(CLAIMABLE_STATUSES)]]},
+            {"logic": "and", "conditions": [["????", "intersects", list(CLAIMABLE_STATUSES)]]},
             ensure_ascii=False,
         ),
     ])
@@ -303,9 +306,9 @@ def _connector_binary() -> list[str]:
     return _source_router__connector_binary(ROOT)
 
 
-# ── Claim-layer re-exports ──────────────────────────────────────────────────
+# ?? Claim-layer re-exports ??????????????????????????????????????????????????
 # parse_base_datetime and is_candidate are pure functions imported directly
-# from feishu_worker.claim — no wrapper needed.  The remaining claim functions
+# from feishu_worker.claim ? no wrapper needed.  The remaining claim functions
 # have legacy wrappers that supply ROOT and inject monkeypatch-compatible
 # callables (list_records, get_record, update_record, local_claim_lock).
 
@@ -755,7 +758,7 @@ def complete_browser_snapshot(config: WorkerConfig, record_id: str, snapshot_dir
     if record is None:
         raise RuntimeError(f"Base record not found in current table: {record_id}")
     fields = record["fields"]
-    source_url = extract_url(fields.get("内容"))
+    source_url = extract_url(fields.get("??"))
     if not source_url:
         raise RuntimeError("Base record has no HTTP(S) URL")
     snapshot_url = str(snapshot.get("url") or "").split("#", 1)[0].rstrip("/")
@@ -783,13 +786,13 @@ def complete_browser_snapshot(config: WorkerConfig, record_id: str, snapshot_dir
         config,
         record_id,
         {
-            "运行状态": "已领取",
-            "运行ID": run_id,
-            "来源哈希": source_hash,
-            "采集模式": "公开浏览器",
-            "错误码": None,
-            "错误说明": None,
-            "重试": False,
+            "????": "???",
+            "??ID": run_id,
+            "????": source_hash,
+            "????": "?????",
+            "???": None,
+            "????": None,
+            "??": False,
         },
     )
     try:
@@ -847,13 +850,13 @@ def complete_browser_snapshot(config: WorkerConfig, record_id: str, snapshot_dir
             config,
             record_id,
             {
-                "运行状态": "Raw就绪",
-                "采集模式": "公开浏览器",
+                "????": "Raw??",
+                "????": "?????",
                 "Raw Bundle": str(output),
-                "质量状态": quality,
-                "错误码": None,
-                "错误说明": None,
-                "总结": f"公开 JavaScript 页面已从受控浏览器快照生成 Raw Bundle v0.2；质量状态={quality}。",
+                "????": quality,
+                "???": None,
+                "????": None,
+                "??": f"?? JavaScript ????????????? Raw Bundle v0.2?????={quality}?",
             },
         )
         return run
@@ -866,11 +869,11 @@ def complete_browser_snapshot(config: WorkerConfig, record_id: str, snapshot_dir
             config,
             record_id,
             {
-                "运行状态": "可重试失败",
-                "采集模式": "公开浏览器",
-                "错误码": failure["code"],
-                "错误说明": _redact_error_text(failure["message"])[:500],
-                "质量状态": "failed",
+                "????": "?????",
+                "????": "?????",
+                "???": failure["code"],
+                "????": _redact_error_text(failure["message"])[:500],
+                "????": "failed",
                 "Raw Bundle": None,
             },
         )
@@ -919,17 +922,38 @@ def main() -> int:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     args = parse_args()
     config = load_config(args)
+    if args.command == "pending":
+        records = list_records(config, args.limit)
+        result = {
+            "count": len(records),
+            "records": [
+                {
+                    "record_id": r.get("record_id", ""),
+                    "content": r.get("??", ""),
+                    "thought": r.get("??", ""),
+                    "status": r.get("????", ""),
+                    "created": r.get("????", ""),
+                    "run_id": r.get("??ID", ""),
+                    "attachments": r.get("??", ""),
+                    "wiki_status": r.get("Wiki??", ""),
+                    "capture_mode": r.get("????", ""),
+                }
+                for r in records
+            ],
+        }
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return 0
     if args.command == "enqueue":
         fields: dict[str, Any] = {
-            "内容": args.content,
-            "思考": args.thought,
-            "状态": "未处理",
-            "运行状态": "待处理",
-            "Wiki状态": "none",
-            "重试": False,
+            "??": args.content,
+            "??": args.thought,
+            "??": "???",
+            "????": "???",
+            "Wiki??": "none",
+            "??": False,
         }
         if args.rating:
-            fields["评级"] = args.rating
+            fields["??"] = args.rating
         created = create_record(config, fields)
         print(json.dumps({
             "record_id": created_record_id(created),

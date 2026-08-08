@@ -1,4 +1,4 @@
-"""oks — Open Knowledge Studio CLI.
+"""oks ? Open Knowledge Studio CLI.
 
 Typer-based CLI for knowledge base search, wiki CRUD, drafts, and maintenance.
 """
@@ -30,8 +30,8 @@ from knowledge_studio.recall import (
     recall_knowledge,
 )
 
-# ── ingest: connector lives in the oks_connector package once installed,
-# or under ../scripts in a source checkout ───────────────────────────
+# ?? ingest: connector lives in the oks_connector package once installed,
+# or under ../scripts in a source checkout ???????????????????????????
 _connector_available = False
 try:
     from oks_connector.raw_bundle_adapter import (
@@ -72,7 +72,7 @@ _configure_utf8_stdio()
 
 app = typer.Typer(
     name="oks",
-    help="Open Knowledge Studio — file-based knowledge engineering CLI.",
+    help="Open Knowledge Studio ? file-based knowledge engineering CLI.",
     no_args_is_help=True,
 )
 console = Console()
@@ -248,7 +248,7 @@ def _connector_install_hint() -> str:
 
 
 def _connector_command() -> str | None:
-    """Connector is bundled as ``scripts/raw_bundle_adapter`` — no separate binary needed."""
+    """Connector is bundled as ``scripts/raw_bundle_adapter`` ? no separate binary needed."""
     return "built-in" if _connector_available else None
 
 
@@ -283,7 +283,7 @@ def ingest(
         ))
         raise typer.Exit(2)
 
-    # ── pre-flight: check capability before running the connector ──
+    # ?? pre-flight: check capability before running the connector ??
     needed = _recommended_capability(source)
     if not _capability_already_installed(needed):
         env = _extractor_env_for(needed)
@@ -295,12 +295,12 @@ def ingest(
         ))
         raise typer.Exit(2)
 
-    # ── formula-secondary requires both pdf and formula capabilities ──
+    # ?? formula-secondary requires both pdf and formula capabilities ??
     if formula_secondary:
         if needed != "pdf":
             console.print(Panel.fit(
-                "[bold yellow]--formula-secondary 仅对 PDF 文件有效[/bold yellow]\n\n"
-                "当前来源不是 PDF 文件，已忽略 --formula-secondary 选项。",
+                "[bold yellow]--formula-secondary ?? PDF ????[/bold yellow]\n\n"
+                "?????? PDF ?????? --formula-secondary ???",
                 title=t("install_hint"),
                 border_style="yellow",
             ))
@@ -453,21 +453,36 @@ def feishu_listen(max_events: int = typer.Option(1, "--max-events"), timeout: st
     _run_feishu_worker("listen-reviews", ["--max-events", str(max_events), "--timeout", timeout])
 
 
+@feishu_app.command("pending")
+def feishu_pending(
+    limit: int = typer.Option(200, "--limit"),
+):
+    """List pending Inbox records from Feishu Base (Pull-mode entry point).
+
+    Returns JSON with record_id, content, thought, status, created,
+    and metadata for each pending record. The Agent filters records
+    by date client-side.
+
+    No daemon, no WebSocket, no background service needed.
+    """
+    _run_feishu_worker("pending", ["--limit", str(limit)])
+
+
 @feishu_app.command("setup")
 def feishu_setup(
-    base_token: Optional[str] = typer.Option(None, "--base-token", help="已有 Base token（跳过创建）"),
+    base_token: Optional[str] = typer.Option(None, "--base-token", help="?? Base token??????"),
     base_name: str = typer.Option("Open Knowledge Studio", "--base-name"),
-    table_name: str = typer.Option("每日知识采集", "--table-name"),
-    show_credentials: bool = typer.Option(False, "--show-credentials", help="显示完整 Base token（仅限受控终端）"),
+    table_name: str = typer.Option("??????", "--table-name"),
+    show_credentials: bool = typer.Option(False, "--show-credentials", help="???? Base token????????"),
 ):
-    """自动创建飞书 Base、采集表和表单。需要 lark-cli 已认证。"""
+    """?????? Base?????????? lark-cli ????"""
     lark = _resolve_lark_cli()
     if lark is None:
-        console.print("[bold red]lark-cli 未安装。[/bold red]")
+        console.print("[bold red]lark-cli ????[/bold red]")
         raise typer.Exit(2)
     worker = _feishu_worker_path()
     if worker is None:
-        console.print("[bold red]找不到 worker 脚本。[/bold red]")
+        console.print("[bold red]??? worker ???[/bold red]")
         raise typer.Exit(2)
     setup_script = worker.parent / "feishu_setup.py"
     if not setup_script.is_file():
@@ -475,7 +490,7 @@ def feishu_setup(
         if module and module.origin:
             setup_script = Path(module.origin)
     if not setup_script.is_file():
-        console.print(f"[bold red]找不到: {setup_script}[/bold red]")
+        console.print(f"[bold red]???: {setup_script}[/bold red]")
         raise typer.Exit(2)
     cmd = [sys.executable, str(setup_script)]
     if base_token:
@@ -486,7 +501,7 @@ def feishu_setup(
     raise typer.Exit(subprocess.run(cmd).returncode)
 
 
-# ── Search / Recall ──────────────────────────────────────────────
+# ?? Search / Recall ??????????????????????????????????????????????
 
 @app.command()
 def search(
@@ -819,7 +834,7 @@ def trace_show(run_id: str = typer.Argument(help="Run identifier")):
         raise typer.Exit(1)
 
 
-# ── Wiki ─────────────────────────────────────────────────────────
+# ?? Wiki ?????????????????????????????????????????????????????????
 
 @wiki_app.command("list")
 def wiki_list(
@@ -908,7 +923,7 @@ def wiki_create(
     wiki_type = type_map.get(page_type)
     if wiki_type is None:
         console.print(
-            f"[yellow]Unknown --type '{page_type}' — using 'concept'. "
+            f"[yellow]Unknown --type '{page_type}' ? using 'concept'. "
             f"Valid: concept, strategy, anti-pattern.[/yellow]"
         )
         wiki_type = "concepts"
@@ -945,7 +960,7 @@ def wiki_archive(slug: str = typer.Argument(help="Page slug to archive")):
 
 @wiki_app.command("use")
 def wiki_use(slug: str = typer.Argument(help="Slug of a page that was actually used/injected")):
-    """Record an explicit use of a wiki page — the memory-curve signal.
+    """Record an explicit use of a wiki page ? the memory-curve signal.
 
     Recall and search are read-only: a query does not count as a use. Call
     this when a page is actually injected or applied so that access_count
@@ -963,7 +978,7 @@ def wiki_use(slug: str = typer.Argument(help="Slug of a page that was actually u
     )
 
 
-# ── Drafts ───────────────────────────────────────────────────────
+# ?? Drafts ???????????????????????????????????????????????????????
 
 @drafts_app.command("list")
 def drafts_list():
@@ -998,7 +1013,7 @@ def drafts_promote(slug: str = typer.Argument(help="Draft slug to promote")):
     """Promote a draft to a wiki page."""
     try:
         new_slug = store.promote_draft(slug)
-        console.print(f"[green]Promoted:[/green] {slug} → {new_slug}")
+        console.print(f"[green]Promoted:[/green] {slug} ? {new_slug}")
     except FileNotFoundError:
         console.print(f"[red]Draft not found:[/red] {slug}")
         raise typer.Exit(1)
@@ -1015,7 +1030,7 @@ def drafts_reject(slug: str = typer.Argument(help="Draft slug to reject")):
         raise typer.Exit(1)
 
 
-# ── Maintenance ──────────────────────────────────────────────────
+# ?? Maintenance ??????????????????????????????????????????????????
 
 @app.command()
 def status():
@@ -1040,7 +1055,7 @@ def status():
         domain_count = sum(1 for d in wiki_d.iterdir() if d.is_dir() and not d.name.startswith("."))
 
     console.print(Panel.fit(
-        f"[bold]Open Knowledge Studio — Status[/bold]\n"
+        f"[bold]Open Knowledge Studio ? Status[/bold]\n"
         f"[dim]Root: {root}[/dim]\n\n"
         f"Wiki pages: [cyan]{digest['total']}[/cyan]  "
         f"Domains: [cyan]{domain_count}[/cyan]  "
@@ -1058,7 +1073,7 @@ def status():
 
 @app.command()
 def decay():
-    """Apply decay — drop wiki pages below threshold score."""
+    """Apply decay ? drop wiki pages below threshold score."""
     dropped = store.apply_decay()
     if dropped:
         console.print(f"[yellow]Dropped {len(dropped)} page(s):[/yellow]")
@@ -1077,7 +1092,7 @@ def lint():
     if result["errors"]:
         console.print(f"[red]{len(result['errors'])} error(s):[/red]")
         for e in result["errors"]:
-            console.print(f"  [red]✗[/red] {e}")
+            console.print(f"  [red]?[/red] {e}")
 
     if result["warnings"]:
         console.print(f"[yellow]{len(result['warnings'])} warning(s):[/yellow]")
@@ -1127,7 +1142,7 @@ def distill(
 ):
     """Run maintenance cycle: decay + evolve knowledge.
 
-    AI distillation (raw → drafts) is handled by Claude Code /ingest skill.
+    AI distillation (raw ? drafts) is handled by Claude Code /ingest skill.
     This command applies decay and generates draft proposals from page clusters.
     """
     from knowledge_studio.distiller import run_distill_cycle
@@ -1154,7 +1169,7 @@ def distill(
         console.print("[dim]No new draft proposals generated.[/dim]")
 
 
-# ── Config ───────────────────────────────────────────────────────
+# ?? Config ???????????????????????????????????????????????????????
 
 @config_app.command("init")
 def config_init(
@@ -1178,12 +1193,17 @@ def config_init(
 @config_app.command("show")
 def config_show():
     """Show current global configuration."""
-    from knowledge_studio.config import load_config, config_path
+    from knowledge_studio.config import load_config, config_path, VALID_STRATEGIES
 
     config = load_config()
+    strategy = config.get("strategy", "")
+    strategy_display = strategy if strategy else "(not set)"
+
     console.print(f"[dim]Config file: {config_path()}[/dim]\n")
     console.print(Panel.fit(
         f"[bold]Knowledge Base[/bold]\n  {config.get('knowledge_base_path', '(not set)')}\n\n"
+        f"[bold]Strategy[/bold]\n  {strategy_display}\n"
+        f"  Valid values: {', '.join(sorted(VALID_STRATEGIES))}\n\n"
         f"[dim]The core CLI stores no model credentials or handler configuration.[/dim]",
         border_style="cyan",
     ))
@@ -1214,6 +1234,11 @@ def config_set(
             )
         value = str(resolved)
         target[keys[-1]] = value
+    elif key == "strategy":
+        from knowledge_studio.config import set_strategy as _set_strategy
+        _set_strategy(value)
+        console.print(f"[green]Set:[/green] strategy = {value}")
+        return
     elif value.lower() in ("true", "false"):
         target[keys[-1]] = value.lower() == "true"
     elif value.isdigit():
@@ -1225,7 +1250,7 @@ def config_set(
     console.print(f"[green]Set:[/green] {key} = {value}")
 
 
-# ── Instance scaffolding ─────────────────────────────────────────
+# ?? Instance scaffolding ?????????????????????????????????????????
 
 _INSTANCE_DIRS = [
     "profiles/users",
@@ -1254,13 +1279,13 @@ env/
 .DS_Store
 Thumbs.db
 
-# OKS local per-machine state (access counts, fingerprints) — NOT synced
+# OKS local per-machine state (access counts, fingerprints) ? NOT synced
 .oks/
 
 # Trace append locks (runtime state, not trace content)
 raw/executions/*/.append.lock
 
-# NOTE: wiki/, drafts/, profiles/ are intentionally TRACKED — they ARE your
+# NOTE: wiki/, drafts/, profiles/ are intentionally TRACKED ? they ARE your
 # memory. Unlike the open-knowledge-studio code repo (which ignores wiki/ &
 # drafts/ so it ships clean), an instance commits its knowledge to git.
 """
@@ -1282,7 +1307,7 @@ def _asset_source() -> Path | None:
 
     A source checkout is authoritative during development; `_assets/` may be a
     stale build artifact. Installed wheels have no repo root and use `_assets/`,
-    which is a verbatim copy of `assets/` — so both share one layout.
+    which is a verbatim copy of `assets/` ? so both share one layout.
     """
     for parent in Path(__file__).resolve().parents:
         if (parent / ".git").exists() and (parent / "assets").is_dir():
@@ -1367,7 +1392,7 @@ def init(
     root = Path(path).expanduser().resolve()
 
     # Refuse to scaffold into an existing non-empty directory that is not
-    # already a KB (missing wiki/) — protects arbitrary folders from being
+    # already a KB (missing wiki/) ? protects arbitrary folders from being
     # hijacked. Re-running on an existing KB is idempotent and allowed.
     if (
         root.is_dir()
@@ -1395,7 +1420,7 @@ def init(
     base = _asset_source()
     if base is None:
         console.print(
-            "[yellow]No bundled assets found — skills/templates not materialized.[/yellow]\n"
+            "[yellow]No bundled assets found ? skills/templates not materialized.[/yellow]\n"
             "  Source installs lack the asset bundle. Fix: pip install open-knowledge-studio,\n"
             "  or run python cli/scripts/bundle_assets.py in the repo before installing."
         )
@@ -1435,14 +1460,14 @@ def init(
         f"{t('init_step_ingest')}\n"
         f"{t('init_step_status')}\n"
         f"\n[dim]{t('init_capabilities')}[/dim]\n"
-        f"  [dim]watch    - 视频/音频 (faster-whisper + yt-dlp + RapidOCR)[/dim]\n"
-        f"  [dim]document - Office/HTML/文本 (markitdown)[/dim]\n"
+        f"  [dim]watch    - ??/?? (faster-whisper + yt-dlp + RapidOCR)[/dim]\n"
+        f"  [dim]document - Office/HTML/?? (markitdown)[/dim]\n"
         f"  [dim]pdf      - PDF (MinerU)[/dim]\n"
-        f"  [dim]formula  - 公式 OCR (PaddleOCR)[/dim]"
+        f"  [dim]formula  - ?? OCR (PaddleOCR)[/dim]"
     )
 
 
-# ── Optional editor hooks (opt-in auto-recall) ───────────────────
+# ?? Optional editor hooks (opt-in auto-recall) ???????????????????
 
 # Hook commands are written as absolute paths (see hook_install). Old
 # installs wired the relative path below; matching is done by script name
@@ -1494,7 +1519,7 @@ def _ensure_recall_scripts(root: Path) -> list[str]:
                     continue
             except OSError:
                 pass
-            # Stale interpreter bake — fall through to re-copy + re-bake.
+            # Stale interpreter bake ? fall through to re-copy + re-bake.
         if src_dir is None or not (src_dir / name).is_file():
             raise FileNotFoundError(
                 f"bundled hook script not found: {name} (asset source: {src_dir})"
@@ -1598,7 +1623,7 @@ def hook_install(
         created = _ensure_recall_scripts(root)
     except FileNotFoundError as e:
         console.print(
-            f"[red]Cannot install hook — bundled assets missing.[/red]\n"
+            f"[red]Cannot install hook ? bundled assets missing.[/red]\n"
             f"  {e}\n"
             f"  This happens when oks was installed from source without the asset bundle.\n"
             f"  Fix: [bold]pip install open-knowledge-studio[/bold] (PyPI wheel includes assets),\n"
@@ -1614,7 +1639,7 @@ def hook_install(
         settings_path = root / _HOOK_EDITORS[name]
         result = _wire_userpromptsubmit(settings_path, hook_cmd)
         label = "[green]wired[/green]" if result == "wired" else "[dim]already wired[/dim]"
-        console.print(f"  {name}: {label} → {settings_path}")
+        console.print(f"  {name}: {label} ? {settings_path}")
 
     console.print(
         "\n[bold]Auto-recall enabled.[/bold] New prompts will inject relevant memory.\n"
@@ -1645,7 +1670,7 @@ def hook_status(
         except (OSError, subprocess.TimeoutExpired):
             ok = False
         state = ("[green]importable[/green]" if ok
-                 else "[red]hook script has stale interpreter — "
+                 else "[red]hook script has stale interpreter ? "
                       "run `oks hook install` to re-bake[/red]")
         console.print(f"  engine: {state} (python: {py})")
     for name, rel in _HOOK_EDITORS.items():
