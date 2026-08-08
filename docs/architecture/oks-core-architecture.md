@@ -8,35 +8,35 @@
 
 ```mermaid
 flowchart TD
-    Source[“Source\nURL、本地文件、人类笔记\n状态：轻量文本已验证”]:::verified
-    Providers[“Providers (16)\nagent-runtime / pdf-lite / rapidocr / ffmpeg / firecrawl / ...\n状态：核心已验证，部分 experimental”]:::verified
-    RawCommit[“oks raw-commit\n12 Schema 验证 → 原子提交\nRaw Bundle v0.2\n状态：Phase 2A 已验证”]:::verified
-    Distill[“Agent Distill\n读取 Raw，用自己的话提炼\n状态：已验证但有发现”]:::verified
-    Candidate[“Candidate\n草稿，还不是正式记忆\n状态：已验证”]:::verified
-    Review{“Human Review\naccept / edit / reject / defer\n人工门禁”}:::human
-    Wiki[“Wiki\n人工批准后的策展记忆\n状态：已验证”]:::verified
-    Recall[“Search / Recall\n6+1 因子召回引擎\n状态：已验证”]:::verified
-    Output[“Agent Output\n带 locator 的有依据回答\n状态：部分验证”]:::partial
-    Eval[“Evaluation\n质量对比与问题记录\n状态：已验证但有发现”]:::partial
+    Source["Source\nURL、本地文件、人类笔记\n状态：轻量文本已验证"]:::verified
+    Providers["Providers (17)\nagent-runtime / pdf-lite / rapidocr / ffmpeg / firecrawl / ...\n状态：核心已验证，部分 experimental"]:::verified
+    RawCommit["oks raw-commit\n12 Schema 验证 → 原子提交\nRaw Bundle v0.2\n状态：Phase 2A 已验证"]:::verified
+    Distill["Agent Distill\n读取 Raw，用自己的话提炼\n状态：已验证但有发现"]:::verified
+    Candidate["Candidate\n草稿，还不是正式记忆\n状态：已验证"]:::verified
+    Review{"Human Review\naccept / edit / reject / defer\n人工门禁"}:::human
+    Wiki["Wiki\n人工批准后的策展记忆\n状态：已验证"]:::verified
+    Recall["Search / Recall\n6+1 因子召回引擎\n状态：已验证"]:::verified
+    Output["Agent Output\n带 locator 的有依据回答\n状态：部分验证"]:::partial
+    Eval["Evaluation\n质量对比与问题记录\n状态：已验证但有发现"]:::partial
 
     Source --> Providers --> RawCommit --> Distill --> Candidate --> Review
     Review -->|accept| Wiki --> Recall --> Output --> Eval
     Review -->|edit| Candidate
-    Review -->|reject or defer| Stop[“停止并保留审计记录\n状态必须保留”]:::human
+    Review -->|reject or defer| Stop["停止并保留审计记录\n状态必须保留"]:::human
 
-    Feishu[“Optional Control Plane\n飞书 Base / 表单 / 消息审核\n状态：部分验证，非必需”]:::optional
-    AgentLayer[“Agent 执行层\nClaude Code、Codex、OpenClaw、Shell Agent\n状态：混合”]:::external
-    External[“外部能力来源\nClaude Code Marketplace、OpenClaw Skill Hub、\n第三方提取器、模型 API\n状态：外部复用，不在 OKS 内重做”]:::external
-    Components[“可选能力组件\ndocument：已验证\npdf-lite / watch：已验证\npdf / formula：部分验证\nFeishu：部分验证”]:::partial
-    SkillInstall[“技能安装\n10 Claude + 10 Agents skill\n单一事实源 skill_templates/\n构建时+运行时技能剥离\n状态：Phase 2A 已验证”]:::verified
+    Feishu["Optional Control Plane\n飞书 Base / 表单 / 消息审核\n状态：部分验证，非必需"]:::optional
+    AgentLayer["Agent 执行层\nClaude Code、Codex、OpenClaw、Shell Agent\n状态：混合"]:::external
+    External["外部能力来源\nClaude Code Marketplace、OpenClaw Skill Hub、\n第三方提取器、模型 API\n状态：外部复用，不在 OKS 内重做"]:::external
+    Components["可选能力组件\ndocument：已验证\npdf-lite / watch：已验证\npdf / formula：部分验证\nFeishu：部分验证"]:::partial
+    SkillInstall["技能安装\n10 Claude + 10 Agents skill\n单一事实源 skill_templates/\n构建时+运行时技能剥离\n状态：Phase 2A 已验证"]:::verified
 
-    Feishu -. “仅作为采集、状态、审核界面” .-> Source
-    Feishu -. “仅作为人工决策界面” .-> Review
-    AgentLayer -. “编排、理解、写 Candidate / 输出” .-> Distill
-    AgentLayer -. “调用 CLI 和 Skills” .-> Source
-    External -. “提供工具、Skill、Provider” .-> AgentLayer
-    Components -. “按需安装” .-> Providers
-    SkillInstall -. “oks init / skills-install” .-> AgentLayer
+    Feishu -. "仅作为采集、状态、审核界面" .-> Source
+    Feishu -. "仅作为人工决策界面" .-> Review
+    AgentLayer -. "编排、理解、写 Candidate / 输出" .-> Distill
+    AgentLayer -. "调用 CLI 和 Skills" .-> Source
+    External -. "提供工具、Skill、Provider" .-> AgentLayer
+    Components -. "按需安装" .-> Providers
+    SkillInstall -. "oks init / skills-install" .-> AgentLayer
 
     classDef verified fill:#e8f5e9,stroke:#2e7d32,color:#1b5e20;
     classDef partial fill:#fff8e1,stroke:#f9a825,color:#5d4037;
@@ -47,7 +47,7 @@ flowchart TD
 
 读者一分钟内应该先看懂这条线：
 
-`Source -> Providers (16) -> oks raw-commit (Raw Bundle v0.2) -> Agent Distill -> Candidate -> Human Review -> Wiki -> 6+1-factor Recall -> Agent Output -> Evaluation`
+`Source -> Providers (17) -> oks raw-commit (Raw Bundle v0.2) -> Agent Distill -> Candidate -> Human Review -> Wiki -> 6+1-factor Recall -> Agent Output -> Evaluation`
 
 ## 状态说明
 

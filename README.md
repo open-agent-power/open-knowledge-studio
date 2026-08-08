@@ -113,8 +113,9 @@ Do not build a new platform when existing Agent capabilities already do the job.
 ### Documentation
 
 * [Core Architecture](docs/architecture/oks-core-architecture.md)
+* [Capability Boundaries](docs/capability-boundaries.md)
 * [Agent-Native Ingest Walkthrough](docs/ingest/agent-native-ingest-walkthrough.md)
-* [Protocol Objects](docs/ingest/protocol-objects.md)
+* [Kimi K3 Deep Analysis](docs/cases/kimi-k3-deep-analysis.md)
 * [Security — Remote Governance](docs/security/remote-governance.md)
 
 ### Migration from v0.3.x
@@ -204,6 +205,7 @@ v0.4.0 已移除旧 extractor 链路：
 ### 详细文档
 
 * [核心架构](docs/architecture/oks-core-architecture.md)
+* [能力边界](docs/capability-boundaries.md)
 * [Agent-Native Ingest 操作手册](docs/ingest/agent-native-ingest-walkthrough.md)
-* [协议对象关系](docs/ingest/protocol-objects.md)
+* [Kimi K3 深度分析](docs/cases/kimi-k3-deep-analysis.md)
 * [安全 — 远程脱敏治理](docs/security/remote-governance.md)
