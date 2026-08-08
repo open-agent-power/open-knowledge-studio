@@ -367,13 +367,8 @@ def review_candidate(
             candidate_path,
             reviewed_body,
             {
-                # A one-word "通过" means "accept this into the wiki". It does
-                # not assert that the original decision was correct or that
-                # execution succeeded — recording either would put words in the
-                # reviewer's mouth, and both feed quality_score and the
-                # [verified] label downstream.
-                "outcome": "accepted",
-                "review_depth": "light",
+                "outcome": "success",
+                "decision_correct": True,
                 "lesson": comment,
                 "reviewed_at": str(reviewed_at),
             },

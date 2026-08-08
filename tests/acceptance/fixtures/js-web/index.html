@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><title>OKS JS Web Acceptance</title></head>
+<body>
+<div id="content"><!-- JS-rendered content appears here --></div>
+<script>
+// This page renders its main content via JavaScript.
+// A static HTTP fetch will see an empty <div id="content">.
+document.getElementById('content').innerHTML = `
+<section id="main">
+  <h1>OKS JavaScript Rendering Acceptance Test</h1>
+  <p>This page requires JavaScript execution to render its content.</p>
+  <p>A static HTTP fetch (without JS) will find an empty div.</p>
+  <h2>Key Findings</h2>
+  <ul>
+    <li>JS rendering is required for content extraction from many modern sites.</li>
+    <li>Firecrawl, browser automation, or Agent-led JS execution fills this gap.</li>
+    <li>This fixture proves the degradation path: static → JS provider.</li>
+  </ul>
+  <h2>Verification Token</h2>
+  <p id="token">oks-js-web-acceptance-v0.4.0</p>
+</section>
+`;
+</script>
+</body>
+</html>

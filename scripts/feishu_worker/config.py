@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass
+import json
 import os
 from pathlib import Path
 
@@ -32,13 +33,35 @@ def resolve_lark_cli() -> Path:
     return _shared_resolve()
 
 
+def _saved_feishu_config() -> dict[str, str]:
+    """Load coordinates written by `oks feishu setup`, if available."""
+    path = Path.home() / ".oks" / "config.json"
+    if not path.exists():
+        return {}
+    try:
+        document = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    section = document.get("feishu", {}) if isinstance(document, dict) else {}
+    return section if isinstance(section, dict) else {}
+
+
 def load_config(args: argparse.Namespace, *, root: Path) -> WorkerConfig:
-    base_token = args.base_token or os.environ.get("OKS_FEISHU_BASE_TOKEN")
-    table_id = args.table_id or os.environ.get("OKS_FEISHU_TABLE_ID")
+    saved = _saved_feishu_config()
+    base_token = (
+        args.base_token
+        or os.environ.get("OKS_FEISHU_BASE_TOKEN")
+        or saved.get("base_token")
+    )
+    table_id = (
+        args.table_id
+        or os.environ.get("OKS_FEISHU_TABLE_ID")
+        or saved.get("table_id")
+    )
     if not base_token or not table_id:
         raise RuntimeError(
             "Base coordinates are required via --base-token/--table-id or "
-            "OKS_FEISHU_BASE_TOKEN/OKS_FEISHU_TABLE_ID"
+            "OKS_FEISHU_BASE_TOKEN/OKS_FEISHU_TABLE_ID or `oks feishu setup`"
         )
     knowledge_root = Path(
         args.knowledge_root

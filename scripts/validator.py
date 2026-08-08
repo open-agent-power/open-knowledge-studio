@@ -16,7 +16,7 @@ from route import is_url
 
 
 def validate_bundle(bundle: Path) -> dict[str, Any]:
-    from extractors.markitdown import markdown_asset_references
+    from _shared import markdown_asset_references
     bundle = bundle.expanduser().resolve()
     errors: list[str] = []
     warnings: list[str] = []

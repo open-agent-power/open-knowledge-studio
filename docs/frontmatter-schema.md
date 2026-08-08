@@ -6,7 +6,7 @@ parent: 参考
 
 # Frontmatter Schema v1.0
 
-`_meta/frontmatter-schema.md` 是 `oks init` 随实例分发的唯一正式契约。本页说明日常使用规则。
+本页是 wiki 页面 frontmatter 的日常使用规则。底层数据形状契约见 `_meta/raw-evidence-schema.md`。
 
 ## Wiki 页面
 

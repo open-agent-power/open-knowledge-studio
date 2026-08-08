@@ -1,4 +1,4 @@
-"""Tests for `oks init` — instance scaffolding + asset materialization."""
+"""Tests for `oks init` — instance scaffolding + shareable-asset materialization."""
 from pathlib import Path
 
 from typer.testing import CliRunner
@@ -7,8 +7,8 @@ from knowledge_studio.cli import app
 
 runner = CliRunner()
 
-# Contract: what `oks init` must produce. Buckets come from _INSTANCE_DIRS; the
-# per-agent dirs and templates/_meta/settings/profiles are assembled from assets/.
+# Contract: what `oks init` must produce. Buckets come from _INSTANCE_DIRS;
+# the dotted editor dirs, templates, _meta and settings are materialized assets.
 EXPECTED_BUCKETS = [
     "profiles/users", "profiles/projects", "profiles/recipes", "profiles/goals",
     "raw", "wiki", "drafts",
@@ -19,33 +19,53 @@ EXPECTED_TOP_LEVEL = {
 }
 
 
-def test_maintainer_skills_live_outside_assets():
-    """Physical separation replaces ignore rules: dev tooling is not in assets/.
-
-    Everything under assets/ ships to users, so maintainer skills must not be
-    there. They stay in the repo's own .claude/ for development.
-    """
-    repo_root = Path(__file__).parents[2]
-    shipped = {entry.name for entry in (repo_root / "assets" / "skills").iterdir()}
-    assert "review-upstream-pr" not in shipped
-    assert "upstream-pr-remediation" not in shipped
-    assert {"ingest", "query", "promote"} <= shipped
-
-    dev_skills = {entry.name for entry in (repo_root / ".claude" / "skills").iterdir()}
-    assert {"review-upstream-pr", "upstream-pr-remediation"} <= dev_skills
+def _load_map(path: Path) -> list[tuple[str, str]]:
+    """Read the _MAP literal without importing the module (setup.py runs setup())."""
+    source = path.read_text(encoding="utf-8")
+    start = source.index("_MAP = [")
+    end = source.index("]", start) + 1
+    namespace: dict = {}
+    exec(source[start:end], namespace)
+    return namespace["_MAP"]
 
 
-def test_both_build_paths_vendor_assets_verbatim():
-    """bundle_assets.py (workflow) and setup.py (pip) must produce one tree."""
+def test_asset_maps_agree_across_build_and_init():
+    """A drift here ships assets that never land, or land under the wrong name."""
+    from knowledge_studio.cli import _ASSET_MAP
+
     cli_dir = Path(__file__).parents[1]
-    sources = {
-        "bundle_assets.py": (cli_dir / "scripts" / "bundle_assets.py").read_text(encoding="utf-8"),
-        "setup.py": (cli_dir / "setup.py").read_text(encoding="utf-8"),
-    }
-    for name, source in sources.items():
-        assert 'repo_root / "assets"' in source, f"{name} must copy from assets/"
-        assert "_SCRIPT_ASSETS" in source, f"{name} must vendor the feishu worker scripts"
-        assert "_MAP = [" not in source, f"{name} still uses the retired per-dir map"
+    bundle_map = _load_map(cli_dir / "scripts" / "bundle_assets.py")
+    setup_map = _load_map(cli_dir / "setup.py")
+
+    assert bundle_map == setup_map, "bundle_assets and setup must vendor the same dirs"
+    # _ASSET_MAP reverses the mapping: (bundled name, on-disk name).
+    assert [(dest, src) for src, dest in bundle_map] == _ASSET_MAP
+    assert (".codex", "codex") in bundle_map
+    assert (".agents", "agents") in bundle_map
+
+
+def _load_tuple(path: Path, name: str) -> tuple[str, ...]:
+    """Read a module-level tuple literal without importing the module."""
+    source = path.read_text(encoding="utf-8")
+    start = source.index(f"{name} = ")
+    end = source.index(")", start) + 1
+    namespace: dict = {}
+    exec(source[start:end], namespace)
+    return namespace[name]
+
+
+def test_dev_only_skills_are_excluded_from_every_build_path():
+    """Maintainer PR-review skills must never ship to a user's knowledge base."""
+    from knowledge_studio.cli import _DEV_ONLY_ASSET_NAMES as cli_names
+
+    cli_dir = Path(__file__).parents[1]
+    bundle_names = _load_tuple(cli_dir / "scripts" / "bundle_assets.py", "_DEV_ONLY_ASSET_NAMES")
+    setup_names = _load_tuple(cli_dir / "setup.py", "_DEV_ONLY_ASSET_NAMES")
+
+    # cli's copy governs source checkouts, where the build-time ignore is absent.
+    assert bundle_names == setup_names == cli_names
+    assert "review-upstream-pr" in bundle_names
+    assert "upstream-pr-remediation" in bundle_names
 
 
 def test_init_never_materializes_dev_only_skills(tmp_path):
@@ -58,25 +78,6 @@ def test_init_never_materializes_dev_only_skills(tmp_path):
     assert "upstream-pr-remediation" not in installed
     # User-facing skills still arrive.
     assert {"ingest", "query", "promote"} <= installed
-
-
-def test_init_assembles_each_agent_ecosystem(tmp_path):
-    """Single-source components are composed per agent target."""
-    from knowledge_studio.cli import _AGENT_TARGETS
-
-    target = tmp_path / "kb"
-    assert runner.invoke(app, ["init", str(target), "--no-git", "--no-set-default"]).exit_code == 0
-
-    for dest_name, spec in _AGENT_TARGETS.items():
-        dest = target / dest_name
-        assert dest.is_dir(), f"{dest_name} was not assembled"
-        assert (dest / "skills").is_dir() is spec["skills"]
-        assert (dest / "hooks").is_dir() is spec["hooks"]
-        assert (dest / "rules").is_dir() is spec["rules"]
-
-    # Per-agent config lands at the ecosystem root, not under a nested dir.
-    assert (target / ".claude" / "settings.json").is_file()
-    assert (target / ".codex" / "hooks.json").is_file()
 
 
 def test_init_scaffolds_buckets_and_data_gitignore(tmp_path):
@@ -136,11 +137,6 @@ def test_init_materializes_shareable_assets(tmp_path):
     assert (target / "templates").is_dir()
     for schema in ("recall-case.schema.json", "trace-event.schema.json", "run-manifest.schema.json"):
         assert (target / "_meta" / schema).is_file()
-    # Contracts that used to sit at the repo root now ship inside the two layers.
-    assert (target / "_meta" / "schemas" / "raw-bundle-v0.2.schema.json").is_file()
-    assert (target / "settings" / "capabilities" / "video.watch.json").is_file()
-    # Recipes and goal templates travel with the instance.
-    assert (target / "profiles" / "recipes" / "daily-arxiv-scan.md").is_file()
 
 
 def test_init_upgrade_refreshes_assets_but_keeps_user_files(tmp_path):

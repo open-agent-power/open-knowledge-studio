@@ -99,8 +99,8 @@ as knowledge. Config and schema do not decay and are not recalled by relevance.
 | Cognitive | `raw/` | Original records, date-based by source | None | Keyword + freshness (rglob any structure) |
 | Cognitive | `wiki/` | Curated knowledge (from raw via Dreaming) | Type-specific λ | 6+1-factor relevance + curve |
 | Cognitive | `drafts/` | Dreaming candidates (raw → wiki intermediate) | None | N/A (human review) |
-| Config | `settings/` | Runtime knobs: handlers.json, input-sources.json, raw-tools | None | Direct read (agent reads routing table at runtime) |
-| Schema | `_meta/` | Data-shape contracts: frontmatter-schema, learning-schema | None | Applied on read; CI-enforced |
+| Config | `settings/` | Runtime knobs: input-sources.json, raw-tools | None | Direct read |
+| Schema | `_meta/` | Data-shape contracts: raw-evidence-schema | None | Applied on read |
 
 `settings/` answers *"what should happen"* (config, changes per deployment);
 `_meta/` answers *"what shape is valid"* (schema, versioned, CI-gated). Both
@@ -131,11 +131,9 @@ open-knowledge-studio/
 ├── drafts/                       # ④ Dreaming candidates
 │   └── {slug}.md
 ├── settings/                     # ⑤ Config layer
-│   ├── handlers.json             # 3-level tool registry
-│   └── input-sources.json        # Scheduled intake sources
+│   ├── input-sources.json        # Scheduled intake sources
 └── _meta/                        # ⑥ Schema layer
-    ├── frontmatter-schema.md     # wiki/ frontmatter contract
-    └── learning-schema.json      # CI-enforced learning schema
+    └── raw-evidence-schema.md    # raw/ evidence shape contract
 ```
 
 **Infrastructure (not buckets):** `cli/` (the API-free `oks` core),

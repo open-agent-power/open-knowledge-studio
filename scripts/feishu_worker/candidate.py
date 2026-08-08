@@ -124,6 +124,13 @@ def candidate_review_fingerprint(fields: dict[str, Any]) -> str:
 
 
 def publish_candidate(
+    # .. deprecated:: 0.4.0
+    #    Candidate publication belongs to the Knowledge Plane and should be
+    #    performed by the Agent via ``observation_to_candidate()``, not by
+    #    the Feishu Worker.  In Phase 6 this function is decomposed:
+    #    - draft writing → Agent ingest skill
+    #    - notification → stays in feishu_worker/notification.py
+    #    - state update → stays as a thin Base write-back helper
     config: WorkerConfig,
     record_id: str,
     candidate_file: Path,

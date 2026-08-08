@@ -1,0 +1,9 @@
+{
+  "watch_python": "D:/path/to/watch-venv/Scripts/python.exe",
+  "document_python": ".venv/Scripts/python.exe",
+  "mineru_python": "D:/path/to/mineru-venv/Scripts/python.exe",
+  "mineru_cli": "D:/path/to/mineru-venv/Scripts/mineru.exe",
+  "formula_python": "D:/path/to/paddle-formula-venv/Scripts/python.exe",
+  "ffmpeg": "ffmpeg",
+  "ffprobe": "ffprobe"
+}

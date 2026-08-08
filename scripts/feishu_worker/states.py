@@ -45,6 +45,7 @@ CLAIMABLE_STATUSES: tuple[str, ...] = (
 
 # 采集模式 — capture routes actually written by pipeline.py
 CAPTURE_MODE_OPTIONS: tuple[str, ...] = (
+    "直接文本",
     "附件",
     "平台提取器",
     "HTTP",
@@ -54,6 +55,15 @@ CAPTURE_MODE_OPTIONS: tuple[str, ...] = (
 
 # 质量状态 — mirrors Raw Bundle processing_status
 QUALITY_STATUS_OPTIONS: tuple[str, ...] = ("complete", "partial", "failed")
+
+# 状态 — compact user-facing capture status shown in the daily grid.
+CAPTURE_STATUS_OPTIONS: tuple[str, ...] = (
+    "未处理",
+    "处理中",
+    "已处理",
+    "跳过",
+    "失败",
+)
 
 # Wiki状态 — candidate/review lifecycle written by pipeline.py & review_events.py
 WIKI_STATUS_OPTIONS: tuple[str, ...] = (

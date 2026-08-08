@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-knowledge-studio.local/schemas/fetch-receipt-v0.1.json",
+  "title": "OKS Fetch Receipt v0.1",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "schema_version",
+    "status",
+    "source_url",
+    "started_at",
+    "finished_at",
+    "fetch_mode",
+    "redirects",
+    "next_action"
+  ],
+  "properties": {
+    "schema_version": {"const": "oks-fetch-receipt/v0.1"},
+    "status": {
+      "enum": ["ok", "needs_user_action", "failed_retryable", "failed_final"]
+    },
+    "source_url": {"type": "string"},
+    "normalized_url": {"type": ["string", "null"]},
+    "final_url": {"type": ["string", "null"]},
+    "started_at": {"type": "string", "format": "date-time"},
+    "finished_at": {"type": "string", "format": "date-time"},
+    "fetch_mode": {
+      "enum": [
+        "http_probe",
+        "http",
+        "platform_extractor",
+        "browser_public",
+        "browser_authenticated",
+        "manual_snapshot"
+      ]
+    },
+    "http_status": {"type": ["integer", "null"], "minimum": 100, "maximum": 599},
+    "content_type": {"type": ["string", "null"]},
+    "content_length": {"type": ["integer", "null"], "minimum": 0},
+    "redirects": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["status", "from", "to"],
+        "properties": {
+          "status": {"type": "integer"},
+          "from": {"type": "string"},
+          "to": {"type": "string"}
+        }
+      }
+    },
+    "robots": {
+      "type": "object",
+      "properties": {
+        "checked": {"type": "boolean"},
+        "allowed": {"type": ["boolean", "null"]},
+        "reason": {"type": ["string", "null"]}
+      }
+    },
+    "error": {
+      "type": ["object", "null"],
+      "properties": {
+        "code": {"type": "string"},
+        "message": {"type": "string"},
+        "retryable": {"type": "boolean"}
+      }
+    },
+    "next_action": {"type": "string", "minLength": 1}
+  }
+}

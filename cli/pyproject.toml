@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "open-knowledge-studio"
-version = "0.3.0"
+version = "0.4.0.dev0"
 description = "File-based knowledge engineering CLI for Claude Code"
 readme = "README.md"
 license = {text = "MIT"}
@@ -30,10 +30,12 @@ dependencies = [
     "jieba>=0.42",
     "gitpython>=3",
     "pyyaml>=6",
+    "jsonschema>=4.20",
 ]
 
 [project.optional-dependencies]
 document = ["markitdown[docx,pptx]==0.1.6"]
+pdf-lite = ["pymupdf4llm==0.0.27", "pymupdf==1.28.0"]
 pdf = ["mineru[pipeline]==3.4.4", "six==1.17.0"]
 watch = [
     "faster-whisper==1.2.1",
@@ -62,20 +64,41 @@ Documentation = "https://open-agent-power.github.io/open-knowledge-studio/"
 
 [project.scripts]
 oks = "knowledge_studio.cli:app"
-oks-connector = "oks_connector.raw_bundle_adapter:main"
 
 [tool.setuptools]
-include-package-data = false
+include-package-data = true
 packages = [
     "knowledge_studio",
-    "oks_connector",
-    "oks_connector.extractors",
-    "oks_connector.feishu_worker",
+    "knowledge_studio.capabilities",
+    "knowledge_studio.providers",
+    "knowledge_studio.recipes",
+    "knowledge_studio.schemas",
+    "knowledge_studio.security",
+    "knowledge_studio.skill_templates",
+    "knowledge_studio.skill_templates.claude",
+    "knowledge_studio.skill_templates.agents",
 ]
 
 [tool.setuptools.package-dir]
 "knowledge_studio" = "knowledge_studio"
-"oks_connector" = "oks_connector"
+"knowledge_studio.capabilities" = "knowledge_studio/capabilities"
+"knowledge_studio.providers" = "knowledge_studio/providers"
+"knowledge_studio.recipes" = "knowledge_studio/recipes"
+"knowledge_studio.schemas" = "knowledge_studio/schemas"
+"knowledge_studio.security" = "knowledge_studio/security"
+"knowledge_studio.skill_templates" = "knowledge_studio/skill_templates"
+"knowledge_studio.skill_templates.claude" = "knowledge_studio/skill_templates/claude"
+"knowledge_studio.skill_templates.agents" = "knowledge_studio/skill_templates/agents"
 
 [tool.setuptools.package-data]
-knowledge_studio = ["_assets/**/*", "_assets/scripts/*.py"]
+knowledge_studio = [
+    "_assets/**/*",
+    "_assets/scripts/*.py",
+]
+"knowledge_studio.schemas" = ["*.schema.json", "*.md"]
+"knowledge_studio.capabilities" = ["*.yaml"]
+"knowledge_studio.providers" = ["*/provider.yaml", "*/SKILL.md", "*/normalize.py"]
+"knowledge_studio.recipes" = ["*.md"]
+"knowledge_studio.security" = ["*.py"]
+"knowledge_studio.skill_templates.claude" = ["skills/*/SKILL.md", "skills/*/scripts/*.py"]
+"knowledge_studio.skill_templates.agents" = ["skills/*/SKILL.md", "skills/*/scripts/*.py"]

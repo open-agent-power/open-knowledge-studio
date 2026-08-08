@@ -265,6 +265,39 @@ def test_send_notification_failure_returns_failed_status(tmp_path):
     assert "network unreachable" in result["error"]
 
 
+def test_send_notification_blocks_likely_mojibake_before_send(tmp_path):
+    from feishu_worker.config import WorkerConfig
+
+    config = WorkerConfig(
+        base_token="t",
+        table_id="tbl",
+        lark_cli=tmp_path / "lark-cli",
+        output_root=tmp_path,
+        review_recipient_user_id="ou_test",
+    )
+
+    def _must_not_send(*_args, **_kwargs):
+        raise AssertionError("corrupt content must not reach lark-cli")
+
+    result = send_candidate_review_notification(
+        config,
+        record_id="rec_1",
+        state={"candidate_id": "c1", "revision": 1, "candidate_sha256": "abc"},
+        metadata={"title": "????????????"},
+        body="X" * 60,
+        fields={},
+        root=tmp_path,
+        _lark_fn=_must_not_send,
+    )
+
+    assert result == {
+        "status": "failed",
+        "reason": "message_content_corrupt_before_send",
+        "identity": "bot",
+        "recipient": "ou_test",
+    }
+
+
 def test_send_notification_success_returns_sent_status(tmp_path):
     from feishu_worker.config import WorkerConfig
 
@@ -276,12 +309,31 @@ def test_send_notification_success_returns_sent_status(tmp_path):
         review_recipient_user_id="ou_test",
     )
 
-    def _success_lark(*_args, **_kwargs):
-        return {
-            "data": {
-                "message_id": "om_msg_001",
-                "chat_id": "oc_chat_001",
+    sent = {}
+
+    def _success_lark(_config, _service, command, *_args, **_kwargs):
+        if command == "+messages-send":
+            payload = json.loads(_args[_args.index("--content") + 1])
+            sent["content"] = payload["zh_cn"]["content"][0][0]["text"]
+            return {
+                "identity": "bot",
+                "data": {
+                    "message_id": "om_msg_001",
+                    "chat_id": "oc_chat_001",
+                },
             }
+        return {
+            "identity": "bot",
+            "data": {
+                "messages": [
+                    {
+                        "message_id": "om_msg_001",
+                        "chat_id": "oc_chat_001",
+                        "sender": {"sender_type": "app"},
+                        "content": sent["content"],
+                    }
+                ]
+            },
         }
 
     result = send_candidate_review_notification(
@@ -299,7 +351,133 @@ def test_send_notification_success_returns_sent_status(tmp_path):
     assert result["chat_id"] == "oc_chat_001"
     assert result["recipient"] == "ou_test"
     assert result["identity"] == "bot"
+    assert result["sender_type"] == "app"
+    assert result["delivery_verified"] is True
+    assert result["content_verified"] is True
     assert "idempotency_key" in result
+
+
+def test_send_notification_rejects_identity_fallback(tmp_path):
+    from feishu_worker.config import WorkerConfig
+
+    config = WorkerConfig(
+        base_token="t",
+        table_id="tbl",
+        lark_cli=tmp_path / "lark-cli",
+        output_root=tmp_path,
+        review_recipient_user_id="ou_test",
+    )
+
+    result = send_candidate_review_notification(
+        config,
+        record_id="rec_1",
+        state={"candidate_id": "c1", "revision": 1, "candidate_sha256": "abc"},
+        metadata={"title": "Test"},
+        body="X" * 60,
+        fields={},
+        root=tmp_path,
+        _lark_fn=lambda *_args, **_kwargs: {
+            "identity": "user",
+            "data": {"message_id": "om_self", "chat_id": "oc_self"},
+        },
+    )
+
+    assert result["status"] == "failed"
+    assert result["reason"] == "message_identity_mismatch"
+    assert result["identity"] == "user"
+    assert result["requested_identity"] == "bot"
+
+
+def test_send_notification_rejects_user_sender_for_bot_message(tmp_path):
+    from feishu_worker.config import WorkerConfig
+
+    config = WorkerConfig(
+        base_token="t",
+        table_id="tbl",
+        lark_cli=tmp_path / "lark-cli",
+        output_root=tmp_path,
+        review_recipient_user_id="ou_test",
+    )
+
+    def _lark(_config, _service, command, *_args, **_kwargs):
+        if command == "+messages-send":
+            return {
+                "identity": "bot",
+                "data": {"message_id": "om_self", "chat_id": "oc_self"},
+            }
+        return {
+            "identity": "bot",
+            "data": {
+                "messages": [
+                    {
+                        "message_id": "om_self",
+                        "chat_id": "oc_self",
+                        "sender": {"sender_type": "user"},
+                    }
+                ]
+            },
+        }
+
+    result = send_candidate_review_notification(
+        config,
+        record_id="rec_1",
+        state={"candidate_id": "c1", "revision": 1, "candidate_sha256": "abc"},
+        metadata={"title": "Test"},
+        body="X" * 60,
+        fields={},
+        root=tmp_path,
+        _lark_fn=_lark,
+    )
+
+    assert result["status"] == "failed"
+    assert result["reason"] == "message_delivery_mismatch"
+    assert result["sender_type"] == "user"
+
+
+def test_send_notification_rejects_corrupted_message_content(tmp_path):
+    from feishu_worker.config import WorkerConfig
+
+    config = WorkerConfig(
+        base_token="t",
+        table_id="tbl",
+        lark_cli=tmp_path / "lark-cli",
+        output_root=tmp_path,
+        review_recipient_user_id="ou_test",
+    )
+
+    def _lark(_config, _service, command, *_args, **_kwargs):
+        if command == "+messages-send":
+            return {
+                "identity": "bot",
+                "data": {"message_id": "om_corrupt", "chat_id": "oc_1"},
+            }
+        return {
+            "identity": "bot",
+            "data": {
+                "messages": [
+                    {
+                        "message_id": "om_corrupt",
+                        "chat_id": "oc_1",
+                        "sender": {"sender_type": "app"},
+                        "content": "????????",
+                    }
+                ]
+            },
+        }
+
+    result = send_candidate_review_notification(
+        config,
+        record_id="rec_1",
+        state={"candidate_id": "c1", "revision": 1, "candidate_sha256": "abc"},
+        metadata={"title": "中文主题"},
+        body="X" * 60,
+        fields={},
+        root=tmp_path,
+        _lark_fn=_lark,
+    )
+
+    assert result["status"] == "failed"
+    assert result["reason"] == "message_content_mismatch"
 
 
 def test_send_notification_idempotency_key_is_deterministic(tmp_path):
@@ -313,8 +491,29 @@ def test_send_notification_idempotency_key_is_deterministic(tmp_path):
         review_recipient_user_id="ou_test",
     )
 
-    def _capture_lark(*_args, **_kwargs):
-        return {"data": {"message_id": "om_1", "chat_id": "oc_1"}}
+    sent = {}
+
+    def _capture_lark(_config, _service, command, *_args, **_kwargs):
+        if command == "+messages-send":
+            payload = json.loads(_args[_args.index("--content") + 1])
+            sent["content"] = payload["zh_cn"]["content"][0][0]["text"]
+            return {
+                "identity": "bot",
+                "data": {"message_id": "om_1", "chat_id": "oc_1"},
+            }
+        return {
+            "identity": "bot",
+            "data": {
+                "messages": [
+                    {
+                        "message_id": "om_1",
+                        "chat_id": "oc_1",
+                        "sender": {"sender_type": "app"},
+                        "content": sent["content"],
+                    }
+                ]
+            },
+        }
 
     state = {"candidate_id": "c1", "revision": 2, "candidate_sha256": "abc123"}
     r1 = send_candidate_review_notification(
@@ -352,8 +551,30 @@ def test_send_notification_top_level_message_id_fallback(tmp_path):
         review_recipient_user_id="ou_test",
     )
 
-    def _lark(*_args, **_kwargs):
-        return {"message_id": "om_top_level"}
+    sent = {}
+
+    def _lark(_config, _service, command, *_args, **_kwargs):
+        if command == "+messages-send":
+            payload = json.loads(_args[_args.index("--content") + 1])
+            sent["content"] = payload["zh_cn"]["content"][0][0]["text"]
+            return {
+                "identity": "bot",
+                "message_id": "om_top_level",
+                "chat_id": "oc_top_level",
+            }
+        return {
+            "identity": "bot",
+            "data": {
+                "messages": [
+                    {
+                        "message_id": "om_top_level",
+                        "chat_id": "oc_top_level",
+                        "sender": {"sender_type": "app"},
+                        "content": sent["content"],
+                    }
+                ]
+            },
+        }
 
     result = send_candidate_review_notification(
         config,

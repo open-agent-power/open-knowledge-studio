@@ -1,0 +1,21 @@
+id: trafilatura
+execution: managed
+label: Trafilatura
+description: 轻量 HTML 正文提取。纯 Python，零外部依赖（不含 requests）。从 HTML 中提取正文、标题、作者和日期。
+
+provides:
+  web.extract:
+    maturity: stable
+
+requirements:
+  python_package: trafilatura
+
+cost:
+  estimated_per_call: 0
+
+known_limits:
+  - 仅处理原始 HTML，不执行 JS
+  - 中文平台反爬页面提取结果可能为空或垃圾
+  - 不保留原始页面截图
+
+last_validated: 2026-08-05

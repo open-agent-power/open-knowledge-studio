@@ -278,13 +278,18 @@ def list_records(
     ]
     for field in projection:
         command.extend(["--field-id", field])
-    # Fetch every claimable status, not just 待处理: is_candidate() also accepts
-    # retry-flagged records and 已领取 records whose lease expired. Filtering to
-    # 待处理 here would make retries and crash recovery unreachable.
+    # Fresh form rows have an empty status. Include them alongside explicit
+    # retry/lease-recovery states; is_candidate() performs the final check.
     command.extend([
         "--filter-json",
         json.dumps(
-            {"logic": "and", "conditions": [["运行状态", "intersects", list(CLAIMABLE_STATUSES)]]},
+            {
+                "logic": "or",
+                "conditions": [
+                    ["运行状态", "empty"],
+                    ["运行状态", "intersects", list(CLAIMABLE_STATUSES)],
+                ],
+            },
             ensure_ascii=False,
         ),
     ])

@@ -1,13 +1,59 @@
-"""Source-type detection and extractor routing.
+"""Source-type detection.
 
-The single entry point is ``route_plan(source) -> dict``.
+Protocol v0.1: ``describe_source(source) -> SourceDescriptor`` is the canonical
+entry point.  It describes *what* the source is without deciding *how* to
+capture it.
+
+Legacy ``route_plan()`` was removed in v0.4.0 along with ``network.py``,
+``scripts/extractors/``, and ``scripts/experiments/``.
+New providers MUST use describe_source → EvidenceFragment → EvidenceManifest.
 """
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
+
+SUPPORTED_VIDEO_SUFFIXES = frozenset({".mp4", ".mkv", ".mov", ".webm", ".avi", ".m4v"})
+SUPPORTED_AUDIO_SUFFIXES = frozenset({".mp3", ".wav", ".m4a", ".flac", ".aac", ".ogg"})
+SUPPORTED_OFFICE_SUFFIXES = frozenset({".pptx", ".docx", ".xlsx", ".html", ".htm", ".txt", ".csv", ".md"})
+SUPPORTED_IMAGE_SUFFIXES = frozenset({".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tiff"})
+
+CONTENT_EXPECTATIONS: dict[str, dict[str, str]] = {
+    ("video", "bilibili"): "transcript",
+    ("video", "douyin"): "transcript",
+    ("video", "youtube"): "transcript",
+    ("video", "local"): "media_metadata",
+    ("audio", "local"): "transcript",
+    ("document", "local"): "article",
+    ("image", "local"): "ocr_text",
+}
+
+
+@dataclass(frozen=True)
+class SourceDescriptor:
+    """Pure source description — no extractor or route decisions baked in."""
+
+    source_modality: str  # pdf, office, image, video, audio, web, text, unknown
+    access_mode: str       # local_file, public_url, authenticated_remote, user_browser, feishu_form
+    platform: str | None   # bilibili, douyin, weibo, zhihu, github, ... or None
+    mime_type: str | None
+    content_expectation: str  # transcript, article, metadata, ocr_text, ...
+    network_policy: tuple[str, ...]  # ["platform_api", "user_authenticated_browser"]
+    diagnostics: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "source_modality": self.source_modality,
+            "access_mode": self.access_mode,
+            "platform": self.platform,
+            "mime_type": self.mime_type,
+            "content_expectation": self.content_expectation,
+            "network_policy": list(self.network_policy),
+            "diagnostics": dict(self.diagnostics),
+        }
 
 
 def is_url(value: str) -> bool:
@@ -27,74 +73,100 @@ def platform_for(source: str) -> str:
     return host or "web"
 
 
-def route_plan(source: str) -> dict[str, Any]:
-    parsed = urlparse(source)
-    suffix = Path(parsed.path if is_url(source) else source).suffix.lower()
+def _suffix_for(source: str) -> str:
+    if is_url(source):
+        return Path(urlparse(source).path).suffix.lower()
+    return Path(source).suffix.lower()
+
+
+def describe_source(source: str) -> SourceDescriptor:
+    """Return a pure source description without choosing an extractor.
+
+    This is the canonical entry point for the unified capture protocol.
+    Callers that still need the legacy extractor/route fields should use
+    ``route_plan()`` instead.
+    """
+    suffix = _suffix_for(source)
     platform = platform_for(source)
-    video_suffixes = {".mp4", ".mkv", ".mov", ".webm", ".avi", ".m4v"}
-    audio_suffixes = {".mp3", ".wav", ".m4a", ".flac", ".aac", ".ogg"}
-    office_suffixes = {".pptx", ".docx", ".xlsx", ".html", ".htm", ".txt", ".csv", ".md"}
-    image_suffixes = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tiff"}
-    if is_url(source) and platform in {"bilibili", "douyin", "youtube"}:
-        return {
-            "source_type": "video", "platform": platform,
-            "modalities": ["speech", "video", "on_screen_text"],
-            "extractor": "watch",
-            "route": ["platform_caption", "media_acquire", "asr", "keyframe", "ocr"],
-        }
-    if suffix in video_suffixes:
-        return {
-            "source_type": "video", "platform": platform,
-            "modalities": ["speech", "video", "on_screen_text"],
-            "extractor": "watch",
-            "route": ["embedded_caption", "asr", "keyframe", "ocr"],
-        }
-    if suffix in audio_suffixes:
-        return {
-            "source_type": "audio", "platform": platform,
-            "modalities": ["speech"], "extractor": "watch",
-            "route": ["embedded_transcript", "asr"],
-        }
-    if suffix == ".pdf":
-        return {
-            "source_type": "document", "platform": platform,
-            "modalities": ["text", "layout", "image", "formula"],
-            "extractor": "mineru",
-            "route": ["text_layer", "layout", "ocr", "formula", "asset_copy"],
-        }
-    if suffix in office_suffixes:
-        return {
-            "source_type": "document", "platform": platform,
-            "modalities": ["text", "layout", "image"],
-            "extractor": "markitdown",
-            "route": ["native_structure", "markdown", "embedded_media"],
-        }
-    if suffix in image_suffixes:
-        return {
-            "source_type": "image", "platform": platform,
-            "modalities": ["image", "on_screen_text"],
-            "extractor": "rapidocr",
-            "route": ["ocr", "bbox", "original_asset"],
-        }
-    return {
-        "source_type": "unknown", "platform": platform,
-        "modalities": [], "extractor": None,
-        "route": ["human_fallback"], "implementation_status": "unsupported",
-        "diagnostics": {
-            "detected_extension": suffix or None,
-            "detected_source": source,
-            "is_url": is_url(source),
-            "url_platform": platform if is_url(source) else None,
-            "supported_extensions": {
-                "视频": sorted(video_suffixes), "音频": sorted(audio_suffixes),
-                "文档": sorted(office_suffixes) + [".pdf"], "图片": sorted(image_suffixes),
-            },
-            "suggestion": (
-                "请输入平台视频链接 (YouTube/Bilibili/抖音)，或本地文件。支持的本地文件："
-                + str(sorted(video_suffixes | audio_suffixes | office_suffixes | {".pdf"} | image_suffixes))
-                if not is_url(source) else
-                "仅支持 YouTube、Bilibili、抖音平台的视频链接。"
-                " 普通网页请先用浏览器采集工具下载为本地文件再导入。"
-            ),
-        },
+    is_local = not is_url(source)
+    access_mode = "local_file" if is_local else _access_mode_for(platform)
+    network_policy: tuple[str, ...] = _network_policy_for(platform, is_local)
+    modality = _classify_modality(suffix, platform, is_local)
+    expectation = CONTENT_EXPECTATIONS.get((modality, platform if not is_local else "local"), "article")
+
+    diag: dict[str, Any] = {
+        "detected_extension": suffix or None,
+        "detected_source": source,
+        "is_url": not is_local,
+        "url_platform": platform if not is_local else None,
     }
+    if modality == "unknown":
+        diag["supported_extensions"] = {
+            "video": sorted(SUPPORTED_VIDEO_SUFFIXES),
+            "audio": sorted(SUPPORTED_AUDIO_SUFFIXES),
+            "document": sorted(SUPPORTED_OFFICE_SUFFIXES) + [".pdf"],
+            "image": sorted(SUPPORTED_IMAGE_SUFFIXES),
+        }
+        diag["suggestion"] = (
+            "supported local files: "
+            + str(sorted(SUPPORTED_VIDEO_SUFFIXES | SUPPORTED_AUDIO_SUFFIXES
+                         | SUPPORTED_OFFICE_SUFFIXES | {".pdf"} | SUPPORTED_IMAGE_SUFFIXES))
+            if is_local else
+            "platform URLs: YouTube, Bilibili, Douyin. "
+            "For web pages, save as local file first."
+        )
+
+    return SourceDescriptor(
+        source_modality=modality,
+        access_mode=access_mode,
+        platform=platform if not is_local else None,
+        mime_type=None,
+        content_expectation=expectation,
+        network_policy=network_policy,
+        diagnostics=diag,
+    )
+
+
+def _access_mode_for(platform: str) -> str:
+    """Derive access mode from platform identity, not extractor choice."""
+    if platform in {"bilibili", "douyin"}:
+        return "authenticated_remote"
+    if platform in {"youtube"}:
+        return "public_url"
+    return "public_url"
+
+
+def _network_policy_for(platform: str, is_local: bool) -> tuple[str, ...]:
+    if is_local:
+        return ("offline",)
+    if platform in {"bilibili", "douyin"}:
+        return ("platform_api", "user_authenticated_browser")
+    if platform in {"youtube"}:
+        return ("public_http",)
+    return ("public_http",)
+
+
+def _classify_modality(suffix: str, platform: str, is_local: bool) -> str:
+    """Classify source into a stable modality without extractor coupling."""
+    if not is_local and platform in {"bilibili", "douyin", "youtube"}:
+        return "video"
+    if suffix in SUPPORTED_VIDEO_SUFFIXES:
+        return "video"
+    if suffix in SUPPORTED_AUDIO_SUFFIXES:
+        return "audio"
+    if suffix == ".pdf":
+        return "pdf"
+    if suffix in SUPPORTED_OFFICE_SUFFIXES:
+        if suffix in {".md", ".txt"}:
+            return "text"
+        if suffix in {".html", ".htm"}:
+            return "web"
+        return "office"
+    if suffix in SUPPORTED_IMAGE_SUFFIXES:
+        return "image"
+    return "unknown"
+
+
+# ── Legacy route_plan — removed in v0.4.0 (network.py was its only consumer). ──
+# describe_source() and SourceDescriptor above are the canonical entry points.
+

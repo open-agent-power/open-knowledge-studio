@@ -1,0 +1,19 @@
+id: human
+execution: human
+label: 人工补充
+description: 用户手动提供的证据——粘贴文本、上传截图、标注确认。当自动化路径不可用或用户选择人工模式时使用。
+
+provides:
+  human.supply:
+    maturity: stable
+
+requirements: {}
+
+cost:
+  estimated_per_call: 0
+
+known_limits:
+  - 依赖人工及时响应
+  - 可能缺少结构化 locator
+
+last_validated: 2026-08-06

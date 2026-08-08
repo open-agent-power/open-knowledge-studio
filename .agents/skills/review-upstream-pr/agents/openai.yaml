@@ -1,0 +1,4 @@
+interface:
+  display_name: "Review Upstream PR"
+  short_description: "Review upstream PR blocking fixes"
+  default_prompt: "Use $review-upstream-pr to review the upstream PR 4 remediation handoff."

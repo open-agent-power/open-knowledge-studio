@@ -1,0 +1,112 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-knowledge-studio.local/schemas/evidence-plan-v0.1.json",
+  "title": "OKS Evidence Plan v0.1",
+  "description": "An EvidencePlan describes the optimal evidence acquisition strategy for a given source, replacing simple (suffix, platform) → extractor routing with capability-aware, fallback-chain planning. The plan is a machine-readable decision — it does not execute capture itself.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "plan_id",
+    "source_modality",
+    "access_mode",
+    "primary_capture",
+    "fallback_capture",
+    "human_gate"
+  ],
+  "properties": {
+    "schema_version": {"const": "oks-evidence-plan/v0.1"},
+    "plan_id": {
+      "description": "Stable identifier for this plan, typically derived from source identity hash.",
+      "type": "string",
+      "minLength": 1
+    },
+    "source_modality": {
+      "description": "The modality of the source material.",
+      "enum": ["pdf", "office", "image", "video", "audio", "web", "text", "unknown"]
+    },
+    "access_mode": {
+      "description": "How the source can be reached.",
+      "enum": ["local_file", "public_url", "authenticated_remote", "user_browser", "feishu_form"]
+    },
+    "primary_capture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["strategy", "provider", "capability"],
+      "properties": {
+        "strategy": {
+          "description": "Preferred evidence acquisition strategy.",
+          "enum": ["text_layer", "file", "dom", "screenshot", "subtitle", "frame", "audio", "remote_api", "direct"]
+        },
+        "provider": {
+          "description": "Provider name (e.g. pymupdf4llm, firecrawl, agentkey, rapidocr).",
+          "type": "string",
+          "minLength": 1
+        },
+        "capability": {
+          "description": "Capability identifier (e.g. pdf.text-layer, web.scrape, ocr.block).",
+          "type": "string",
+          "minLength": 1
+        },
+        "expected_status": {
+          "description": "Expected capture outcome for this strategy.",
+          "enum": ["complete", "partial"],
+          "default": "complete"
+        }
+      }
+    },
+    "fallback_capture": {
+      "type": "array",
+      "description": "Ordered fallback strategies, tried in sequence if the primary returns partial or failed.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["strategy", "provider", "condition"],
+        "properties": {
+          "strategy": {
+            "enum": ["remote_ocr", "agent_observation", "remote_api", "rendered_page", "manual", "metadata_only"]
+          },
+          "provider": {
+            "type": "string",
+            "minLength": 1
+          },
+          "capability": {
+            "type": "string"
+          },
+          "condition": {
+            "description": "When this fallback activates (e.g. 'primary_returned_partial', 'primary_returned_failed').",
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "human_gate": {
+      "description": "Whether human action is required before capture can begin.",
+      "enum": ["none", "required"]
+    },
+    "human_gate_reason": {
+      "description": "When human_gate is required, why (e.g. 'login_required', 'captcha_detected', 'browser_extension_missing').",
+      "type": "string"
+    },
+    "agent_role": {
+      "description": "What the Agent should do with the evidence (distill, observe, judge_challenge, not_needed).",
+      "enum": ["distill", "observe", "judge_challenge", "not_needed"],
+      "default": "distill"
+    },
+    "cost_estimate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "primary_max_credits": {"type": "number", "minimum": 0},
+        "fallback_max_credits": {"type": "number", "minimum": 0},
+        "currency": {"type": "string"}
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "Known limitations or risks for this plan."
+    }
+  }
+}

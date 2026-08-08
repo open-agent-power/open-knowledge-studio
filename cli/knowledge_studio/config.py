@@ -1,4 +1,4 @@
-"""Global configuration — ~/.oks/config.json
+"""Global configuration ? ~/.oks/config.json
 
 Enables cross-project access: any project can find the knowledge base
 via the global config, without being inside the OKS repo.
@@ -17,7 +17,32 @@ from typing import Any
 
 DEFAULT_CONFIG: dict[str, Any] = {
     "knowledge_base_path": "",
+    "strategy": "",
 }
+
+# Allowed strategy values; empty string = unset (Agent prompts user on first use)
+VALID_STRATEGIES = frozenset({"lightweight", "quality", "privacy", "ask_each_time"})
+
+
+def get_strategy() -> str:
+    """Return the current strategy, or empty string if unset."""
+    config = load_config()
+    strategy = config.get("strategy", "")
+    if strategy in VALID_STRATEGIES:
+        return strategy
+    return ""
+
+
+def set_strategy(value: str) -> None:
+    """Set the strategy value, validating it."""
+    if value and value not in VALID_STRATEGIES:
+        raise ValueError(
+            f"Invalid strategy: {value!r}. "
+            f"Must be one of: {', '.join(sorted(VALID_STRATEGIES))}"
+        )
+    config = load_config()
+    config["strategy"] = value
+    save_config(config)
 
 
 def config_dir() -> Path:
@@ -75,7 +100,7 @@ def init_config(kb_path: str | None = None) -> Path:
     """Initialize global config. Returns the config path.
 
     Raises ValueError when no kb_path is given and the existing config has
-    no knowledge_base_path — we never silently default to cwd.
+    no knowledge_base_path ? we never silently default to cwd.
     """
     config = load_config()
 
@@ -114,7 +139,7 @@ def get_kb_root() -> Path:
 
     Priority:
     1. OKS_ROOT env var
-    2. ~/.oks/config.json → knowledge_base_path
+    2. ~/.oks/config.json ? knowledge_base_path
     3. Current working directory
 
     A corrupt config warns on stderr and falls back to cwd instead of
@@ -141,7 +166,7 @@ def get_kb_root() -> Path:
     if kb_path:
         root = Path(kb_path).expanduser().resolve()
         # If the current directory is itself a valid knowledge base,
-        # prefer it over the global config — the user is clearly working here.
+        # prefer it over the global config ? the user is clearly working here.
         cwd = Path.cwd()
         if (cwd / "wiki").is_dir():
             return cwd

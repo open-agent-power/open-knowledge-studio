@@ -35,8 +35,8 @@ _TEXTS: dict[str, dict[str, str]] = {
         "en": "Connector module not found",
     },
     "connector_missing_hint": {
-        "zh": "`scripts/raw_bundle_adapter.py` 模块导入失败。请确认 OKS 安装包含 scripts/ 目录。",
-        "en": "The `scripts/raw_bundle_adapter.py` module could not be imported. Ensure the OKS installation includes the scripts/ directory.",
+        "zh": "oks ingest 在纯终端中需 Agent 接管。请使用支持的 Agent Host (Claude Code / Codex) 并运行 /ingest 技能。",
+        "en": "oks ingest in a pure terminal requires an Agent. Use a supported Agent Host (Claude Code / Codex) and run the /ingest skill.",
     },
     "action_required": {
         "zh": "需要操作",

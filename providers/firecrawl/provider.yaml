@@ -1,0 +1,29 @@
+id: firecrawl
+execution: external
+label: Firecrawl
+description: 远程网页抓取与解析。支持 JavaScript 渲染、结构化提取和 Office 文档解析（/parse）。通过 MCP 或 HTTP API 调用。
+
+provides:
+  web.fetch:
+    maturity: validated
+  web.extract:
+    maturity: validated
+  web.screenshot:
+    maturity: experimental
+  document.text.extract:
+    maturity: validated_partial
+
+requirements:
+  env: [FIRECRAWL_API_KEY]
+  mcp: firecrawl
+
+cost:
+  estimated_per_call: 1 credit
+
+known_limits:
+  - 中文平台（知乎、CSDN、掘金）可能被反爬
+  - Office 公式和嵌入媒体可能丢失
+  - /parse 返回结构可能不如原生工具
+  - 不支持需要登录态的平台
+
+last_validated: 2026-08-05

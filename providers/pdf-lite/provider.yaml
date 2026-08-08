@@ -1,0 +1,31 @@
+id: pdf-lite
+execution: managed
+label: PDF 文本层提取 (pymupdf4llm)
+description: 轻量 PDF 文本层提取。使用 pymupdf4llm 0.0.27 按页提取文本，逐页生成 evidence。不需要 MinerU 或 OCR 依赖。
+
+provides:
+  document.text.extract:
+    maturity: stable
+  document.structure.extract:
+    maturity: validated
+  metadata.fetch:
+    maturity: stable
+
+requirements:
+  python_package: pymupdf4llm
+  env: [OKS_PDF_LITE_PYTHON]
+
+cost:
+  estimated_per_call: 0
+
+known_limits:
+  - 扫描 PDF（纯图像，无文本层）只能返回 partial
+  - 复杂版式可能丢失表格和列结构
+  - 不包含 OCR 能力
+
+last_validated: 2026-08-06
+
+evidence:
+  method: pdf_text_layer
+  locator_kind: page
+  agent_judgment: mechanical

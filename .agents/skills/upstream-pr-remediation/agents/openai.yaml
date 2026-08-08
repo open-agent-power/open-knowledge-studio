@@ -1,0 +1,4 @@
+interface:
+  display_name: "Upstream PR Remediation"
+  short_description: "Implement scoped PR 4 blocking fixes"
+  default_prompt: "Use $upstream-pr-remediation to implement the approved upstream PR 4 blocking fixes."

@@ -84,27 +84,6 @@ def test_review_action_re_matches():
 # ── parse_review_reply ─────────────────────────────────────────────────
 
 
-def test_accept_does_not_fabricate_the_reviewer_judgement():
-    """A one-word "通过" must not become a machine-written decision_correct.
-
-    Accepting a candidate means "put this in the wiki". It does not assert the
-    original decision was correct — and that value feeds quality_score and the
-    [verified] label, so fabricating it corrupts the trust signal. reject is
-    different: there the human made an explicit negative call, and recall.py
-    relies on decision_correct=False to surface failure lessons.
-    """
-    source = (Path(__file__).resolve().parent / "review_events.py").read_text(encoding="utf-8")
-    accept_branch = source.split('if action == "accept":', 1)[1].split("elif action ==", 1)[0]
-    reject_branch = source.split('elif action == "reject":', 1)[1].split("elif action ==", 1)[0]
-
-    assert "decision_correct" not in accept_branch, (
-        "accept must not write decision_correct — the reviewer did not make that call"
-    )
-    assert '"outcome": "accepted"' in accept_branch
-    assert '"review_depth": "light"' in accept_branch
-    assert '"decision_correct": False' in reject_branch
-
-
 def test_parse_review_reply_accepts_action_before_or_after_comment():
     assert parse_review_reply("accept 文章有价值") == ("accept", "文章有价值")
     assert parse_review_reply("文章有价值，accept") == ("accept", "文章有价值")

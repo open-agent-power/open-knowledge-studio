@@ -1,75 +1,125 @@
-"""Build hook: vendor the instance-template assets and the connector package.
+"""Build hook: vendor the shareable asset layer.
 
-`assets/` at the repo root is the single source for everything an instance
-gets: skills, hooks, rules, templates, _meta, settings, per-agent config.
-Maintainer-only tooling lives in the repo's own `.claude/`, outside `assets/` —
-physical separation instead of ignore rules.
+The repo root is the single source of truth for ``.claude/``, ``templates/``,
+``_meta/``, ``settings/`` and ``scripts/``. Building from a git checkout copies
+them into ``knowledge_studio/_assets/`` before the build runs, so
+source installs, sdists and PyPI wheels are identical. When building from an
+sdist the repo root is absent and the tree is already present — skip silently.
 
-Building from a git checkout copies `assets/` into `knowledge_studio/_assets/`
-and `scripts/` into `oks_connector/`, so source installs, sdists and PyPI
-wheels are identical. A `package-dir` pointing at `../scripts` cannot reach
-into an sdist, which is why the connector is vendored here. When building from
-an sdist the repo root is absent and both trees already exist — skip silently.
+The legacy ``oks_connector`` package was permanently removed in v0.4.0;
+two essential stdlib-only utilities (``capability_check``, ``_lark_cli``)
+were inlined into ``knowledge_studio/``.
 """
 from __future__ import annotations
 
 import shutil
+import stat
 from pathlib import Path
 
 from setuptools import setup
 from setuptools.command.build_py import build_py
 from setuptools.command.sdist import sdist
 
-# Test modules would collide with the repo-root copies during collection;
-# caches are build noise.
-_CONNECTOR_IGNORE = shutil.ignore_patterns("test_*.py", "tests", "__pycache__", "*.pyc")
-_ASSET_IGNORE = shutil.ignore_patterns("__pycache__", "*.pyc")
+_MAP = [
+    (".claude", "claude"),
+    (".codex", "codex"),
+    (".agents", "agents"),
+    ("templates", "templates"),
+    ("_meta", "_meta"),
+    ("settings", "settings"),
+]
 
-# `oks feishu` resolves the worker from _assets/scripts/ (see cli.py), so it is
-# vendored alongside the template tree.
-_SCRIPT_ASSETS = ("feishu_base_worker.py", "feishu_setup.py")
+# Test modules would collide with the repo-root copies during collection;
+# caches are build noise. Also exclude legacy bridge/assembler modules that
+# were deleted in v0.4.0 — they must not reach user wheels.
+_CONNECTOR_IGNORE = shutil.ignore_patterns(
+    "test_*.py", "tests", "__pycache__", "*.pyc",
+    # Legacy bridge/assembler/planner — deleted in v0.4.0
+    "raw_assembler.py", "evidence_plan.py", "evidence_fragment.py",
+    "degradation.py", "capture_contract.py", "observation_adapter.py",
+    "agent_observation.py", "capability_check.py",
+    # Legacy network layer — imports deleted route_plan
+    "network.py",
+    # Legacy directories
+    "capture_adapters", "extractors", "experiments",
+    # Build artefacts
+    ".pytest_cache",
+    # Docs not intended for wheel
+    "PHASE6-DELETION-MANIFEST.md", "ARCHITECTURE.md",
+    # Requirements files for deleted extractors
+    "raw_extract_requirements.txt", "watch_extract_requirements.txt",
+    "mineru_extract_requirements.txt", "media_ingest_requirements.txt",
+    "formula_extract_requirements.txt",
+)
+
+# Maintainer-only and dev-only skills: they drive development workflows and must
+# never reach a user's knowledge base, where they would pollute skill discovery
+# and could be auto-matched by an agent. Kept in the repo for development.
+_DEV_ONLY_ASSET_NAMES = (
+    "review-upstream-pr",
+    "upstream-pr-remediation",
+    "triad-engineering-closure",
+    "claude-code-vision-skill",
+)
+_DEV_ONLY_IGNORE = shutil.ignore_patterns(
+    ".git", ".hg", ".svn", "__pycache__", "*.pyc", *_DEV_ONLY_ASSET_NAMES
+)
+
+
+def _remove_readonly(func, path, _exc_info):
+    """Allow build cleanup to remove read-only files copied from skills."""
+    Path(path).chmod(stat.S_IWRITE)
+    func(path)
 
 
 def _repo_root() -> Path:
     return Path(__file__).resolve().parent.parent
 
 
-def _vendor_connector() -> None:
-    """Copy ../scripts into cli/oks_connector/ so it reaches sdists and wheels."""
-    source = _repo_root() / "scripts"
-    if not source.is_dir():
-        return
-    dest = Path(__file__).resolve().parent / "oks_connector"
-    if dest.exists():
-        shutil.rmtree(dest)
-    shutil.copytree(source, dest, ignore=_CONNECTOR_IGNORE)
-
-
 def _vendor_assets() -> None:
-    """Copy ../assets verbatim into knowledge_studio/_assets/."""
     repo_root = _repo_root()
-    source = repo_root / "assets"
-    if not source.is_dir():
-        return
     dest_root = Path(__file__).resolve().parent / "knowledge_studio" / "_assets"
     if dest_root.exists():
-        shutil.rmtree(dest_root)
-    shutil.copytree(source, dest_root, ignore=_ASSET_IGNORE)
+        shutil.rmtree(dest_root, onerror=_remove_readonly)
+    dest_root.mkdir(parents=True)
+    for src_name, dest_name in _MAP:
+        src = repo_root / src_name
+        if src.is_dir():
+            shutil.copytree(src, dest_root / dest_name, ignore=_DEV_ONLY_IGNORE)
+    # ── Skills live in skill_templates/, not _assets/ ──
+    # _install_skills() reads from skill_templates/ via importlib.resources;
+    # duplicating skills under _assets/ creates a second, diverging source
+    # that shadows the canonical one during oks init (via _materialize_assets).
+    for host in ("claude", "agents"):
+        skills_dir = dest_root / host / "skills"
+        if skills_dir.is_dir():
+            shutil.rmtree(skills_dir, onerror=_remove_readonly)
+    worker = repo_root / "scripts" / "feishu_base_worker.py"
+    if worker.is_file():
+        worker_dest = dest_root / "scripts"
+        worker_dest.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(worker, worker_dest / worker.name)
+        resolver = worker.parent / "_lark_cli.py"
+        if resolver.is_file():
+            shutil.copy2(resolver, worker_dest / resolver.name)
+        worker_package = worker.parent / "feishu_worker"
+        if worker_package.is_dir():
+            shutil.copytree(
+                worker_package,
+                worker_dest / worker_package.name,
+                ignore=_CONNECTOR_IGNORE,
+            )
+            # extractors/ was permanently deleted in v0.4.0.
+            # network.py was permanently deleted — do not vendor.
 
-    scripts_dest = dest_root / "scripts"
-    scripts_dest.mkdir(parents=True, exist_ok=True)
-    for name in _SCRIPT_ASSETS:
-        script = repo_root / "scripts" / name
-        if script.is_file():
-            shutil.copy2(script, scripts_dest / name)
 
 
 def _purge_stale_build_copies(*relative: str) -> None:
     """Drop build/lib mirrors of vendored trees.
 
     build_py copies into build/lib incrementally and never deletes, so a tree
-    vendored before a layout change keeps shipping from there — observed as
-    removed maintainer skills reappearing in a fresh wheel.
+    that was vendored before an exclusion was added keeps shipping from there —
+    observed as removed maintainer skills reappearing in a fresh wheel.
     """
     build_lib = Path(__file__).resolve().parent / "build" / "lib"
     for name in relative:
@@ -78,11 +128,28 @@ def _purge_stale_build_copies(*relative: str) -> None:
             shutil.rmtree(stale, ignore_errors=True)
 
 
+def _purge_stale_egg_infos() -> None:
+    """Remove stale nested egg-info directories from old builds.
+
+    ``scripts/open_knowledge_studio.egg-info/`` is a leftover from when
+    ``scripts/`` was its own package.  ``cli/oks_connector/`` (the whole
+    directory) is removed below.  Both pollute discovery tooling with dead
+    entry points (e.g. ``oks-connector = raw_bundle_adapter:main``).
+    """
+    for candidate in (
+        _repo_root() / "scripts" / "open_knowledge_studio.egg-info",
+        Path(__file__).resolve().parent / "oks_connector",
+    ):
+        if candidate.exists():
+            shutil.rmtree(candidate, ignore_errors=True)
+
+
 def _sync_from_checkout() -> None:
-    if (_repo_root() / "assets").is_dir():
-        _purge_stale_build_copies("knowledge_studio/_assets", "oks_connector")
+    repo_root = _repo_root()
+    if (repo_root / ".claude").is_dir() and (repo_root / "templates").is_dir():
+        _purge_stale_build_copies("knowledge_studio/_assets")
+        _purge_stale_egg_infos()
         _vendor_assets()
-        _vendor_connector()
 
 
 class build_py_with_assets(build_py):
@@ -96,5 +163,7 @@ class sdist_with_assets(sdist):
         _sync_from_checkout()
         super().run()
 
+
+_sync_from_checkout()
 
 setup(cmdclass={"build_py": build_py_with_assets, "sdist": sdist_with_assets})

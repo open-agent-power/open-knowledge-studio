@@ -1,0 +1,111 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-knowledge-studio.local/schemas/locator-v0.1.json",
+  "title": "OKS Evidence Locator v0.1",
+  "description": "Minimal structural contract for evidence locators. Each evidence record in a Raw Bundle carries a locator that pinpoints where the evidence came from inside an artifact. This schema defines the required fields per locator kind so downstream consumers (AgentObservation, Candidate) can reliably resolve artifact_id + locator to a specific position in source material.",
+  "type": "object",
+  "minProperties": 1,
+  "additionalProperties": false,
+  "required": ["kind"],
+  "properties": {
+    "kind": {
+      "description": "Locator structural kind — determines which additional fields are required.",
+      "enum": ["page", "bbox", "timestamp", "dom", "document", "custom"]
+    },
+    "page": {
+      "description": "1-indexed page number. Required when kind=page.",
+      "type": "integer",
+      "minimum": 1
+    },
+    "total_pages": {
+      "description": "Total page count of the artifact. Optional with kind=page.",
+      "type": "integer",
+      "minimum": 1
+    },
+    "region": {
+      "description": "Optional human-readable region label within a page (e.g. 'header', 'table', 'embedded-image', 'body').",
+      "type": "string"
+    },
+    "bbox": {
+      "description": "Bounding box [x1, y1, x2, y2] in pixel coordinates. Required when kind=bbox.",
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "items": {"type": "number", "minimum": 0}
+    },
+    "bbox_page": {
+      "description": "1-indexed page that contains this bbox. Optional with kind=bbox.",
+      "type": "integer",
+      "minimum": 1
+    },
+    "start_ms": {
+      "description": "Start time in milliseconds. Required when kind=timestamp.",
+      "type": "number",
+      "minimum": 0
+    },
+    "end_ms": {
+      "description": "End time in milliseconds. Required when kind=timestamp.",
+      "type": "number",
+      "minimum": 0
+    },
+    "text_hash": {
+      "description": "SHA-256 hex digest of the referenced text span. Optional, for integrity verification.",
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "xpath_fragment": {
+      "description": "Minimal XPath or CSS selector fragment. Required when kind=dom.",
+      "type": "string"
+    },
+    "dom_snapshot_index": {
+      "description": "0-based index into a DOM snapshot array. Optional with kind=dom.",
+      "type": "integer",
+      "minimum": 0
+    },
+    "document_section": {
+      "description": "Section heading or paragraph offset within a document. Optional with kind=document.",
+      "type": "string"
+    },
+    "custom_label": {
+      "description": "Free-form locator label. Required when kind=custom.",
+      "type": "string"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "required": ["kind"],
+        "properties": {"kind": {"const": "page"}}
+      },
+      "then": {"required": ["page"]}
+    },
+    {
+      "if": {
+        "required": ["kind"],
+        "properties": {"kind": {"const": "bbox"}}
+      },
+      "then": {"required": ["bbox"]}
+    },
+    {
+      "if": {
+        "required": ["kind"],
+        "properties": {"kind": {"const": "timestamp"}}
+      },
+      "then": {"required": ["start_ms", "end_ms"]}
+    },
+    {
+      "if": {
+        "required": ["kind"],
+        "properties": {"kind": {"const": "dom"}}
+      },
+      "then": {"required": ["xpath_fragment"]}
+    },
+    {
+      "if": {
+        "required": ["kind"],
+        "properties": {"kind": {"const": "custom"}}
+      },
+      "then": {"required": ["custom_label"]}
+    }
+  ]
+}

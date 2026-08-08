@@ -1,0 +1,4 @@
+interface:
+  display_name: "OKS Acceptance"
+  short_description: "Run isolated modular capability acceptance"
+  default_prompt: "Use $accept to run isolated OKS capability acceptance."

@@ -1,0 +1,28 @@
+{
+  "sources": [
+    {
+      "type": "web_search",
+      "name": "AI Native Strategy",
+      "keywords": ["AI native architecture", "agent loop framework", "knowledge evolution", "self-evolving agent"],
+      "scan_interval_hours": 24,
+      "strategy": "keyword_search",
+      "raw_source": "articles",
+      "recipe": "daily-arxiv-scan",
+      "enabled": true,
+      "description": "Daily search for AI native strategies"
+    },
+    {
+      "type": "arxiv",
+      "name": "AI Agent Papers",
+      "categories": ["cs.AI", "cs.CL"],
+      "keywords": ["agent", "self-evolving", "knowledge management", "loop engineering"],
+      "scan_interval_hours": 168,
+      "strategy": "paper_scan",
+      "raw_source": "papers",
+      "recipe": "daily-arxiv-scan",
+      "enabled": true,
+      "description": "Weekly arXiv paper scan"
+    }
+  ],
+  "raw_path_template": "raw/{YYYY}/{MM}/{DD}/{raw_source}/"
+}

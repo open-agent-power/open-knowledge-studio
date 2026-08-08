@@ -1,0 +1,24 @@
+id: http-fetch
+execution: managed
+label: HTTP 获取
+description: 安全 HTTP GET 请求，带 SSRF 保护和 redirect 处理。用于获取公开 URL 的原始 HTML、PDF、Office 文件等。
+
+provides:
+  source.fetch:
+    maturity: experimental
+  web.fetch:
+    maturity: experimental
+
+requirements:
+  python_package: requests
+
+cost:
+  estimated_per_call: 0
+
+known_limits:
+  - 不执行 JavaScript
+  - 不处理登录态或 Cookie
+  - 中文平台可能返回反爬页面
+  - 受 SSRF 保护（仅允许公网目标）
+
+last_validated: 2026-08-05

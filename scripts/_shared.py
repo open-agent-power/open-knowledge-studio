@@ -1,6 +1,7 @@
-"""Shared utilities used by raw_bundle_adapter and extractor modules.
+"""Shared utilities — hashing, atomic writes, Rich-safe rendering.
 
-These are pure functions with no side-effects on the extraction pipeline.
+Historical / Removed in v0.4.0: raw_bundle_adapter and extractor modules
+were permanently deleted. See Git tag v0.4.0-legacy-final.
 """
 
 from __future__ import annotations
@@ -194,6 +195,19 @@ def format_media_time(seconds: float) -> str:
     return f"{minutes:02d}:{secs:02d}"
 
 from constants import SCHEMA_VERSION
+
+
+def markdown_asset_references(markdown: str) -> list[str]:
+    """Extract asset references (images) from a Markdown string.
+
+    Returns a list of target paths found in ``![alt](target)`` and
+    ``<img src="target">`` patterns.  Pure utility — no network, no filesystem.
+    """
+    import re as _re
+    values = _re.findall(r"!\[[^\]]*\]\(([^)]+)\)", markdown)
+    values.extend(_re.findall(r'<img\s+[^>]*src=["\']([^"\']+)', markdown))
+    return [value.strip().split()[0].strip("<>") for value in values]
+
 
 def common_metadata(
     *,

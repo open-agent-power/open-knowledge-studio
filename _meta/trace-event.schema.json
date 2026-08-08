@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-agent-power.github.io/open-knowledge-studio/schemas/trace-event.schema.json",
+  "title": "OKS execution trace event",
+  "type": "object",
+  "required": ["schema_version", "event_id", "run_id", "sequence", "timestamp", "event_type", "actor", "payload", "evidence_refs"],
+  "properties": {
+    "schema_version": {"const": "trace-event/v1"},
+    "event_id": {"type": "string", "minLength": 1},
+    "run_id": {"type": "string", "pattern": "^[A-Za-z0-9._-]+$"},
+    "sequence": {"type": "integer", "minimum": 1},
+    "timestamp": {"type": "string", "format": "date-time"},
+    "event_type": {
+      "enum": ["goal", "retrieval", "ai_action", "tool_observation", "ai_comment", "judge_comment", "human_action", "human_comment", "checkpoint", "blocker", "proposal", "final_result"]
+    },
+    "actor": {"enum": ["agent", "judge", "human", "tool", "system"]},
+    "payload": {"type": "object"},
+    "evidence_refs": {"type": "array", "items": {"type": "string"}}
+  },
+  "additionalProperties": false
+}

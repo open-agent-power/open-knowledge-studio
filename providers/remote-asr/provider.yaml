@@ -1,0 +1,23 @@
+id: remote-asr
+execution: external
+label: 远程语音识别
+description: 使用 OpenAI Whisper API 或 Groq Whisper 进行远程语音转文字。适合长音频或无本地 GPU 的环境。
+
+provides:
+  speech.transcribe:
+    maturity: experimental
+
+requirements:
+  env: [OPENAI_API_KEY]
+  mcp: openai
+
+cost:
+  estimated_per_call: token-based (varies by audio length)
+
+known_limits:
+  - 需要 API key
+  - 数据上传到远程服务（隐私考虑）
+  - 长音频成本高
+  - 当前实验环境网络受限
+
+last_validated: 2026-08-04

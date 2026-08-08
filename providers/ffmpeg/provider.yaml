@@ -1,0 +1,26 @@
+id: ffmpeg
+execution: managed
+label: FFmpeg
+description: 媒体处理工具。提供媒体信息探测、音频提取、关键帧提取和格式转码。
+
+provides:
+  media.probe:
+    maturity: stable
+  audio.extract:
+    maturity: validated
+  video.keyframes:
+    maturity: experimental
+  media.transcode:
+    maturity: validated
+
+requirements:
+  command: ffmpeg
+
+cost:
+  estimated_per_call: 0
+
+known_limits:
+  - 关键帧提取缺少完整验收
+  - 部分编解码器可能需要额外安装
+
+last_validated: 2026-08-06

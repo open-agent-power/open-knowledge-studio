@@ -1,0 +1,27 @@
+id: rapidocr
+execution: managed
+label: RapidOCR
+description: 轻量 OCR 引擎。对图片进行文字识别，返回 text blocks 和 bounding boxes。46 blocks / 47 条 evidence / 5.5s 已验证。
+
+provides:
+  image.ocr:
+    maturity: validated
+
+requirements:
+  python_package: rapidocr-onnxruntime
+  env: [OKS_WATCH_PYTHON]
+
+cost:
+  estimated_per_call: 0
+
+known_limits:
+  - 仅返回逐字 bbox，不提供页面级语义
+  - 手写识别准确率不稳定
+  - 复杂版式文字顺序可能不准确
+
+last_validated: 2026-08-06
+
+evidence:
+  method: rapidocr_engine
+  locator_kind: bbox
+  agent_judgment: mechanical

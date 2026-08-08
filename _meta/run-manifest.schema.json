@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-agent-power.github.io/open-knowledge-studio/schemas/run-manifest.schema.json",
+  "title": "OKS execution run manifest",
+  "type": "object",
+  "required": ["schema_version", "run_id", "goal_id", "status", "created_at", "updated_at", "event_count", "trace_path"],
+  "properties": {
+    "schema_version": {"const": "run-manifest/v1"},
+    "run_id": {"type": "string", "pattern": "^[A-Za-z0-9._-]+$"},
+    "goal_id": {"type": "string", "minLength": 1},
+    "status": {"enum": ["running", "blocked", "completed"]},
+    "created_at": {"type": "string", "format": "date-time"},
+    "updated_at": {"type": "string", "format": "date-time"},
+    "event_count": {"type": "integer", "minimum": 0},
+    "trace_path": {"type": "string", "minLength": 1},
+    "result": {"type": ["object", "null"]}
+  },
+  "additionalProperties": false
+}

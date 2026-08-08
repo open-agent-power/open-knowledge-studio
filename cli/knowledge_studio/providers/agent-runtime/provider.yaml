@@ -1,0 +1,33 @@
+id: agent-runtime
+execution: agent_native
+label: Agent 多模态理解
+description: 当前 Agent Runtime（Claude Code / Codex）的自身多模态能力。包括图像理解、布局分析、图表解读和证据交叉验证。不需要安装额外工具。
+
+provides:
+  image.observe:
+    maturity: runtime_dependent
+  layout.understand:
+    maturity: runtime_dependent
+  chart.interpret:
+    maturity: runtime_dependent
+  web.fetch:
+    maturity: runtime_dependent
+  evidence.cross_check:
+    maturity: experimental
+
+requirements: {}
+
+cost:
+  estimated_per_call: token-based (model dependent)
+
+known_limits:
+  - 不等同 OCR 字符级准确率
+  - 嵌入图像语义和 OCR 置信度未经过独立校验
+  - 真实模型成本和延迟未测量
+  - 不能替代登录态、Cookie 或反爬访问
+
+last_validated: 2026-08-06
+
+evidence:
+  method: agent_multimodal_observation
+  agent_judgment: agent_observed

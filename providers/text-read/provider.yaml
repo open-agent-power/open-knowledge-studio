@@ -1,0 +1,23 @@
+id: text-read
+execution: agent_native
+label: 文本文件直读
+description: 零依赖读取本地 .md / .txt / .csv 文件。Agent 直接读文件内容，不做任何格式转换。
+
+provides:
+  web.extract:
+    maturity: stable
+  document.text.extract:
+    maturity: stable
+  metadata.fetch:
+    maturity: stable
+
+requirements: {}
+
+cost:
+  estimated_per_call: 0
+
+known_limits:
+  - 不支持二进制格式
+  - 大文件可能超出 Agent 上下文窗口
+
+last_validated: 2026-08-06

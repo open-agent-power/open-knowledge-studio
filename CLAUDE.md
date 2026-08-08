@@ -7,7 +7,7 @@
 Open Knowledge Studio is a file-based knowledge base system designed for use with Claude Code. It provides:
 
 - **4 cognitive buckets (profiles/, raw/, wiki/, drafts/) + 2 infrastructure layers (settings/, _meta/)**: profiles/ incl. recipes, goals
-- **Three-level tool protocol**: agent-direct intake (L0 system tools, L1 OKS protocol CLIs, L2 independent tools)
+- **Agent-Native ingestion pipeline**: Source → Provider → EvidenceFragment → EvidenceManifest → `oks raw-commit` → Raw Bundle v0.2 → Candidate → Human Review → Wiki
 - **6+1-factor recall engine**: token overlap + substring + topic trace + type boost + review bonus (failure lessons rank higher) + memory curve + optional goal boost (active goals lift on-scope pages; no-op without goals)
 - **4 knowledge relationships**: supersedes, enriches, confirms, challenges (CONSTITUTION A4)
 - **Recipes & goals**: executable automation recipes + goal-aware recall boosting
@@ -15,7 +15,7 @@ Open Knowledge Studio is a file-based knowledge base system designed for use wit
 - **Decay system**: memory curve scoring with type-specific λ, tier classification (hot/warm/cold/evictable)
 - **Date-based raw/**: `raw/{YYYY}/{MM}/{DD}/{source}/` — auto-organized by intake date + source category
 - **Global config**: `~/.oks/config.json` enables cross-project access from any directory
-- **CLI tool (`oks`)**: search, recall, wiki CRUD (incl. `wiki use` — the explicit usage signal), drafts, distill, lint, status, metrics, config
+- **CLI tool (`oks`)**: 46 commands across 8 Typer groups — search, recall, raw-commit, ingest, init, skills-install, wiki CRUD, drafts, distill, lint, status, metrics, capability, feishu, trace, eval, hook, config
 
 ## Raw Material vs Memory — The Core Distinction
 
@@ -43,11 +43,17 @@ pipx avoids PEP 668 `externally-managed-environment` errors on Ubuntu 24.04+ and
 macOS Homebrew Python (get pipx: `sudo apt install pipx` / `brew install pipx` /
 Windows `py -m pip install --user pipx && py -m pipx ensurepath`).
 
+Developers working from source: `pipx install ./cli --force` to install the
+local checkout directly.
+
 ## Core Pipeline
 
 ```
 raw/ (human-collected or tool-processed materials)
-  ↓ /ingest skill — 3-level routing → raw/, then AI triage A/B/C grade
+  ↓ /ingest skill — Agent-native evidence ingestion
+  ↓ Source → Judge Modality → Select Providers → Execute
+  ↓ EvidenceFragment × N → EvidenceManifest
+  ↓ oks raw-commit → Raw Bundle v0.2
 drafts/ (intermediate proposals)
   ↓ /promote skill — human review
 wiki/ (curated knowledge, with decay)
@@ -69,17 +75,24 @@ See `CONSTITUTION.md` for the full memory design (A1-A5):
 
 ```
 open-knowledge-studio/
-├── .claude/          # Claude Code skills (8) + hooks (4) + rules (2)
+├── .claude/          # Claude Code skills (10) + hooks (4) + rules (2)
+├── .agents/          # Agent skill replicas (10 Claude + 10 Agents)
+├── .codex/           # Codex hooks config
 ├── profiles/         # ① Portraits — team, users, projects, recipes, goals
 ├── raw/              # ② Raw materials — date-based: {YYYY}/{MM}/{DD}/{source}/
 ├── wiki/             # ③ Curated knowledge — 22 domains × 3 types
 ├── drafts/           # ④ Dreaming candidates
 ├── settings/         # ⑤ Config layer — decay, tool registry, input sources
-├── _meta/            # ⑥ Schema layer — frontmatter/learning contracts (CI-enforced)
+├── _meta/            # ⑥ Schema layer — raw evidence shape contract
 ├── templates/        # concept, strategy, anti-pattern, draft
-├── cli/              # Python CLI tool (oks) — API-free core
+├── capabilities/     # Capability action catalog (actions.yaml)
+├── providers/        # 16 Provider definitions
+├── recipes/          # Modality recipes (7 modalities)
+├── security/         # Credential redaction + sensitive field detection
+├── cli/              # Python CLI tool (oks) + skill_templates/ (canonical skill source)
 ├── docs/             # GitHub Pages design documentation
 ├── CONSTITUTION.md   # Memory architecture design
+├── CHANGELOG.md      # Release history
 └── CLAUDE.md         # This file
 ```
 
@@ -88,19 +101,30 @@ open-knowledge-studio/
 | Skill | Purpose |
 |-------|---------|
 | `/start` | First-time setup: choose domain, build structure, scan raw/ |
-| `/ingest` | Multi-modal intake: 3-level routing → raw/, then A/B/C triage → drafts/ |
+| `/ingest` | Agent-native evidence ingestion (Source → Provider → Fragment → Manifest → raw-commit) |
 | `/query` | 6+1-factor recall → inject into context → AI answers with citations |
 | `/lint` | Scan wiki/: frontmatter, orphans, broken links, stale |
 | `/compile` | Re-compile concept pages from sources → drafts/ |
 | `/status` | Overview: wiki count, tier distribution, drafts, quality |
 | `/archive` | Extract conversation Q&A → AI summarize → drafts/ (never writes wiki directly) |
 | `/promote` | Review drafts/ → promote/reject/edit |
-| `/media-ingest` | Experimental compatibility adapter; current protocol baseline: `oks-connector/schemas/` and `oks-connector/capabilities/` |
+| `/accept` | Evidence-first isolated capability acceptance (wheel install, ingest, promote, recall) |
+| `/media-ingest` | Experimental video intake adapter (currently unavailable — scripts not yet packaged) |
+
+Agents skills mirror Claude skills with identical content. 4 dev-only skills
+are excluded from the Wheel via `_DEV_ONLY_ASSET_NAMES`.
 
 ## CLI Commands
 
 ```bash
-oks init <path>   # scaffold a personal knowledge instance (buckets + memory-tracking .gitignore + register as active KB)
+# Instance scaffold
+oks init <path> [--set-default|--no-set-default] [--git|--no-git] [--upgrade] [--force]
+oks skills-install [--force]
+
+# Raw ingestion
+oks raw-commit <manifest-dir> [--output/-o <dir>] [--overwrite] [--json/--text]
+
+# Search & recall
 oks search <query> [--limit 5] [--domain computing] [--type strategy] [--goal active|none|SLUG] [--format table|json] [--explain]
 oks recall <query> [--topic-id ID] [--limit 5] [--goal active|none|SLUG] [--format table|json] [--explain]
 oks wiki list [--domain] [--type] [--status active]
@@ -111,6 +135,8 @@ oks wiki use <slug>   # explicit "this page was used" signal (search/recall are 
 oks drafts list | promote <slug> | reject <slug>
 oks distill [--dry-run]
 oks lint | status | metrics | decay
+oks capability list | catalog [--json] [--verbose] | doctor [--json] [--verbose]
+oks capability install <name> [--yes]
 oks hook install [--editor claude|qoder|both] [--path DIR]   # opt-in auto-recall on prompt
 oks hook status
 oks eval recall <dataset.yaml> --output <run.json>

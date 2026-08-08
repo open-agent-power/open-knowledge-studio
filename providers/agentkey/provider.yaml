@@ -1,0 +1,34 @@
+id: agentkey
+execution: external
+label: AgentKey
+description: 平台专用远程获取能力。通过 TikHub 等后端访问知乎、微信公众号、Bilibili 等中文平台 API。
+
+provides:
+  web.fetch:
+    maturity: validated
+  web.extract:
+    maturity: validated
+  metadata.fetch:
+    maturity: validated
+  subtitle.fetch:
+    maturity: experimental
+
+requirements:
+  mcp: agentkey
+
+cost:
+  estimated_per_call: 0.2-2 credits
+
+known_limits:
+  - 知乎：仅单样本 full 验证
+  - 微信：正文可取，严格锚点未通过（partial）
+  - Bilibili：只有元数据，无字幕正文（metadata_only）
+  - 需要 OAuth 设备流认证，session 凭据不持久化
+
+last_validated: 2026-08-06
+
+maturity_by_action:
+  web.extract.zhihu: validated
+  web.extract.wechat: validated_partial
+  metadata.fetch.bilibili: validated
+  subtitle.fetch.bilibili: experimental

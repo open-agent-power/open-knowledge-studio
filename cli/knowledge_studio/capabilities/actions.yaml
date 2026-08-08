@@ -1,0 +1,110 @@
+# OKS Capability Actions — stable action semantics
+#
+# Each action describes WHAT the system can do, independent of WHO implements it.
+# Providers declare which actions they support in their provider.yaml.
+# Recipes reference actions to describe what evidence is needed for a source type.
+#
+# Adding a new action here is a schema change — version the actions.yaml in git.
+
+schema_version: oks-capability-actions/v0.1
+
+actions:
+  source.fetch:
+    label: 获取来源资源
+    description: Download or copy the source material to a local work directory.
+
+  web.fetch:
+    label: 获取网页资源
+    description: Fetch a URL with HTTP, including redirect handling and SSRF protection.
+
+  web.extract:
+    label: 网页正文提取
+    description: Extract the main content from an HTML page as structured text.
+
+  web.screenshot:
+    label: 网页截图
+    description: Capture a visual screenshot of a web page.
+
+  document.text.extract:
+    label: 文档文本提取
+    description: Extract text content from a document (PDF, Office, etc.), preserving page or section boundaries.
+
+  document.structure.extract:
+    label: 文档结构提取
+    description: Extract structural elements — headings, tables, lists — from a document.
+
+  document.render:
+    label: 文档页面渲染
+    description: Render document pages to images for visual inspection.
+
+  metadata.fetch:
+    label: 元数据获取
+    description: Retrieve metadata — title, author, duration, format, platform-specific identifiers.
+
+  media.download:
+    label: 媒体下载
+    description: Download video or audio media files.
+
+  subtitle.fetch:
+    label: 字幕获取
+    description: Extract or download subtitles/captions from media.
+
+  speech.transcribe:
+    label: 语音转写
+    description: Convert spoken audio to text (ASR).
+
+  audio.extract:
+    label: 音频提取
+    description: Extract audio track from video media.
+
+  video.keyframes:
+    label: 关键帧提取
+    description: Extract representative keyframes from video at scene changes or regular intervals.
+
+  media.transcode:
+    label: 媒体转码
+    description: Convert media between formats.
+
+  media.probe:
+    label: 媒体探测
+    description: Inspect media file metadata — codec, resolution, duration, frame rate.
+
+  image.ocr:
+    label: 图片文字识别
+    description: Detect and recognize text in images, returning text blocks with bounding boxes.
+
+  image.observe:
+    label: 图片语义观察
+    description: Describe the semantic content of an image — layout, objects, charts, diagrams — beyond OCR.
+
+  layout.understand:
+    label: 布局理解
+    description: Understand document layout — reading order, columns, tables, figure placement.
+
+  chart.interpret:
+    label: 图表解读
+    description: Interpret the data and meaning of charts, graphs, and diagrams.
+
+  evidence.cross_check:
+    label: 证据交叉验证
+    description: Compare evidence from multiple providers to identify conflicts, confirmations, or gaps.
+
+  social.content.fetch:
+    label: 社交平台内容获取
+    description: 从社交平台（小红书、抖音、B站、知乎等）获取公开帖子、文章或视频的正文内容。
+
+  social.search:
+    label: 社交平台搜索
+    description: 在社交平台内按关键词搜索公开内容。
+
+  social.comments.fetch:
+    label: 社交平台评论获取
+    description: 获取社交平台帖子的评论和回复。
+
+  social.creator.fetch:
+    label: 创作者信息获取
+    description: 获取创作者公开资料、粉丝数、作品列表等元数据。
+
+  human.supply:
+    label: 人工补充证据
+    description: Accept evidence manually supplied by a human — pasted text, uploaded screenshots, annotations.

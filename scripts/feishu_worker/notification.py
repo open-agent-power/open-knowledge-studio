@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import functools
 import hashlib
+import json
 from pathlib import Path
 from typing import Any
 
@@ -93,9 +94,23 @@ def send_candidate_review_notification(
         body=body,
         fields=fields,
     )
+    if "????" in message:
+        return {
+            "status": "failed",
+            "reason": "message_content_corrupt_before_send",
+            "identity": config.review_message_identity,
+            "recipient": recipient,
+        }
     idempotency_key = hashlib.sha256(
         f"{state['candidate_id']}:{state['revision']}:{state['candidate_sha256']}".encode("utf-8")
     ).hexdigest()[:50]
+    post_content = json.dumps(
+        {"zh_cn": {"content": [[{"tag": "md", "text": message}]]}},
+        # Keep argv ASCII-only so Windows npm/.cmd launchers cannot corrupt
+        # Chinese text before Node parses the JSON payload.
+        ensure_ascii=True,
+        separators=(",", ":"),
+    )
     _lark = _lark_fn if _lark_fn is not None else functools.partial(_base_lark_json, root=root)
     try:
         envelope = _lark(
@@ -104,23 +119,140 @@ def send_candidate_review_notification(
             "+messages-send",
             "--user-id",
             recipient,
-            "--markdown",
-            message,
-            "--idempotency-key",
-            idempotency_key,
             "--as",
             config.review_message_identity,
+            "--msg-type",
+            "post",
+            "--content",
+            post_content,
+            "--idempotency-key",
+            idempotency_key,
             "--format",
             "json",
         )
     except RuntimeError as error:
         return {"status": "failed", "error": str(error)[:500]}
     data = envelope.get("data") if isinstance(envelope.get("data"), dict) else {}
+    message_id = data.get("message_id") or envelope.get("message_id")
+    chat_id = data.get("chat_id") or envelope.get("chat_id")
+    actual_identity = str(envelope.get("identity") or "").strip()
+    if actual_identity and actual_identity != config.review_message_identity:
+        return {
+            "status": "failed",
+            "reason": "message_identity_mismatch",
+            "message_id": message_id,
+            "chat_id": chat_id,
+            "identity": actual_identity,
+            "requested_identity": config.review_message_identity,
+            "recipient": recipient,
+            "idempotency_key": idempotency_key,
+        }
+    if not message_id:
+        return {
+            "status": "failed",
+            "reason": "message_id_missing",
+            "identity": actual_identity or config.review_message_identity,
+            "recipient": recipient,
+            "idempotency_key": idempotency_key,
+        }
+    try:
+        verification = _lark(
+            config,
+            "im",
+            "+messages-mget",
+            "--message-ids",
+            str(message_id),
+            "--as",
+            config.review_message_identity,
+            "--no-reactions",
+            "--format",
+            "json",
+        )
+    except RuntimeError as error:
+        return {
+            "status": "failed",
+            "reason": "message_verification_failed",
+            "message_id": message_id,
+            "chat_id": chat_id,
+            "identity": actual_identity or config.review_message_identity,
+            "recipient": recipient,
+            "idempotency_key": idempotency_key,
+            "error": str(error)[:500],
+        }
+    verification_data = (
+        verification.get("data")
+        if isinstance(verification.get("data"), dict)
+        else {}
+    )
+    messages = (
+        verification_data.get("messages")
+        if isinstance(verification_data.get("messages"), list)
+        else []
+    )
+    verified_message = next(
+        (
+            item
+            for item in messages
+            if isinstance(item, dict) and item.get("message_id") == message_id
+        ),
+        None,
+    )
+    sender = (
+        verified_message.get("sender")
+        if isinstance(verified_message, dict)
+        and isinstance(verified_message.get("sender"), dict)
+        else {}
+    )
+    sender_type = str(sender.get("sender_type") or "").strip()
+    verified_content = (
+        str(verified_message.get("content") or "")
+        if isinstance(verified_message, dict)
+        else ""
+    )
+    expected_sender_types = (
+        {"app", "bot"}
+        if config.review_message_identity == "bot"
+        else {"user"}
+    )
+    verified_chat_id = (
+        verified_message.get("chat_id")
+        if isinstance(verified_message, dict)
+        else None
+    )
+    if (
+        verified_message is None
+        or sender_type not in expected_sender_types
+        or (chat_id and verified_chat_id != chat_id)
+    ):
+        return {
+            "status": "failed",
+            "reason": "message_delivery_mismatch",
+            "message_id": message_id,
+            "chat_id": chat_id,
+            "identity": actual_identity or config.review_message_identity,
+            "sender_type": sender_type or None,
+            "recipient": recipient,
+            "idempotency_key": idempotency_key,
+        }
+    if verified_content != message:
+        return {
+            "status": "failed",
+            "reason": "message_content_mismatch",
+            "message_id": message_id,
+            "chat_id": chat_id,
+            "identity": actual_identity or config.review_message_identity,
+            "sender_type": sender_type,
+            "recipient": recipient,
+            "idempotency_key": idempotency_key,
+        }
     return {
         "status": "sent",
-        "message_id": data.get("message_id") or envelope.get("message_id"),
-        "chat_id": data.get("chat_id") or envelope.get("chat_id"),
-        "identity": config.review_message_identity,
+        "message_id": message_id,
+        "chat_id": chat_id,
+        "identity": actual_identity or config.review_message_identity,
+        "sender_type": sender_type,
+        "delivery_verified": True,
+        "content_verified": True,
         "recipient": recipient,
         "idempotency_key": idempotency_key,
     }

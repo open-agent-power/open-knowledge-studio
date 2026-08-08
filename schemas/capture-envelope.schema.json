@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-knowledge-studio.local/schemas/capture-envelope-v0.2.json",
+  "title": "OKS Capture Envelope v0.2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "capture_id",
+    "source_type",
+    "source_uri",
+    "captured_at",
+    "submitted_by",
+    "user_note",
+    "attachments",
+    "content_hash",
+    "capture_adapter"
+  ],
+  "properties": {
+    "schema_version": {"const": "oks-capture-envelope/v0.2"},
+    "capture_id": {"type": "string", "minLength": 1},
+    "capture_revision": {"type": "integer", "minimum": 1, "default": 1},
+    "source_type": {"enum": ["feishu_base", "browser", "obsidian", "local", "remote_api"]},
+    "source_uri": {"type": "string", "minLength": 1},
+    "captured_at": {"type": "string", "format": "date-time"},
+    "submitted_by": {"type": ["string", "null"]},
+    "user_note": {"type": ["string", "null"]},
+    "content": {"type": ["string", "null"]},
+    "source_snapshot": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["final_url", "content_type", "size", "sha256"],
+      "properties": {
+        "kind": {"enum": ["content", "reference"]},
+        "content_hash_status": {"enum": ["verified", "unavailable"]},
+        "final_url": {"type": "string", "minLength": 1},
+        "content_type": {"type": ["string", "null"]},
+        "size": {"type": "integer", "minimum": 0},
+        "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+      }
+    },
+    "content_hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "hash_algorithm": {"const": "sha256-canonical-json-v1"},
+    "source_record": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "properties": {
+        "base_token": {"type": "string"},
+        "table_id": {"type": "string"},
+        "record_id": {"type": "string"},
+        "revision": {"type": ["string", "integer", "null"]}
+      }
+    },
+    "attachments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["source_token", "name", "size"],
+        "properties": {
+          "source_token": {"type": "string", "minLength": 1},
+          "name": {"type": "string", "minLength": 1},
+          "size": {"type": "integer", "minimum": 0},
+          "mime_type": {"type": ["string", "null"]},
+          "sha256": {"type": ["string", "null"], "pattern": "^[a-f0-9]{64}$"},
+          "source_uri": {"type": ["string", "null"]}
+        }
+      }
+    },
+    "capture_adapter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "version": {"type": "string", "minLength": 1}
+      }
+    }
+  }
+}

@@ -1,0 +1,26 @@
+id: markitdown
+execution: managed
+label: MarkItDown
+description: Office 文档（.docx, .pptx, .xlsx）和 HTML → Markdown 转换。保留表格结构，公式和嵌入媒体可能丢失。
+
+provides:
+  document.text.extract:
+    maturity: stable
+  document.structure.extract:
+    maturity: validated_partial
+
+requirements:
+  python_package: markitdown
+  env: [OKS_DOCUMENT_PYTHON]
+
+cost:
+  estimated_per_call: 0
+
+known_limits:
+  - 公式可能丢失
+  - 嵌入媒体不保留
+  - PPTX 列表结构弱于原生
+  - 复杂 Office 版式有损
+
+last_validated: 2026-08-05
+legacy_migration: true

@@ -1,4 +1,25 @@
-"""Feishu worker pipeline — process_record orchestration and its direct helpers.
+"""Feishu worker pipeline — ``process_record`` orchestration and helpers.
+
+.. attention:: ARCHITECTURE DEBT — crosses four architecture planes.
+
+    ``process_record()`` currently performs:
+    - Source Plane: read/claim records, extract URLs
+    - Acquisition Plane: probe URLs, download attachments
+    - Perception Plane: select extractors, call ``oks-connector`` CLI
+    - Knowledge Plane: publish candidates, send notifications
+
+    In the target architecture (Phase 6):
+    - The **Agent** owns Perception and Knowledge planes via the ingest skill
+    - The Worker is limited to Source Plane (record read/claim) and
+      Review Control Plane (notification delivery, review consumption)
+    - ``source_router.py`` is deprecated and will be deleted
+    - ``process_record()`` will be decomposed into:
+      ``claim_source()`` + ``await_agent_ingest()`` + ``update_status()``
+    - Candidate publication moves to Agent's ``observation_to_candidate()``
+
+    **Current state**: kept only for Source and Review plane operations.
+    Packaging and orchestration were removed in Phase 6 (v0.4.0).
+    Do NOT add orchestration logic here.
 
 Extracted from feishu_base_worker.py (Round 3 Phase 3).  Imports only from
 feishu_worker.* leaf modules and stdlib.  Never imports feishu_base_worker.
@@ -8,6 +29,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -20,6 +42,7 @@ from feishu_worker.config import WorkerConfig
 from feishu_worker.io_utils import (
     attachment_capability,
     atomic_write_json,
+    atomic_write_text,
     content_type_extension,
     _redact_error_text,
     sha256_file,
@@ -37,14 +60,48 @@ from feishu_worker.capture import (
     capture_envelope,
     envelope_content_hash,
 )
-from feishu_worker.source_router import (
-    _connector_binary as _source_router__connector_binary,
-    package_local_attachment as _source_router_package_local_attachment,
-    package_routed_source as _source_router_package_routed_source,
-    package_public_web as _source_router_package_public_web,
-)
 
-ROOT = Path(__file__).resolve().parents[2]
+# ── Packaging stubs: source_router.py was permanently deleted in Phase 6. ──
+# The old oks-connector packaging pipeline is gone.  These stubs exist only
+# so process_record() still loads — they raise immediately if any code path
+# tries to reach the old packaging logic.  There is NO env-var gate to
+# restore this functionality.  Use Agent-native ingest with oks raw-commit,
+# or checkout Git tag v0.4.0-legacy-final for the old pipeline.
+
+
+def _connector_binary() -> list[str]:
+    raise NotImplementedError(
+        "source_router was permanently deleted in OKS 0.4.0. "
+        "No env-var gate exists. Use Agent-native ingest with oks raw-commit. "
+        "The old code is preserved in Git tag v0.4.0-legacy-final."
+    )
+
+
+def package_local_attachment(*args: Any, **kwargs: Any) -> Any:
+    raise NotImplementedError(
+        "source_router was permanently deleted in OKS 0.4.0. "
+        "No env-var gate exists. Use Agent-native ingest with oks raw-commit."
+    )
+
+
+def package_routed_source(*args: Any, **kwargs: Any) -> Any:
+    raise NotImplementedError(
+        "source_router was permanently deleted in OKS 0.4.0. "
+        "No env-var gate exists. Use Agent-native ingest with oks raw-commit."
+    )
+
+
+def package_public_web(*args: Any, **kwargs: Any) -> Any:
+    raise NotImplementedError(
+        "source_router was permanently deleted in OKS 0.4.0. "
+        "No env-var gate exists. Use Agent-native ingest with oks raw-commit."
+    )
+
+
+ROOT = Path(
+    os.environ.get("OKS_KNOWLEDGE_ROOT")
+    or Path(__file__).resolve().parents[2]
+).expanduser().resolve()
 
 
 # ── Thin wrappers (supply ROOT) ──────────────────────────────────────────
@@ -56,10 +113,6 @@ def lark_json(config: WorkerConfig, *arguments: str) -> dict[str, Any]:
 
 def base_args(config: WorkerConfig) -> list[str]:
     return _base_client_base_args(config)
-
-
-def _connector_binary() -> list[str]:
-    return _source_router__connector_binary(ROOT)
 
 
 # ── Direct helpers for process_record ────────────────────────────────────
@@ -242,26 +295,6 @@ def download_public_source(
     return downloaded, receipt
 
 
-def package_local_attachment(config: WorkerConfig, source: Path, output: Path) -> dict[str, Any]:
-    """Package a local attachment file into a Raw bundle (delegates to feishu_worker.source_router)."""
-    return _source_router_package_local_attachment(config, source, output, root=ROOT)
-
-
-def package_routed_source(config: WorkerConfig, source: str, output: Path) -> dict[str, Any]:
-    """Package a platform-routed source into a Raw bundle (delegates to feishu_worker.source_router)."""
-    return _source_router_package_routed_source(config, source, output, root=ROOT)
-
-
-def package_public_web(
-    config: WorkerConfig,
-    url: str,
-    output: Path,
-    human_context: str,
-) -> dict[str, Any]:
-    """Package a public web page into a Raw bundle (delegates to feishu_worker.source_router)."""
-    return _source_router_package_public_web(config, url, output, human_context, root=ROOT)
-
-
 # ── Shared tail helpers (dedup attachment / public-file / public-web) ──────
 
 
@@ -350,6 +383,7 @@ def process_record(
     fields = record["fields"]
     url = extract_url(fields.get("内容"))
     attachment_descriptors = normalize_attachments(fields.get("附件"))
+    inline_text = str(fields.get("内容") or "").strip()
     run_id = claimed_run_id or f"run-{datetime.now(timezone.utc):%Y%m%dT%H%M%S}-{uuid.uuid4().hex[:8]}"
     capture = capture_envelope(config, record_id, fields)
     source_hash = capture["content_hash"]
@@ -357,6 +391,8 @@ def process_record(
     declared_capability = "web.trafilatura"
     if not url and attachment_descriptors:
         declared_capability, _ = attachment_capability(Path(attachment_descriptors[0]["name"]))
+    elif not url and inline_text:
+        declared_capability = "office.markitdown"
     run = initial_run(run_id, capture, declared_capability)
     atomic_write_json(run_dir / "capture-envelope.json", capture)
     atomic_write_json(run_dir / "processing-run.json", run)
@@ -373,6 +409,84 @@ def process_record(
             "Wiki状态": "none",
         },
     )
+    if not url and not attachment_descriptors and inline_text:
+        source = run_dir / "submitted-content.txt"
+        atomic_write_text(source, inline_text + "\n")
+        capture["source_snapshot"] = {
+            "kind": "content",
+            "content_hash_status": "verified",
+            "final_url": capture["source_uri"],
+            "content_type": "text/plain; charset=utf-8",
+            "size": source.stat().st_size,
+            "sha256": sha256_file(source),
+        }
+        source_hash = envelope_content_hash(capture)
+        capture["content_hash"] = source_hash
+        capture["capture_id"] = f"feishu-{record_id}-{source_hash[:12]}"
+        run["capture_id"] = capture["capture_id"]
+        run["recipe_version"] = "feishu-inline-text-v0.1"
+        run["job"]["capability"] = "office.markitdown"
+        run["inputs"] = [{
+            "dataset_id": capture["capture_id"],
+            "uri": capture["source_uri"],
+            "kind": "capture",
+            "sha256": source_hash,
+        }]
+        run["modalities"]["text"].update({"status": "running", "capability": "office.markitdown"})
+        atomic_write_json(run_dir / "capture-envelope.json", capture)
+        atomic_write_json(run_dir / "processing-run.json", run)
+        _update(
+            config,
+            record_id,
+            {"运行状态": "探测中", "来源哈希": source_hash, "采集模式": "直接文本"},
+        )
+        output = config.output_root / f"feishu-{record_id}-{source_hash[:10]}-inline-text"
+        try:
+            report = _pkg_local(config, source, output)
+            _complete_bundle(
+                config=config,
+                record_id=record_id,
+                run=run,
+                run_dir=run_dir,
+                capture=capture,
+                output=output,
+                report=report,
+                modality_key="text",
+                extra_metadata={"intake_kind": "inline_text"},
+                build_success_patch=lambda q: {
+                    "运行状态": "Raw就绪",
+                    "采集模式": "直接文本",
+                    "Raw Bundle": str(output),
+                    "质量状态": q,
+                    "错误码": None,
+                    "错误说明": None,
+                    "总结": f"直接文本 Raw Bundle v0.2 已生成并通过校验；质量状态={q}。",
+                },
+                _finalize=_finalize,
+                _update=_update,
+                finalize_source=source,
+            )
+        except Exception as error:
+            _fail_bundle(
+                config=config,
+                record_id=record_id,
+                run=run,
+                run_dir=run_dir,
+                error=error,
+                failure_code="INLINE_TEXT_PROCESSING_FAILED",
+                build_failure_patch=lambda code, msg: {
+                    "运行状态": "可重试失败",
+                    "采集模式": "直接文本",
+                    "错误码": code,
+                    "错误说明": msg[:500],
+                    "质量状态": "failed",
+                    "Raw Bundle": None,
+                    "总结": f"直接文本未生成 Raw：{msg}"[:1000],
+                },
+                _update=_update,
+            )
+        return run
+
     if not url and attachment_descriptors:
         try:
             downloaded = _dl_att(config, record_id, run_dir / "source-downloads")

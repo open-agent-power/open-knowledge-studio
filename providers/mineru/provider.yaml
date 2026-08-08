@@ -1,0 +1,27 @@
+id: mineru
+execution: managed
+label: MinerU
+description: 重型 PDF 布局解析管线（mineru[pipeline] >= 3.4.4）。提供文本层、布局结构、公式识别和页面渲染。依赖约 300MB，不进入默认轻量安装。
+
+provides:
+  document.text.extract:
+    maturity: validated
+  document.structure.extract:
+    maturity: validated
+  document.render:
+    maturity: validated
+
+requirements:
+  python_package: mineru
+  env: [OKS_MINERU_PYTHON]
+
+cost:
+  estimated_per_call: 0
+
+known_limits:
+  - 依赖体积大（~300MB），不进入默认安装
+  - 需要 GPU 或较长时间（W3C PDF 超时 ~244s）
+  - 子进程清理不完整（端口 59072 残留）
+  - 按需安装：oks capability install pdf --yes
+
+last_validated: 2026-08-03

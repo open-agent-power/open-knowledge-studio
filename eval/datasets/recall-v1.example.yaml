@@ -1,0 +1,15 @@
+schema_version: recall-case/v1
+dataset_id: example-recall
+version: "1"
+description: >-
+  Format example only. Replace the slugs and relevance judgments with a
+  reviewed project dataset before using metrics as competition evidence.
+cases:
+  - case_id: example-001
+    query: "How should an agent record a failed tool action?"
+    goal: none
+    scope: computing
+    type_filter: anti-pattern
+    relevant:
+      - replace-with-reviewed-wiki-slug
+    forbidden: []

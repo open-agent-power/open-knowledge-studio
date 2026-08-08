@@ -11,8 +11,76 @@ import os
 
 _TEXTS: dict[str, dict[str, str]] = {
     "init_ready": {
-        "zh": "知识库就绪。下一步：",
-        "en": "Instance ready. Next steps:",
+        "zh": "OKS 已准备完成。",
+        "en": "OKS is ready.",
+    },
+    "init_first_prompt": {
+        "zh": "现在可对 Agent 说：",
+        "en": "Now you can say to your Agent:",
+    },
+    "init_local_capabilities": {
+        "zh": "本地能力：",
+        "en": "Local capabilities:",
+    },
+    "init_remote_capabilities": {
+        "zh": "远程能力：",
+        "en": "Remote capabilities:",
+    },
+    "status_configured": {
+        "zh": "已配置",
+        "en": "Configured",
+    },
+    "status_not_configured": {
+        "zh": "未配置",
+        "en": "Not configured",
+    },
+    "status_not_installed": {
+        "zh": "未安装",
+        "en": "Not installed",
+    },
+    "status_runtime_only": {
+        "zh": "需要 Agent 运行时验证",
+        "en": "Requires Agent runtime verification",
+    },
+    "status_blocked": {
+        "zh": "当前不可用",
+        "en": "Currently unavailable",
+    },
+    "status_experimental": {
+        "zh": "实验性",
+        "en": "Experimental",
+    },
+    "firecrawl_setup_hint": {
+        "zh": "设置环境变量 FIRECRAWL_API_KEY=<你的密钥>",
+        "en": "Set FIRECRAWL_API_KEY=<your key> as environment variable",
+    },
+    "agentkey_setup_hint": {
+        "zh": "在 Claude Code 中配置 AgentKey MCP 服务器。本地无法验证 AgentKey 可用性。",
+        "en": "Configure AgentKey MCP server in Claude Code. Local verification not available.",
+    },
+    "mediacrawler_setup_hint": {
+        "zh": "需自行安装 MediaCrawler。不捆绑进 OKS。",
+        "en": "Install MediaCrawler separately. Not bundled with OKS.",
+    },
+    "init_remote_note": {
+        "zh": "Firecrawl 用于普通网页；AgentKey 用于受限平台。两者独立配置，都不影响本地文件摄入。",
+        "en": "Firecrawl for public web; AgentKey for restricted platforms. Both are optional — local file ingest always works.",
+    },
+    "init_no_remote": {
+        "zh": "当前仅本地文本能力可用。配置 Firecrawl 后可摄入网页。AgentKey 用于受限平台（独立配置）。",
+        "en": "Only local text capability available. Configure Firecrawl for web content. AgentKey for restricted platforms (separate config).",
+    },
+    "init_prompt_local_only": {
+        "zh": "把这份文档收录进 OKS。",
+        "en": "Ingest this document into OKS.",
+    },
+    "init_prompt_with_pdf": {
+        "zh": "把这个 PDF 收录进 OKS，并生成待审核知识。",
+        "en": "Ingest this PDF into OKS and generate a reviewable candidate.",
+    },
+    "init_prompt_with_web": {
+        "zh": "把这个网页收录进 OKS。",
+        "en": "Ingest this web page into OKS.",
     },
     "init_step_install": {
         "zh": "  oks capability install watch --yes     # 安装视频/音频提取能力",
@@ -35,8 +103,8 @@ _TEXTS: dict[str, dict[str, str]] = {
         "en": "Connector module not found",
     },
     "connector_missing_hint": {
-        "zh": "`scripts/raw_bundle_adapter.py` 模块导入失败。请确认 OKS 安装包含 scripts/ 目录。",
-        "en": "The `scripts/raw_bundle_adapter.py` module could not be imported. Ensure the OKS installation includes the scripts/ directory.",
+        "zh": "oks ingest 在纯终端中需 Agent 接管。请使用支持的 Agent Host (Claude Code / Codex) 并运行 /ingest 技能。",
+        "en": "oks ingest in a pure terminal requires an Agent. Use a supported Agent Host (Claude Code / Codex) and run the /ingest skill.",
     },
     "action_required": {
         "zh": "需要操作",
@@ -74,6 +142,10 @@ _TEXTS: dict[str, dict[str, str]] = {
         "zh": "{name} 安装失败（exit {code}）",
         "en": "{name} installation failed (exit {code})",
     },
+    "capability_verify_failed": {
+        "zh": "{name} 安装后仍不可用：目标 Python 无法导入所需模块。",
+        "en": "{name} remains unavailable after installation: the target Python cannot import the required module.",
+    },
     "capability_already": {
         "zh": "{name} 已安装，无需重复操作。",
         "en": "{name} is already installed.",
@@ -97,6 +169,26 @@ _TEXTS: dict[str, dict[str, str]] = {
     "pipx_missing": {
         "zh": "pipx 未安装",
         "en": "pipx is not installed",
+    },
+    "init_always_available": {
+        "zh": "始终可用：",
+        "en": "Always available:",
+    },
+    "cap_markdown_text": {
+        "zh": "收录 Markdown / 文本",
+        "en": "Ingest Markdown / text",
+    },
+    "cap_agent_multimodal": {
+        "zh": "使用 Agent 理解图片和网页（需要支持多模态的模型）",
+        "en": "Agent multimodal understanding — images and web pages (requires multimodal model)",
+    },
+    "init_can_do_now": {
+        "zh": "现在可以直接：",
+        "en": "Available now:",
+    },
+    "init_can_enable": {
+        "zh": "按需可以启用：",
+        "en": "Available on demand:",
     },
 }
 

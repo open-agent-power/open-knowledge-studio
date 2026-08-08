@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-knowledge-studio.local/schemas/processing-run-v0.2.json",
+  "title": "OKS Processing Run v0.2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "run_id",
+    "capture_id",
+    "recipe_version",
+    "job",
+    "status",
+    "started_at",
+    "finished_at",
+    "inputs",
+    "outputs",
+    "modalities",
+    "warnings",
+    "errors"
+  ],
+  "properties": {
+    "schema_version": {"const": "oks-processing-run/v0.2"},
+    "run_id": {"type": "string", "minLength": 1},
+    "parent_run_id": {"type": ["string", "null"]},
+    "capture_id": {"type": "string", "minLength": 1},
+    "recipe_version": {"type": "string", "minLength": 1},
+    "job": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["namespace", "name", "version"],
+      "properties": {
+        "namespace": {"type": "string", "minLength": 1},
+        "name": {"type": "string", "minLength": 1},
+        "version": {"type": "string", "minLength": 1},
+        "capability": {"type": ["string", "null"]}
+      }
+    },
+    "status": {"enum": ["queued", "running", "complete", "partial", "failed", "cancelled"]},
+    "failure_disposition": {"enum": ["none", "needs_user_auth", "needs_user_action", "retryable", "final"]},
+    "started_at": {"type": "string", "format": "date-time"},
+    "finished_at": {"type": ["string", "null"], "format": "date-time"},
+    "inputs": {"type": "array", "items": {"$ref": "#/$defs/dataset"}},
+    "outputs": {"type": "array", "items": {"$ref": "#/$defs/dataset"}},
+    "modalities": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["status"],
+        "properties": {
+          "status": {"enum": ["pending", "running", "succeeded", "partial", "failed", "skipped"]},
+          "capability": {"type": ["string", "null"]},
+          "error_code": {"type": ["string", "null"]},
+          "evidence_count": {"type": "integer", "minimum": 0}
+        }
+      }
+    },
+    "warnings": {"type": "array", "items": {"type": "string"}},
+    "errors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "message"],
+        "properties": {
+          "code": {"type": "string"},
+          "message": {"type": "string"},
+          "modality": {"type": ["string", "null"]}
+        }
+      }
+    }
+  },
+  "$defs": {
+    "dataset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dataset_id", "uri", "kind"],
+      "properties": {
+        "dataset_id": {"type": "string"},
+        "uri": {"type": "string"},
+        "kind": {"enum": ["capture", "source", "artifact", "bundle"]},
+        "sha256": {"type": ["string", "null"], "pattern": "^[a-f0-9]{64}$"}
+      }
+    }
+  }
+}
