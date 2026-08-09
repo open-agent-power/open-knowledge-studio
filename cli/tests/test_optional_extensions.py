@@ -28,23 +28,23 @@ def test_capability_registry_entries_are_valid():
             )
 
 
-def test_ingest_prepare_shows_source_info(monkeypatch, tmp_path):
-    """`oks ingest prepare` creates workspace and shows source info."""
+def test_ingest_shows_source_info(monkeypatch, tmp_path):
+    """`oks ingest` creates the workspace and shows source info."""
     f = tmp_path / "test.md"
     f.write_text("# Hello\n\nSample content.", encoding="utf-8")
     result = runner.invoke(cli.app, [
-        "ingest", "prepare", str(f),
+        "ingest", str(f),
         "--kb-root", str(tmp_path),
     ])
     assert result.exit_code == 0, result.output
     assert "test.md" in result.output or "Source:" in result.output
 
 
-def test_ingest_group_help_no_args():
-    """`oks ingest` with no args shows help (group requires subcommand)."""
+def test_ingest_requires_source():
+    """`oks ingest` requires a source argument."""
     result = runner.invoke(cli.app, ["ingest"])
-    assert result.exit_code == 2  # no_args_is_help
-    assert "prepare" in result.output
+    assert result.exit_code == 2
+    assert "{source}" in result.output
 
 
 def test_connector_command_reports_none_after_legacy_deletion():
@@ -52,12 +52,12 @@ def test_connector_command_reports_none_after_legacy_deletion():
     assert cli._connector_command() is None
 
 
-def test_ingest_prepare_json_output(monkeypatch, tmp_path):
-    """`oks ingest prepare --json` outputs valid JSON with expected keys."""
+def test_ingest_json_output(monkeypatch, tmp_path):
+    """`oks ingest --json` outputs valid JSON with expected keys."""
     f = tmp_path / "sample.md"
     f.write_text("content", encoding="utf-8")
     result = runner.invoke(cli.app, [
-        "ingest", "prepare", str(f),
+        "ingest", str(f),
         "--kb-root", str(tmp_path),
     ])
     assert result.exit_code == 0, result.output
@@ -67,10 +67,10 @@ def test_ingest_prepare_json_output(monkeypatch, tmp_path):
         assert key in data, f"Missing key: {key}"
 
 
-def test_ingest_prepare_rejects_bad_source(tmp_path):
-    """`oks ingest prepare` for non-existent file: succeeds but text_ready=False."""
+def test_ingest_rejects_bad_source(tmp_path):
+    """`oks ingest` for a non-existent file succeeds with text_ready=False."""
     result = runner.invoke(cli.app, [
-        "ingest", "prepare", "/nonexistent/file.xyz",
+        "ingest", "/nonexistent/file.xyz",
         "--kb-root", str(tmp_path),
     ])
     assert result.exit_code == 0

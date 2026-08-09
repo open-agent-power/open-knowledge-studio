@@ -22,7 +22,7 @@
       <text x="600" y="231" text-anchor="middle" font-size="14" font-weight="700" fill="#5d4037">.md / .txt？</text>
 
       <rect x="85" y="330" width="400" height="58" rx="8" fill="#e8f5e9" stroke="#66bb6a" stroke-width="1.5"/>
-      <text x="285" y="356" text-anchor="middle" font-size="14" font-weight="700" fill="#2e7d32">oks ingest prepare</text>
+<text x="285" y="356" text-anchor="middle" font-size="14" font-weight="700" fill="#2e7d32">oks ingest</text>
       <text x="285" y="376" text-anchor="middle" font-size="12" fill="#558b2f">text_ready=true</text>
       <rect x="85" y="430" width="400" height="58" rx="8" fill="#e8f5e9" stroke="#66bb6a" stroke-width="1.5"/>
       <text x="285" y="456" text-anchor="middle" font-size="14" font-weight="700" fill="#2e7d32">所有协议文件预填充完成</text>
@@ -38,7 +38,7 @@
       <text x="285" y="776" text-anchor="middle" font-size="12" fill="#795548">与 Protocol 路径在 drafts 汇合</text>
 
       <rect x="715" y="330" width="400" height="58" rx="8" fill="#e3f2fd" stroke="#42a5f5" stroke-width="1.5"/>
-      <text x="915" y="356" text-anchor="middle" font-size="14" font-weight="700" fill="#1565c0">oks ingest prepare</text>
+<text x="915" y="356" text-anchor="middle" font-size="14" font-weight="700" fill="#1565c0">oks ingest</text>
       <text x="915" y="376" text-anchor="middle" font-size="12" fill="#1976d2">Recipe + candidate_providers + 协议骨架</text>
       <rect x="715" y="430" width="400" height="58" rx="8" fill="#e3f2fd" stroke="#42a5f5" stroke-width="1.5"/>
       <text x="915" y="456" text-anchor="middle" font-size="14" font-weight="700" fill="#1565c0">Agent 选 Provider + 执行</text>

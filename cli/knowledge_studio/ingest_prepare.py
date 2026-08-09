@@ -1,4 +1,4 @@
-"""``oks ingest prepare`` — generate protocol skeleton for Agent ingestion.
+"""``oks ingest`` — generate protocol skeleton for Agent ingestion.
 
 Core principle: the Agent should fill in *evidence content*, not protocol
 plumbing.  This module handles source detection, workspace creation, and
@@ -349,7 +349,7 @@ def prepare_ingest(source: str, kb_root: Path | None = None) -> dict[str, Any]:
         ],
         "evidence": manifest["evidence_records"],
         "modalities": manifest["modalities"],
-        "agent_notes": "Pre-filled by oks ingest prepare" if is_text else None,
+        "agent_notes": "Pre-filled by oks ingest" if is_text else None,
     }
 
     # ── Write files ──
@@ -453,7 +453,7 @@ def _load_recipe(modality: str) -> str | None:
 
     Recipes live in ``knowledge_studio/recipes/`` inside the installed
     package — this is the canonical source.  The Agent receives recipe
-    content through ``oks ingest prepare`` output rather than reading
+    content through ``oks ingest`` output rather than reading
     a file path that does not exist in the user's knowledge base.
     """
     try:

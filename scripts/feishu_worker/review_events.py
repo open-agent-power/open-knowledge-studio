@@ -367,8 +367,8 @@ def review_candidate(
             candidate_path,
             reviewed_body,
             {
-                "outcome": "success",
-                "decision_correct": True,
+                "outcome": "accepted",
+                "review_depth": "light",
                 "lesson": comment,
                 "reviewed_at": str(reviewed_at),
             },

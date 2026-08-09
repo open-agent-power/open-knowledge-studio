@@ -25,7 +25,7 @@
 
 ```text
 Agent Host (Codex / Claude Code)
-  → oks ingest prepare
+  → oks ingest
   → 读取 Recipe、candidate_providers 和协议骨架
   → 选择已注册 Provider 并执行（本地、远程或人工）
   → work/<provider>/ + EvidenceFragment + evidence-manifest.json
@@ -49,7 +49,7 @@ oks capability doctor --verbose
 远程 Provider（Firecrawl、AgentKey、remote-asr 等）不通过 `oks capability install` 安装；它们需要用户自己的 API Key / OAuth / MCP 配置，并在证据中保留 provenance。MediaCrawler、Browser 和 remote-asr 仍是实验性或受环境约束的路径，不能写成默认支持。
 
 **当前用户路径：**
-- **Agent 路径**：`/ingest` → `oks ingest prepare` → Provider → `oks raw-commit` → `/promote` → Wiki
+- **Agent 路径**：`/ingest` → `oks ingest` → Provider → `oks raw-commit` → `/promote` → Wiki
 - **本地快速路径**：`.md/.txt` → `text_ready=true` → `oks raw-commit`，无需 Provider 执行
 - **飞书路径**：作为提交与审核入口，由 Agent/worker 编排；不是绕过 provenance 的另一套摄入协议
 
@@ -302,7 +302,7 @@ OpenAlex API → 学术论文（完全免费、CC0）
 
 ```
 1. Source     Markdown 文章："AI Agent Memory Systems in 2026"
-2. Raw        `oks ingest prepare` → Agent/Provider evidence → `oks raw-commit` → ✅ Raw Bundle (ok 状态)
+2. Raw        `oks ingest` → Agent/Provider evidence → `oks raw-commit` → ✅ Raw Bundle (ok 状态)
 3. Draft      Agent 蒸馏 → drafts/agent-memory-gap-2026.md
 4. Promote    oks drafts promote → ✅ Wiki page (score=0.70, tier=hot)
 5. Recall     oks recall "human review gate agent memory" → 🥇 首条命中！
@@ -378,7 +378,7 @@ OpenAlex API → 学术论文（完全免费、CC0）
 
 **当前状态：**
 - `oks capability install` 已实现按需安装和隔离环境
-- `oks ingest prepare` 已输出 Recipe、candidate_providers 和协议骨架
+- `oks ingest` 已输出 Recipe、candidate_providers 和协议骨架
 - `oks raw-commit` 已把 provenance 完整性作为机械检查
 - Provider 的选择和执行由 Agent 负责；CLI 不隐式替用户调用远程服务
 
@@ -445,7 +445,7 @@ metadata:
 **CLI 本身不适合非技术用户，但 OKS 不需要让非技术用户用 CLI。** 当前 CLI 是 Agent/管理员的协议与能力管理入口，面向普通用户的低摩擦入口仍属于后续产品化工作。
 
 正确的架构：
-- **CLI** = 管理员/技术用户的配置入口（`oks init`, `oks ingest prepare`, `oks capability install`）
+- **CLI** = 管理员/技术用户的配置入口（`oks init`, `oks ingest`, `oks capability install`）
 - **浏览器扩展/Watch Folder/Bot** = 普通用户的日常使用入口
 - 技术用户配置好 Workspace 后，普通用户不需要打开终端
 
@@ -478,7 +478,7 @@ oks watch ~/Knowledge/Inbox
 # 把任何文件扔进去 → 自动 ingest → Agent 处理 → Drafts → 人工审核 → Wiki
 ```
 
-这是未来可做的最低摩擦入口。当前稳定入口仍是 Agent 调用 `/ingest`，或由用户把文件/URL交给 Agent 后执行 `oks ingest prepare`。
+这是未来可做的最低摩擦入口。当前稳定入口仍是 Agent 调用 `/ingest`，或由用户把文件/URL交给 Agent 后执行 `oks ingest`。
 
 **第三步（短期，最高 ROI）：浏览器扩展**
 
@@ -1002,13 +1002,13 @@ oks capability install formula --yes
 oks capability install feishu --yes
 ```
 
-远程 Provider 不靠安装全部本地依赖获得：用户在 Agent Host 中配置 Firecrawl 或 AgentKey 的 MCP/API/OAuth，然后由 `oks ingest prepare` 返回的 `candidate_providers` 指示可选路径。密钥、是否允许远程处理和敏感数据策略必须由用户明确决定。
+远程 Provider 不靠安装全部本地依赖获得：用户在 Agent Host 中配置 Firecrawl 或 AgentKey 的 MCP/API/OAuth，然后由 `oks ingest` 返回的 `candidate_providers` 指示可选路径。密钥、是否允许远程处理和敏感数据策略必须由用户明确决定。
 
 ### 12.3 当前用户交互路径
 
 ```text
 用户给 Agent 一个 URL 或文件
-  → Agent 调用 oks ingest prepare
+  → Agent 调用 oks ingest
   → 用户/Agent 确认 recipe、provider 和远程处理策略
   → Provider 执行，原始输出保存到 work/<provider>/
   → Agent 填 evidence-manifest.json

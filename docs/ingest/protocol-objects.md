@@ -19,9 +19,9 @@ Agent-Native Ingest 路径涉及四个协议对象和一个产物。本文说明
 
 | 对象 | 谁创建 | 谁填充 | 关系 |
 |------|--------|--------|------|
-| **SourceEnvelope** | `oks ingest prepare` | CLI 预填充所有确定性字段 | 1 个源 → 1 个 Envelope |
-| **EvidenceFragment** | `oks ingest prepare`（骨架） | Agent 填 evidence 内容 | 1 个 Provider → 1 个 Fragment |
-| **EvidenceManifest** | `oks ingest prepare`（骨架） | Agent 汇总所有 Fragment | 1 个源 → 1 个 Manifest，引用 N 个 Fragment |
+| **SourceEnvelope** | `oks ingest` | CLI 预填充所有确定性字段 | 1 个源 → 1 个 Envelope |
+| **EvidenceFragment** | `oks ingest`（骨架） | Agent 填 evidence 内容 | 1 个 Provider → 1 个 Fragment |
+| **EvidenceManifest** | `oks ingest`（骨架） | Agent 汇总所有 Fragment | 1 个源 → 1 个 Manifest，引用 N 个 Fragment |
 | **Raw Bundle v0.2** | `oks raw-commit` | CLI 组装 | 1 个 Manifest → 1 个 Bundle |
 
 ## SourceEnvelope

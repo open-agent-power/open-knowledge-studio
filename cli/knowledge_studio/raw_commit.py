@@ -445,7 +445,7 @@ def _check_fragment_manifest_consistency(
 
 
 # Providers that do NOT produce external work/ output files.
-# text-read: pre-filled by ingest prepare, no external tool execution
+# text-read: pre-filled by oks ingest, no external tool execution
 # agent-runtime: Agent's own multimodal observation, no external tool
 # runtime-tool: ad-hoc tools (curl, playwright), not registered providers
 # human: manually supplied by user
@@ -640,7 +640,7 @@ def _assemble_bundle(
         #   1. media_type (explicit)
         #   2. artifact kind  (primary_text → text)
         #   3. file extension  (common text formats)
-        media_type = primary.get("media_type", "")
+        media_type = primary.get("media_type") or ""
         art_kind = primary.get("kind", "")
         ext = primary["path"].rsplit(".", 1)[-1].lower() if "." in primary["path"] else ""
         _TEXT_EXTENSIONS: frozenset[str] = frozenset({

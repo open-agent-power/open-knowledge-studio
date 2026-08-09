@@ -112,10 +112,6 @@ app.add_typer(hook_app, name="hook")
 app.add_typer(eval_app, name="eval")
 app.add_typer(trace_app, name="trace")
 app.add_typer(feishu_app, name="feishu")
-ingest_app = typer.Typer(
-    help="Agent-native ingestion preparation and execution.",
-    no_args_is_help=True,
-)
 security_app = typer.Typer(
     help="Credential redaction and security utilities.",
     no_args_is_help=True,
@@ -125,7 +121,6 @@ schema_app = typer.Typer(
     no_args_is_help=True,
 )
 app.add_typer(capability_app, name="capability")
-app.add_typer(ingest_app, name="ingest")
 app.add_typer(security_app, name="security")
 app.add_typer(schema_app, name="schema")
 
@@ -286,9 +281,9 @@ def _recommended_capability(source: str, *, pdf_engine: str = "pdf-lite") -> str
     return "watch"  # video, audio, and platform URLs all route to watch
 
 
-@ingest_app.command("prepare")
-def ingest_prepare(
-    source: str = typer.Argument(..., help="Local file or URL to prepare for ingestion"),
+@app.command("ingest")
+def ingest(
+    source: str = typer.Argument(..., help="Local file or URL to ingest"),
     kb_root: Optional[str] = typer.Option(
         None, "--kb-root", help="Knowledge base root (default: from OKS_ROOT or config)",
     ),
@@ -296,7 +291,7 @@ def ingest_prepare(
         True, "--json/--text", help="Output as JSON",
     ),
 ):
-    """Prepare a source for Agent ingestion — generate protocol skeleton.
+    """Ingest a source — generate the Agent-native protocol skeleton.
 
     Creates a run workspace under .oks/runs/ and generates
     source-envelope.json, evidence-manifest.json, and evidence fragments
@@ -314,17 +309,17 @@ def ingest_prepare(
     if json_output:
         import json as _json
         print(_json.dumps(result, ensure_ascii=False, indent=2))
-    else:
-        console.print(Panel.fit(
-            f"[bold]Source:[/bold] {source}\n"
-            f"[bold]Modality:[/bold] {result['modality']}\n"
-            f"[bold]Run ID:[/bold] {result['run_id']}\n"
-            f"[bold]Manifest dir:[/bold] {result['manifest_dir']}\n\n"
-            + "\n".join(f"  [green]+[/green] {f}" for f in result["files_generated"])
-            + f"\n\n[bold cyan]{result['next_step']}[/bold cyan]",
-            title="Ingest Prepared",
-            border_style="green" if result.get("text_ready") else "yellow",
-        ))
+        return
+    console.print(Panel.fit(
+        f"[bold]Source:[/bold] {source}\n"
+        f"[bold]Modality:[/bold] {result['modality']}\n"
+        f"[bold]Run ID:[/bold] {result['run_id']}\n"
+        f"[bold]Manifest dir:[/bold] {result['manifest_dir']}\n\n"
+        + "\n".join(f"  [green]+[/green] {f}" for f in result["files_generated"])
+        + f"\n\n[bold cyan]{result['next_step']}[/bold cyan]",
+        title="Ingest Prepared",
+        border_style="green" if result.get("text_ready") else "yellow",
+    ))
 
 
 def _feishu_worker_path() -> Path | None:

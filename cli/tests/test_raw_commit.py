@@ -28,6 +28,9 @@ def _sha_file(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+_MEDIA_TYPE_UNSET = object()
+
+
 def _make_manifest(
     art_dir: Path,
     primary_name: str,
@@ -36,6 +39,7 @@ def _make_manifest(
     supp: tuple[tuple[str, str, str], ...] = (),
     fragment_evidence: list[dict] | None = None,
     create_fragment: bool = True,
+    media_type: str | None | object = _MEDIA_TYPE_UNSET,
 ) -> tuple[Path, str]:
     """Build a minimal Agent-submitted manifest directory.
 
@@ -76,6 +80,15 @@ def _make_manifest(
             }
         )
     )
+    primary_artifact = {
+        "artifact_id": primary_name,
+        "kind": "primary_text",
+        "path": primary_name,
+        "sha256": ph,
+    }
+    if media_type is not _MEDIA_TYPE_UNSET:
+        primary_artifact["media_type"] = media_type
+
     (m / "evidence-manifest.json").write_text(
         json.dumps(
             {
@@ -84,12 +97,7 @@ def _make_manifest(
                 "source_id": sid,
                 "status": "complete",
                 "fragment_refs": ["f1"],
-                "primary_artifact": {
-                    "artifact_id": primary_name,
-                    "kind": "primary_text",
-                    "path": primary_name,
-                    "sha256": ph,
-                },
+                "primary_artifact": primary_artifact,
                 "supplementary_artifacts": supp_list,
                 "evidence_records": evidence_records,
                 "modalities": {
@@ -548,6 +556,42 @@ def test_primary_text_without_media_type_preserves_content():
         f"content.md must NOT contain 'Binary artifact' placeholder. "
         f"Got: {content_md[:200]}"
     )
+
+
+@pytest.mark.parametrize("media_type", [None, "text/plain", "application/pdf"])
+def test_primary_media_type_values_are_safe(media_type):
+    """Null and explicit media types must never crash raw-commit."""
+    base = Path(tempfile.mkdtemp(prefix="t-media-type-"))
+    art = base / "artifacts"
+    art.mkdir()
+    m, _ = _make_manifest(
+        art,
+        "source.txt",
+        "Source content\n",
+        [{"evidence_id": "e1", "artifact_id": "source.txt", "kind": "text",
+          "method": "read", "locator": {"kind": "document"}}],
+        media_type=media_type,
+    )
+
+    r = _run_commit(m, base / "out")
+    assert r.returncode == 0, f"media_type={media_type!r}: {r.stdout[:300]}"
+
+
+def test_primary_media_type_key_missing_is_safe():
+    """The legacy manifest shape without a media_type key must still commit."""
+    base = Path(tempfile.mkdtemp(prefix="t-media-type-missing-"))
+    art = base / "artifacts"
+    art.mkdir()
+    m, _ = _make_manifest(
+        art,
+        "source.txt",
+        "Source content\n",
+        [{"evidence_id": "e1", "artifact_id": "source.txt", "kind": "text",
+          "method": "read", "locator": {"kind": "document"}}],
+    )
+
+    r = _run_commit(m, base / "out")
+    assert r.returncode == 0, f"missing media_type: {r.stdout[:300]}"
 
 
 def test_schema_mirrors_identical():

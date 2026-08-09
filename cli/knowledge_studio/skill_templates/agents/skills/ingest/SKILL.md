@@ -9,7 +9,7 @@ Agent is the orchestrator.  OKS provides capability; Agent decides what to do.
 ## Flow
 
 ```
-oks ingest prepare <source>  →  SourceEnvelope + Manifest skeleton
+oks ingest <source>  →  SourceEnvelope + Manifest skeleton
 → Judge modality → Read Recipe → Query capability status → Select minimum sufficient provider set
 → Execute provider cluster (one execution → multiple evidence fragments)
 → Fill evidence_records  →  oks raw commit
@@ -18,7 +18,7 @@ oks ingest prepare <source>  →  SourceEnvelope + Manifest skeleton
 
 ## Step 0: Prepare (use the CLI — do NOT hand-craft protocol JSON)
 
-Run `oks ingest prepare <source>` to create the workspace and generate
+Run `oks ingest <source>` to create the workspace and generate
 the protocol skeleton (source-envelope.json, evidence-manifest.json,
 artifacts/).  This command fills all deterministic fields — source_id,
 content_hash, schema_version, timestamps, artifact hashes — so the
@@ -45,7 +45,7 @@ schema requirements when filling evidence records.
 
 ## Step 1: Check text_ready
 
-`oks ingest prepare` outputs a `text_ready` field in its JSON response.
+`oks ingest` outputs a `text_ready` field in its JSON response.
 
 **IF `text_ready` is `true`:**
 - The source is a local Markdown (`.md`) or plain text (`.txt`) file.
@@ -71,7 +71,7 @@ Determine the source's modality from its file extension or URL pattern:
 
 ### 3a. Read the Recipe
 
-The Recipe for this modality is in the `recipe` field of the `oks ingest prepare`
+The Recipe for this modality is in the `recipe` field of the `oks ingest`
 output (Step 0).  Read it to understand what evidence is needed.
 
 Do NOT read `recipes/{modality}.md` from disk — the user's knowledge base
@@ -125,7 +125,7 @@ capabilities — not one provider per capability.**
 Do not pursue optional capabilities at higher degradation levels —
 optional means optional.
 
-**When multiple providers satisfy the same capability**, `oks ingest prepare`
+**When multiple providers satisfy the same capability**, `oks ingest`
 returns a `candidate_providers` shortlist of 2–4 relevant providers covering
 the required capabilities.  The Agent selects from this shortlist based on
 availability, maturity, and the provider's declared limits — not a static

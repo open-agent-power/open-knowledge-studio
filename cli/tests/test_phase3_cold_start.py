@@ -239,8 +239,8 @@ def test_no_python_imports_in_ingest_skill():
         assert "oks schema show" in text, (
             f"{host}/ingest/SKILL.md missing oks schema show reference"
         )
-        assert "oks ingest prepare" in text, (
-            f"{host}/ingest/SKILL.md missing oks ingest prepare reference"
+        assert "oks ingest <source>" in text, (
+            f"{host}/ingest/SKILL.md missing oks ingest <source> reference"
         )
         assert "oks security sanitize" in text, (
             f"{host}/ingest/SKILL.md missing oks security sanitize reference"
@@ -299,10 +299,10 @@ def test_schema_show_resolves_names():
     assert _resolve_schema_name("nonexistent-schema") is None
 
 
-# ── oks ingest prepare ──────────────────────────────────────────────
+# ── oks ingest ──────────────────────────────────────────────────────
 
 def test_ingest_prepare_text_creates_valid_envelope(tmp_path):
-    """oks ingest prepare for a .md file creates valid source-envelope.json."""
+    """oks ingest flow for a .md file creates valid source-envelope.json."""
     from knowledge_studio.ingest_prepare import prepare_ingest
     import json
 
@@ -340,7 +340,7 @@ def test_ingest_prepare_text_creates_valid_envelope(tmp_path):
 
 
 def test_ingest_prepare_non_text_creates_skeleton(tmp_path):
-    """oks ingest prepare for a .pdf file creates a skeleton (text_ready=False).
+    """oks ingest flow for a .pdf file creates a skeleton (text_ready=False).
 
     R4-5: evidence_records and steps are now pre-filled from the Recipe.
     text, confidence are null — Agent fills after provider execution.
@@ -1735,10 +1735,10 @@ def test_recipe_capabilities_all_in_registry():
     )
 
 
-# ── Recipe in ingest prepare output ─────────────────────────────────
+# ── Recipe in ingest output ─────────────────────────────────────────
 
 def test_ingest_prepare_includes_recipe(tmp_path):
-    """oks ingest prepare output must include the Recipe for the detected modality.
+    """oks ingest output must include the Recipe for the detected modality.
 
     The Agent must be able to read the Recipe from the CLI output without
     needing a recipes/ directory in the user's knowledge base.
@@ -1751,10 +1751,10 @@ def test_ingest_prepare_includes_recipe(tmp_path):
     result = prepare_ingest(str(f), kb_root=tmp_path)
     assert result["modality"] == "pdf"
     assert "recipe" in result, (
-        "ingest prepare output missing 'recipe' field"
+        "ingest output missing 'recipe' field"
     )
     assert result["recipe"] is not None, (
-        "ingest prepare recipe is None for pdf modality"
+        "ingest recipe is None for pdf modality"
     )
     assert "Recipe: PDF" in result["recipe"], (
         "recipe should contain 'Recipe: PDF' header"
@@ -1769,7 +1769,7 @@ def test_ingest_prepare_includes_recipe(tmp_path):
 
 
 def test_ingest_prepare_recipe_for_all_modalities(tmp_path):
-    """Every known modality must have a recipe in the ingest prepare output."""
+    """Every known modality must have a recipe in the ingest output."""
     from knowledge_studio.ingest_prepare import prepare_ingest
 
     test_files = {
@@ -1793,7 +1793,7 @@ def test_ingest_prepare_recipe_for_all_modalities(tmp_path):
             f"{filename} should be {expected_modality}, got {result['modality']}"
         )
         assert result.get("recipe") is not None, (
-            f"ingest prepare for {filename} ({expected_modality}) missing recipe"
+            f"ingest for {filename} ({expected_modality}) missing recipe"
         )
         assert len(result["recipe"]) > 50, (
             f"recipe for {expected_modality} is too short ({len(result['recipe'])} chars)"
@@ -1847,7 +1847,7 @@ def test_capability_guide_all_providers_with_skill():
 # ── Ingest SKILL.md: Agent-facing contract closure ──────────────────
 
 def test_ingest_skill_uses_cli_for_recipe():
-    """Ingest SKILL.md must tell Agent to get Recipe from oks ingest prepare,
+    """Ingest SKILL.md must tell Agent to get Recipe from oks ingest,
     NOT to read recipes/{modality}.md from disk."""
     for host in ("claude", "agents"):
         text = _read_skill_text(host)
@@ -2367,7 +2367,7 @@ def test_init_output_uses_categories_not_provider_ids():
 # ── R4-5: Pre-filled evidence skeleton ──────────────────────────────
 
 def test_ingest_prepare_prefills_evidence_slots_for_non_text():
-    """R4-5: Non-text ingest prepare must pre-fill evidence_records from recipe."""
+    """R4-5: Non-text ingest must pre-fill evidence_records from recipe."""
     from knowledge_studio.ingest_prepare import prepare_ingest
     import json
 
@@ -2566,7 +2566,7 @@ def test_runtime_tool_no_work_output_accepted(monkeypatch, tmp_path):
 # ── H1-B: Agent contract simplification ─────────────────────────────
 
 def test_ingest_prepare_returns_candidate_providers(tmp_path):
-    """H1-B: ingest prepare must return candidate_providers for non-text sources."""
+    """H1-B: ingest must return candidate_providers for non-text sources."""
     from knowledge_studio.ingest_prepare import prepare_ingest
 
     f = tmp_path / "test.pdf"
@@ -2575,7 +2575,7 @@ def test_ingest_prepare_returns_candidate_providers(tmp_path):
     result = prepare_ingest(str(f), kb_root=tmp_path)
     assert result["text_ready"] is False
     assert "candidate_providers" in result, (
-        "ingest prepare must return candidate_providers"
+        "ingest must return candidate_providers"
     )
     candidates = result["candidate_providers"]
     assert isinstance(candidates, list), "candidate_providers must be a list"

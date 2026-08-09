@@ -81,6 +81,18 @@ def test_review_action_re_matches():
     assert not REVIEW_ACTION_RE.search("acceptance")
 
 
+def test_accept_does_not_fabricate_the_reviewer_judgement():
+    """Accepting a Candidate must not invent a correctness judgement."""
+    source = (Path(__file__).resolve().parent / "review_events.py").read_text(encoding="utf-8")
+    accept_branch = source.split('if action == "accept":', 1)[1].split("elif action ==", 1)[0]
+    reject_branch = source.split('elif action == "reject":', 1)[1].split("elif action ==", 1)[0]
+
+    assert "decision_correct" not in accept_branch
+    assert '"outcome": "accepted"' in accept_branch
+    assert '"review_depth": "light"' in accept_branch
+    assert '"decision_correct": False' in reject_branch
+
+
 # ── parse_review_reply ─────────────────────────────────────────────────
 
 

@@ -29,7 +29,7 @@
       ↓ (no daemon, no WebSocket, no background process)
 晚上：用户启动 Agent → oks feishu pending --json
       ↓
-      获取待处理记录 → 逐条 ingest prepare → Provider → raw-commit
+      获取待处理记录 → 逐条 oks ingest → Provider → raw-commit
 ```
 
 Pull Mode 是 Push Mode（实时事件监听）的补充，不是替代。不需要 daemon、WebSocket 或后台任务队列。

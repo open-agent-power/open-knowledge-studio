@@ -33,7 +33,7 @@
       <text x="155" y="190" text-anchor="middle" font-size="12" fill="#795548">Source</text>
 
       <rect x="335" y="145" width="220" height="58" rx="7" fill="#eceff1" stroke="#78909c" stroke-width="1.5"/>
-      <text x="445" y="170" text-anchor="middle" font-size="14" font-weight="700" fill="#37474f">oks ingest prepare</text>
+<text x="445" y="170" text-anchor="middle" font-size="14" font-weight="700" fill="#37474f">oks ingest</text>
       <text x="445" y="190" text-anchor="middle" font-size="12" fill="#546e7a">workspace + recipe + candidates</text>
 
       <rect x="335" y="235" width="220" height="58" rx="7" fill="#eceff1" stroke="#78909c" stroke-width="1.5"/>

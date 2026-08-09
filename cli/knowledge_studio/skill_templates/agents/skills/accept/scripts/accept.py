@@ -217,13 +217,11 @@ def run_capability(capability: str, args: argparse.Namespace) -> Report:
             report.artifacts["source_kind"] = "local_fixture"
             report.artifacts["source_path"] = str(local_fixture)
             report.artifacts["source_sha256"] = sha256_file(local_fixture)
-            modes = [("quick", args.watch_timeout if capability == "watch" else args.ingest_timeout)]
-            if capability == "watch":
-                modes.append(("forensic", args.watch_timeout))
+            timeout = args.watch_timeout if capability == "watch" else args.ingest_timeout
         elif capability == "watch":
             source, _ = FIXTURES[capability]
             report.artifacts["source_url"] = source
-            modes = [("quick", args.watch_timeout), ("forensic", args.watch_timeout)]
+            timeout = args.watch_timeout
         else:
             source_url, filename = FIXTURES[capability]
             fixtures.mkdir(parents=True, exist_ok=True)
@@ -231,11 +229,9 @@ def run_capability(capability: str, args: argparse.Namespace) -> Report:
             final_url = download(source_url, Path(source))
             report.artifacts["source_url"] = final_url
             report.artifacts["source_sha256"] = sha256_file(Path(source))
-            modes = [("quick", args.ingest_timeout)]
-        for mode, timeout in modes:
-            ingest_runner = Runner(report, cwd=kb, env=env)
-            ingest_command = [oks, "ingest", source, "--mode", mode, "--no-progress"]
-            ingest_runner.run(*ingest_command, timeout=timeout)
+            timeout = args.ingest_timeout
+        ingest_runner = Runner(report, cwd=kb, env=env)
+        ingest_runner.run(oks, "ingest", source, timeout=timeout)
         bundles = sorted(path for path in (kb / "raw").iterdir() if path.is_dir() and path.name != ".gitkeep")
         report.assert_true("raw_bundle_created", bool(bundles), "expected a Raw Bundle in the isolated KB")
         bundle = bundles[-1]

@@ -22,10 +22,10 @@ OKS 根据源类型自动选择路径：
 
 ## 完整流程（Protocol 路径）
 
-### Step 0: `oks ingest prepare`
+### Step 0: `oks ingest`
 
 ```bash
-oks ingest prepare <source>
+oks ingest <source>
 ```
 
 **输出**（JSON）：
@@ -224,7 +224,7 @@ oks recall "关键词"
 本地 Markdown / 纯文本跳过 Step 1-5，直接：
 
 ```bash
-oks ingest prepare my-note.md
+oks ingest my-note.md
 # text_ready: true → 所有协议文件已预填充完成
 
 oks raw-commit .oks/runs/<run_id>/manifest/
