@@ -66,6 +66,7 @@ def test_dev_only_skills_are_excluded_from_every_build_path():
     assert bundle_names == setup_names == cli_names
     assert "review-upstream-pr" in bundle_names
     assert "upstream-pr-remediation" in bundle_names
+    assert "settings.local.json" in bundle_names
 
 
 def test_init_never_materializes_dev_only_skills(tmp_path):
@@ -137,6 +138,14 @@ def test_init_materializes_shareable_assets(tmp_path):
     assert (target / "templates").is_dir()
     for schema in ("recall-case.schema.json", "trace-event.schema.json", "run-manifest.schema.json"):
         assert (target / "_meta" / schema).is_file()
+
+
+def test_init_does_not_materialize_machine_local_claude_settings(tmp_path):
+    target = tmp_path / "kb"
+    result = runner.invoke(app, ["init", str(target), "--no-git", "--no-set-default"])
+    assert result.exit_code == 0, result.output
+
+    assert not (target / ".claude" / "settings.local.json").exists()
 
 
 def test_init_upgrade_refreshes_assets_but_keeps_user_files(tmp_path):

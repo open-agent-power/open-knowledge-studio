@@ -1,16 +1,18 @@
 # 干净服务器部署报告
 
+> 历史验证快照：本报告记录的是 v0.2.x 时代的隔离部署，不是当前 v0.4 发布 Gate。主机、目录、服务名和运行 ID 均已脱敏。
+
 日期：2026-07-29
 
-远程主机：`root@47.82.119.154`
+远程主机：`<redacted test host>`
 
-测试根目录：`/opt/oks-word-landing-20260729b`
+测试根目录：`<clean-checkout>`
 
-清理后证据存档：`/opt/oks-word-landing-evidence-20260729`
+清理后证据存档：`<evidence-dir>`
 
-生产项目未触碰：`/home/artboy-knowledge-studio`
+生产项目未触碰：`<unrelated production project>`
 
-OpenClaw 进程未触碰：`/usr/bin/node /home/openclaw/dist/index.js gateway --port 18789`
+OpenClaw 进程未触碰：`<unrelated service process>`
 
 ## 源码状态
 
@@ -20,7 +22,7 @@ OpenClaw 进程未触碰：`/usr/bin/node /home/openclaw/dist/index.js gateway -
 
 源码压缩包：
 
-`/tmp/oks-head-1e7cfaf.tar`
+`<source-archive>`
 
 压缩包 SHA-256：
 
@@ -40,10 +42,10 @@ OpenClaw 进程未触碰：`/usr/bin/node /home/openclaw/dist/index.js gateway -
 
 | 步骤 | 结果 |
 |---|---|
-| `pipx install /opt/oks-word-landing-20260729b/src/cli --force` | 通过 |
+| `pipx install <clean-checkout>/src/cli --force` | 通过 |
 | `oks --version` | `oks 0.2.4` |
-| `oks init /opt/oks-word-landing-20260729b/kb` | 通过 |
-| `OKS_ROOT=/opt/oks-word-landing-20260729b/kb oks status` | 通过 |
+| `oks init <clean-checkout>/kb` | 通过 |
+| `OKS_ROOT=<clean-checkout>/kb oks status` | 通过 |
 | 未安装 document 能力时 `oks ingest <txt>` | 预期失败，缺失 `document` 能力，退出码 `2` |
 | `oks capability install document --yes` | 通过 |
 | `oks ingest <txt> --mode quick --progress` | 通过 |
@@ -69,7 +71,7 @@ OpenClaw 进程未触碰：`/usr/bin/node /home/openclaw/dist/index.js gateway -
 
 首次干净服务器尝试发现了一个真实的产品缺陷：
 
-`oks ingest` 进行了能力检测，但将 Raw 写入 `/root/raw/...` 而非当前激活的隔离 KB。这违反了"Raw 不得落入宿主机目录"的验收规则。
+`oks ingest` 进行了能力检测，但将 Raw 写入宿主机目录而非当前激活的隔离 KB。这违反了"Raw 不得落入宿主机目录"的验收规则。
 
 修复提交：
 
@@ -79,7 +81,7 @@ OpenClaw 进程未触碰：`/usr/bin/node /home/openclaw/dist/index.js gateway -
 
 - `scripts/tests/test_raw_bundle_adapter.py`：`42 passed`
 - 完整测试套件：`150 passed`
-- 远程复测：Raw bundle 路径 `/opt/oks-word-landing-20260729b/kb/raw/20260729-232027-687843-0be7cbe1-pg4238-af31a5cc`
+- 远程复测：Raw bundle 位于隔离 KB 的 `raw/<run-id>` 下
 
 ## 遗留发现
 
@@ -92,7 +94,7 @@ OpenClaw 进程未触碰：`/usr/bin/node /home/openclaw/dist/index.js gateway -
 
 所有留存的证据位于：
 
-`/opt/oks-word-landing-evidence-20260729/`
+`<evidence-dir>/`
 
 重要文件：
 
@@ -118,16 +120,15 @@ OpenClaw 进程未触碰：`/usr/bin/node /home/openclaw/dist/index.js gateway -
 
 归档报告文件和 SHA-256 清单后：
 
-- 已删除 `/opt/oks-word-landing-20260729`；
-- 已删除 `/opt/oks-word-landing-20260729b`；
-- 已删除失败运行的 `/root/raw` 测试输出；
-- 已删除 `/tmp/oks-head-87315a3.tar`；
-- 已删除 `/tmp/oks-head-1e7cfaf.tar`；
-- 已卸载 root 用户的 pipx `open-knowledge-studio` 测试安装。
+- 已删除 `<clean-checkout>`；
+- 已删除失败运行的隔离 KB；
+- 已删除失败运行的宿主机 Raw 测试输出；
+- 已删除临时源码归档；
+- 已卸载测试用户的 pipx `open-knowledge-studio` 测试安装。
 
 保留：
 
-- `/opt/oks-word-landing-evidence-20260729`；
-- `/home/artboy-knowledge-studio`；
-- `/home/openclaw`；
-- `/root/Desktop/kimi-k3-deep-analysis.md`。
+- `<evidence-dir>`；
+- `<unrelated production project>`；
+- `<unrelated service directory>`；
+- `<local analysis note>`。

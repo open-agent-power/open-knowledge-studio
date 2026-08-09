@@ -1756,13 +1756,14 @@ _ASSET_MAP = [
     ("settings", "settings"),
 ]
 
-# Maintainer-only and dev-only skills. Kept in the repo for development, never
+# Maintainer-only and dev-only assets. Kept in the repo for development, never
 # installed into a user's knowledge base. Must stay in sync with setup.py.
 _DEV_ONLY_ASSET_NAMES = (
     "review-upstream-pr",
     "upstream-pr-remediation",
     "triad-engineering-closure",
     "claude-code-vision-skill",
+    "settings.local.json",
 )
 
 

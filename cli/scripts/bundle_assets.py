@@ -32,14 +32,14 @@ _MAP = [
 
 _SCRIPT_ASSETS = ("feishu_base_worker.py", "feishu_setup.py")
 
-# Maintainer-only skills: they drive the upstream-PR review workflow and must
-# never reach a user's knowledge base, where they would pollute skill discovery
-# and could be auto-matched by an agent. Kept in the repo for development.
+# Maintainer-only and dev-only assets: they drive development workflows or
+# contain machine-local settings and must never reach a user's knowledge base.
 _DEV_ONLY_ASSET_NAMES = (
     "review-upstream-pr",
     "upstream-pr-remediation",
     "triad-engineering-closure",
     "claude-code-vision-skill",
+    "settings.local.json",
 )
 _DEV_ONLY_IGNORE = shutil.ignore_patterns(*_DEV_ONLY_ASSET_NAMES)
 

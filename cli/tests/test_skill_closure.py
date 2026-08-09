@@ -117,6 +117,22 @@ def test_wheel_assets_do_not_duplicate_skills_in_wheel():
         )
 
 
+def test_wheel_contains_feishu_setup_and_agent_skill_metadata():
+    """Clean wheels must contain every file used by their installed entrypoints."""
+    wheels = sorted(WHEEL_DIR.glob("open_knowledge_studio-*.whl")) if WHEEL_DIR.is_dir() else []
+    if not wheels:
+        pytest.skip("No wheel found — build the wheel first")
+
+    with zipfile.ZipFile(str(wheels[-1])) as zf:
+        names = set(zf.namelist())
+
+    assert "knowledge_studio/_assets/scripts/feishu_base_worker.py" in names
+    assert "knowledge_studio/_assets/scripts/feishu_setup.py" in names
+    assert "knowledge_studio/skill_templates/agents/skills/accept/agents/openai.yaml" in names
+    assert "knowledge_studio/skill_templates/claude/skills/accept/agents/openai.yaml" in names
+    assert not any(name.endswith("settings.local.json") for name in names)
+
+
 # ── test_init_and_skills_install_hashes_identical ──────────────────
 
 

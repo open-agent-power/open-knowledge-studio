@@ -52,14 +52,15 @@ _CONNECTOR_IGNORE = shutil.ignore_patterns(
     "formula_extract_requirements.txt",
 )
 
-# Maintainer-only and dev-only skills: they drive development workflows and must
-# never reach a user's knowledge base, where they would pollute skill discovery
-# and could be auto-matched by an agent. Kept in the repo for development.
+# Maintainer-only and dev-only assets: they drive development workflows or
+# contain machine-local settings and must never reach a user's knowledge base.
 _DEV_ONLY_ASSET_NAMES = (
     "review-upstream-pr",
     "upstream-pr-remediation",
     "triad-engineering-closure",
     "claude-code-vision-skill",
+    # Never publish a maintainer's machine-local Claude permission overrides.
+    "settings.local.json",
 )
 _DEV_ONLY_IGNORE = shutil.ignore_patterns(
     ".git", ".hg", ".svn", "__pycache__", "*.pyc", *_DEV_ONLY_ASSET_NAMES
@@ -99,6 +100,9 @@ def _vendor_assets() -> None:
         worker_dest = dest_root / "scripts"
         worker_dest.mkdir(parents=True, exist_ok=True)
         shutil.copy2(worker, worker_dest / worker.name)
+        setup_script = worker.parent / "feishu_setup.py"
+        if setup_script.is_file():
+            shutil.copy2(setup_script, worker_dest / setup_script.name)
         resolver = worker.parent / "_lark_cli.py"
         if resolver.is_file():
             shutil.copy2(resolver, worker_dest / resolver.name)
@@ -115,11 +119,12 @@ def _vendor_assets() -> None:
 
 
 def _purge_stale_build_copies(*relative: str) -> None:
-    """Drop build/lib mirrors of vendored trees.
+    """Drop build/lib mirrors that setuptools would otherwise retain.
 
-    build_py copies into build/lib incrementally and never deletes, so a tree
-    that was vendored before an exclusion was added keeps shipping from there —
-    observed as removed maintainer skills reappearing in a fresh wheel.
+    build_py copies into build/lib incrementally and never deletes removed
+    modules.  Purging the package mirror prevents old ``oks_connector`` and
+    product-feedback modules from reappearing in a later wheel built from the
+    same checkout.
     """
     build_lib = Path(__file__).resolve().parent / "build" / "lib"
     for name in relative:
@@ -147,7 +152,7 @@ def _purge_stale_egg_infos() -> None:
 def _sync_from_checkout() -> None:
     repo_root = _repo_root()
     if (repo_root / ".claude").is_dir() and (repo_root / "templates").is_dir():
-        _purge_stale_build_copies("knowledge_studio/_assets")
+        _purge_stale_build_copies("knowledge_studio", "oks_connector")
         _purge_stale_egg_infos()
         _vendor_assets()
 

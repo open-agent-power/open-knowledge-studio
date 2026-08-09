@@ -4,12 +4,15 @@
 
 ## 调用
 
-```bash
-python -c "
-from network import fetch_url
-content, receipt = fetch_url('https://example.com/article')
-"
+```text
+provider: http-fetch
+action: source.fetch
+url: https://example.com/article
 ```
+
+The Agent selects an installed HTTP provider for this action. This Skill does
+not import the removed legacy `network` module or provide a standalone Python
+API.
 
 ## 输出
 

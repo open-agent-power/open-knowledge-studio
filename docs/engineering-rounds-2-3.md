@@ -1,5 +1,7 @@
 # Engineering Rounds 2-3
 
+> Historical engineering record: this document preserves the Round 2/3 implementation and test plan. The legacy `scripts/extractors/` and `scripts/experiments/` paths mentioned below are not part of the current v0.4 runtime; current public entry points are `providers/`, `capabilities/`, and the Agent-native ingest protocol.
+
 ## Round 2 — Reliability Hardening (COMPLETED)
 
 ### Scope
@@ -28,20 +30,18 @@ No new features. No Feishu API calls. No network.
   - `naive_migration="reject"` (default) returns `None` for tz-naive timestamps.
   - `naive_migration="assume_utc"` treats naive timestamps as UTC (used in `is_candidate` for backward compatibility).
 
-- [x] **C -- Public-web Raw extractor moved to production**
-  - Supported public-web Raw behavior extracted from `scripts/experiments/web_raw_probe.py` into `scripts/extractors/web.py`.
-  - `package_public_web()` in the worker calls the production module directly -- no subprocess to the experiment script.
-  - Test asserts the production worker source has zero references to `experiments/`.
+- [x] **C -- Public-web Raw extractor moved to production (historical snapshot)**
+  - The intermediate implementation moved public-web behavior out of the experiment script.
+  - In current v0.4, the legacy extractor tree is removed; Agents select the declared HTTP, Trafilatura, Firecrawl, browser, or Agent-native Provider instead.
+  - The historical test asserted that the worker did not depend on the experiment script.
 
 - [x] **D -- Lease locking documented as single-host serialization**
   - `local_claim_lock()` docstring states it is local filesystem serialization only, not distributed coordination.
   - Documents multi-host requirement: external coordination mechanism (database lease table, Redis Redlock, or Feishu Base record-level compare-and-swap).
 
-- [x] **E -- Watch helper shadowing removed**
-  - Removed local `format_media_time`, `order_ocr_blocks`, and `parse_ocr_roi` definitions from `scripts/extractors/watch.py` that shadowed the `_shared` imports.
-  - Enhanced `_shared.format_media_time` to support hour durations (HH:MM:SS for >= 1 hour).
-  - Renamed watch-specific `normalize_ocr_text` to `_normalize_ocr_strict` to avoid shadowing.
-  - Fixed `extractors/image.py` comment: "parent module" changed to "sibling module".
+- [x] **E -- Watch helper shadowing removed (historical snapshot)**
+  - The intermediate extractor implementation removed local helpers that shadowed `_shared` imports.
+  - Current v0.4 no longer ships the legacy watch/image extractor modules; media behavior is represented by the declared Providers.
 
 - [x] **F -- `docs/engineering-rounds-2-3.md` ASCII-only and accurate**
   - All prose is valid UTF-8 ASCII-only; no non-ASCII characters.
@@ -76,17 +76,15 @@ Key test additions:
 - `test_lease_format_roundtrips_through_parse` -- write/read round-trip verification.
 - `test_claim_record_writes_aware_utc_lease` -- verifies `+00:00` in stored lease and future timestamp.
 - `test_claim_record_run_id_contains_utc_timestamp` -- verifies run-id format.
-- `test_production_web_extractor_has_no_experiment_import` -- production extractor has no experiment dependency.
-- `test_package_public_web_uses_production_extractor_not_experiment` -- worker source has no experiment reference.
+- `test_production_web_extractor_has_no_experiment_import` -- historical extractor regression check.
+- `test_package_public_web_uses_production_extractor_not_experiment` -- historical worker regression check.
 
 ### Changed Files
 
 | File | Change |
 |------|--------|
-| `scripts/feishu_base_worker.py` | `lark_json` retry logic narrowed: no retry on malformed JSON, narrow OSError retry to transient subclasses; `local_claim_lock` docstring documenting single-host scope; `package_public_web` calls production `extractors.web` module; new helpers `_extract_lark_error_code` / `_is_retryable_lark_error` / `_is_fatal_lark_error`, new constants; `parse_base_datetime` aware-UTC + `naive_migration` parameter; UTC time paths in `is_candidate` / `claim_next_record` / `claim_record` / `process_record`. |
-| `scripts/extractors/web.py` | New production module: public-web article extraction with Trafilatura, extracted from `scripts/experiments/web_raw_probe.py`. |
-| `scripts/extractors/watch.py` | Removed local `format_media_time`, `order_ocr_blocks`, `parse_ocr_roi` shadowing `_shared` imports; renamed `normalize_ocr_text` to `_normalize_ocr_strict`. |
-| `scripts/extractors/image.py` | Fixed comment: "parent module" -> "sibling module". |
+| `scripts/feishu_base_worker.py` | Historical retry, lease, and timestamp hardening; current worker behavior is split into `scripts/feishu_worker/` and the public-web legacy extractor is no longer shipped. |
+| `scripts/extractors/*` | Historical intermediate extractor tree; removed from the current v0.4 runtime. |
 | `scripts/_shared.py` | Enhanced `format_media_time` to support hour durations (HH:MM:SS). |
 | `scripts/tests/test_feishu_base_worker.py` | 23 new test functions for retry regression, UTC time handling, production extractor verification. |
 | `docs/engineering-rounds-2-3.md` | This document. |

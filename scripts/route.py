@@ -83,8 +83,8 @@ def describe_source(source: str) -> SourceDescriptor:
     """Return a pure source description without choosing an extractor.
 
     This is the canonical entry point for the unified capture protocol.
-    Callers that still need the legacy extractor/route fields should use
-    ``route_plan()`` instead.
+    Provider selection and execution happen after this description through the
+    Agent-native EvidenceFragment and EvidenceManifest protocol.
     """
     suffix = _suffix_for(source)
     platform = platform_for(source)
