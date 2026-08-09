@@ -4,15 +4,14 @@
 
 ## 调用
 
-```text
-provider: http-fetch
-action: source.fetch
-url: https://example.com/article
-```
+Agent 使用当前 Agent Runtime 提供的安全 HTTP GET 工具执行此 Provider；OKS
+不提供 `network.py`、`fetch_url()` 或独立 Python API。
 
-The Agent selects an installed HTTP provider for this action. This Skill does
-not import the removed legacy `network` module or provide a standalone Python
-API.
+- URL 来源：用户提供的 HTTP/HTTPS 地址
+- 能力标识：网页采集使用 `web.fetch`，来源落盘使用 `source.fetch`
+- 执行前：遵守运行时的 SSRF / 重定向安全边界，不发送凭据、Cookie 或令牌
+- 执行后：先把原始响应和 fetch receipt（仅做必要的安全脱敏）保存到当前
+  run 的 `.oks/runs/{run_id}/work/http-fetch/`，再交给正文提取 Provider
 
 ## 输出
 
