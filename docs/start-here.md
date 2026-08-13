@@ -1,157 +1,45 @@
 ---
-title: 快速开始
-nav_order: 2
-parent: 概述
+title: 从这里开始
+nav_order: 1
+parent: 开始使用
 ---
-# 快速开始
+# 从这里开始
 
-*最短可用路径：保存一条 → 搜索到它 → 验证工作。*
+OKS 把一份资料变成以后还能使用的知识，同时保留来源和人的最终判断。
 
-Open Knowledge Studio 最容易理解的方式是一个循环：
+```text
+资料 → Candidate → 人工审核 → Wiki → Recall
+```
 
-* 保存一条有价值的东西
-* 再找到它
-* 让 Agent 用它
+你不需要先理解 Provider、Manifest 或评分公式。第一天只完成一次真实闭环。
 
-{: .note }
-本页是这个循环的最短路径。**前置条件**：Python ≥ 3.12、git；Claude Code（或兼容 Agent）为可选，但 `/ingest`、`/query` 等技能依赖它——没有 Agent 时走下文标注的"纯 CLI 路径"。安装：`pipx install open-knowledge-studio && pipx ensurepath && oks init my-knowledge-base && cd my-knowledge-base`（pipx 本身：Ubuntu 用 `sudo apt install pipx`，macOS 用 `brew install pipx`，Windows 用 `py -m pip install --user pipx && py -m pipx ensurepath`；Ubuntu 24.04 / Homebrew Python 受 PEP 668 保护，直接 `pip install` 会报 externally-managed-environment）。
+## 选择第一条路径
 
-## Studio 是什么
+### 我正在使用 Agent
 
-简单来说，Studio 做三件事：
+这是推荐路径。完成[安装](installation.md)后，在 Claude Code、Codex 或兼容
+Agent 中，把一份你真正想保存的资料交给它：
 
-* 存储你的决策、洞察、来源和对话
-* 让它们可搜索、可复用
-* 让 Agent 从同样的记忆开始工作，而不是每次从零开始
+> 把这份资料收录到 OKS，生成 Candidate 后停下来让我审核。
 
-你不需要理解整个系统就能开始用。
+Agent 会读取 `/ingest` Skill、选择可用能力、保存证据并生成 Candidate。
 
-## 第一个循环
+### 我现在只有终端
 
-### Step 1: 保存一条真实知识
-
-写一条你想保留的真实内容：一个决策、一个工作洞察、一个你反复使用的模式。放进 `raw/` 目录（`oks init` 只创建空的 `raw/`，日期子目录需自建）：
+可以先创建知识库并检查环境：
 
 ```bash
-cd <你的实例目录>   # 例如 my-knowledge-base，以下命令都在实例目录内执行
-mkdir -p raw/$(date +%Y/%m/%d)/misc
-cat > raw/$(date +%Y/%m/%d)/misc/my-first-note.md << 'EOF'
-## Decision: Use Typer for CLI
-
-We chose Typer over Click because Typer has native type hint support
-and integrates with Rich for terminal formatting.
-EOF
+oks init ./my-knowledge-base
+cd ./my-knowledge-base
+oks status
+oks ingest prepare <文件或URL>
 ```
 
-### Step 2: 蒸馏为草稿
+`prepare` 只创建 Run Workspace，不会调用 Agent。纯 CLI 可以查看和维护知识库，
+但不会替你完成语义理解或 Candidate 判断。
 
-raw → drafts 的 A/B/C 分级由 **`/ingest` 技能**完成：每收录一个来源，Agent 在证据落盘后按相关性 / 质量 / 新颖性评一次级 —— A 级写出 `drafts/` 候选，B/C 只在 `result.json` 记下判断与理由，Raw Bundle 一律保留。
+## 接下来
 
-分级是 Agent 的判断，CLI 核心不评估内容质量（P4）；它只决定**值不值得起草**，不决定能否进 wiki —— 那仍要过 `/promote` 的人工审阅（A3）。CLI 的 `oks distill --dry-run` 只预览维护循环统计，**不做**这个分级。
-
-{: .note }
-**纯 CLI 路径**（没有 Claude Code 时）：跳过 drafts，直接把知识写成 wiki 页，然后跳到 Step 4——
-```bash
-cd <你的实例目录>
-oks wiki create --title "CLI framework decision" --type strategy --area computing \
-  --content "Chose Typer over Click: native type hints + Rich integration."
-```
-
-### Step 3: 提升到 wiki
-
-审查草稿并提升：
-
-```bash
-cd <你的实例目录>
-oks drafts list           # 查看候选
-oks drafts promote <slug> # 提升到 wiki/
-```
-
-或用 `/promote` 技能交互式审查。
-
-### Step 4: 确认搜索能找到它
-
-```bash
-cd <你的实例目录>
-oks recall "CLI framework decision" --knowledge-only
-```
-
-如果搜索结果反映了你刚保存的内容，循环就跑通了。
-
-### Step 5: 连接 AI Agent
-
-Agent 技能预配置在 `.claude/skills/`。核心技能：
-
-| 技能 | 使用场景 |
-|------|----------|
-| `/query <问题>` | 提问 — Studio 召回相关 wiki 页面并注入上下文 |
-| `/ingest` | 多模态摄入：Provider 取证 → raw/ → A/B/C 分级 → A 级写 drafts/ |
-| `/promote` | 审查 drafts 并提升到 wiki |
-| `/status` | 查看知识库概览 |
-
-试一下：
-
-```
-/query What did we decide about CLI frameworks?
-```
-
-Agent 会召回你刚提升的 wiki 页面，并带引用回答。
-
-## 验收标准
-
-以下每一条你都应该能回答"是"：
-
-* 我在 `raw/` 保存了一条原始材料
-* 我把它蒸馏为 `drafts/` 中的草稿
-* 我把草稿提升到了 `wiki/`
-* 我用 `oks recall` 召回到了它
-* 在 Agent 会话中，`/query` 召回了我的知识
-
-如果任何一条是"否"，查看下面的验证步骤。
-
-## 验证
-
-### 知识单路是否工作
-
-```bash
-oks recall "your topic" --knowledge-only
-```
-
-应该返回 `wiki/` 中的结果，带相关性分数。
-
-### 召回是否工作
-
-```bash
-oks recall "your topic"
-```
-
-应该同时返回 episodic 结果（来自 `raw/`）和 knowledge 结果（来自 `wiki/`）。
-
-### Agent 集成是否工作
-
-在 Agent 会话中：
-
-```
-/query What do I know about <topic>?
-```
-
-应该将相关 wiki 页面注入上下文，并带来源标签如 `[verified]` 或 `[inferred]` 回答。
-
-## 第一天少做
-
-{: .tip }
-> 保存一条记忆。蒸馏一个草稿。提升一个 wiki 页面。跑一次搜索。停。
->
-> 第一天的目标是验证循环跑通，不是配置所有域。
-
-## 下一步
-
-* [Memories](wiki.md) — wiki 页面结构、类型和搜索
-* [Raw Materials](raw-multimodal-standard.md) — 原始材料、协议标准和 Raw Bundle 格式
-* [架构设计](architecture.md) — 认知桶结构和记忆生命周期
-* [召回引擎](recall-engine.md) — 6+1 因子评分算法
-* [Dreaming 循环](dreaming-cycle.md) — 知识演化管线
-
----
-
-{% include comments.html %}
+- 尚未安装：前往[安装](installation.md)。
+- 已完成安装：开始[第一个知识闭环](first-knowledge-loop.md)。
+- 已经尝试过：用[确认 OKS 正在工作](verify-it-works.md)定位失败环节。

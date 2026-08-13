@@ -6,7 +6,8 @@ parent: 参考
 
 # Raw 多模态协议入口
 
-Studio 不再维护另一份多模态字段标准。当前机器可读事实源位于本仓库 `schemas/`（connector 合入后为规范参考，不由运行时自动加载或强制校验）：
+Studio 不再维护另一份多模态字段标准。仓库级机器可读事实源位于 `schemas/`，
+运行时使用包内镜像 `knowledge_studio/schemas/` 做强制校验：
 
 - `schemas/capture-envelope.schema.json`
 - `schemas/capability-manifest.schema.json`

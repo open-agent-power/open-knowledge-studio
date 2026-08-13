@@ -1,13 +1,25 @@
 ---
 title: Agent-Native Ingest 操作手册
 nav_order: 1
-parent: 摄入
+parent: 收录资料
 ---
 
 # Agent-Native Ingest 操作手册
 
-从一条 URL 或本地文件出发，走完 Source → Evidence → Commit → Draft → Promote 的
+从一条 URL 或本地文件出发，走完 Recall → Source → Evidence → Commit → Grade → Review 的
 完整链路。本手册按你实际会遇到的顺序写，每个步骤标出常见错误和解决方法。
+
+## Step 0：先 Recall，避免平行知识
+
+收录前先查一次主题：
+
+```bash
+oks recall "<这份资料的主题>"
+```
+
+如果已有 Wiki 页面，在 Candidate 中记录 `relates_to` 和 `relationship`，关系只能是
+`enriches`、`supersedes`、`confirms` 或 `challenges`。这不会跳过人工审核；它只是让
+审核者看到新旧知识之间的关系。
 
 ## 两条路径
 
@@ -22,7 +34,7 @@ OKS 根据源类型自动选择路径：
 
 ## 完整流程（Protocol 路径）
 
-### Step 0: `oks ingest prepare`
+### Step 1: `oks ingest prepare`
 
 ```bash
 oks ingest prepare <source>
@@ -49,7 +61,7 @@ oks ingest prepare <source>
 **关键字段**：
 
 - `recipe`：这个 modality 的完整 Recipe（required_capabilities、optional_capabilities、degradation chain、complete_when 条件）
-- `candidate_providers`：2-4 个覆盖 required capabilities 的 Provider 摘要。Agent 从这里选，不需要扫全部 17 个 Provider
+- `candidate_providers`：覆盖 required capabilities 的 Provider 短名单。Agent 从这里选，不需要扫描全部注册项
 - `text_ready`：`false` 表示走 Protocol 路径
 
 **此时 workspace 里已经有**：
@@ -62,7 +74,7 @@ oks ingest prepare <source>
   artifacts/                 ← 空（等 Provider 输出）
 ```
 
-### Step 1: 读取 Recipe + 选 Provider
+### Step 2: 读取 Recipe + 选 Provider
 
 读 `recipe` 字段，理解需要哪些 evidence。
 
@@ -80,7 +92,7 @@ oks ingest prepare <source>
 oks capability guide <provider>
 ```
 
-### Step 2: 执行 Provider + 保存原始输出
+### Step 3: 执行 Provider + 保存原始输出
 
 调用 Provider 工具（MCP / API / CLI）。
 
@@ -105,7 +117,7 @@ mkdir -p .oks/runs/<run_id>/work/firecrawl/
 - 把 Agent 改写后的内容当"原始输出"保存——必须保存 Provider 的**原始响应**
 - Agent 自己总结了一段文字然后标 `producer=firecrawl` → provenance 非法
 
-### Step 3: 填写 evidence-manifest.json
+### Step 4: 填写 evidence-manifest.json
 
 打开 `manifest/evidence-manifest.json`。`evidence_records` 里已经有预填充的槽位：
 
@@ -146,7 +158,7 @@ mkdir -p .oks/runs/<run_id>/work/firecrawl/
 }
 ```
 
-### Step 4: `oks raw-commit`
+### Step 5: `oks raw-commit`
 
 ```bash
 oks raw-commit .oks/runs/<run_id>/manifest/
@@ -179,7 +191,19 @@ oks raw-commit .oks/runs/<run_id>/manifest/
 }
 ```
 
-### Step 5: 生成 Candidate
+### Step 6: A/B/C 分级
+
+Agent 在 Raw Bundle 提交后分级：
+
+| 等级 | 处理 |
+|---|---|
+| A | 证据支持可复用判断，生成 Candidate |
+| B | 有价值但证据薄弱或过于情境化；保留 Raw 和原因，不生成 Candidate |
+| C | 噪声、重复或只有事实列表；保留 Raw 和原因，不生成 Candidate |
+
+只有 A 级继续下面的 Candidate 步骤。分级不是晋升，任何 Candidate 仍须人工审核。
+
+### Step 7: 生成 Candidate
 
 读 Raw Bundle 的 `evidence.jsonl`，基于证据写一个 Markdown 草稿到 `drafts/<slug>.md`：
 
@@ -194,6 +218,8 @@ created: "2026-08-07"
 tags: "web, example"
 status: pending
 source_type: agent-ingest
+relates_to: ""                 # 可选：已有 Wiki slug
+relationship: ""              # enriches | supersedes | confirms | challenges
 ---
 ```
 
@@ -203,16 +229,17 @@ source_type: agent-ingest
 
 **重要**：Candidate 是一个 Markdown 文件，不是 OKS 协议对象。不要跑 `oks schema show candidate`。
 
-### Step 6: Human Review → Promote
+### Step 8: Human Review
 
 ```bash
 oks drafts list              # 查看所有草稿
 oks drafts promote <slug>    # 提升到 wiki/
+oks drafts reject <slug>     # 拒绝并保留 review receipt
 ```
 
 或用 `/promote` 技能交互式审查。
 
-### Step 7: 验证召回
+### Step 9: 验证召回
 
 ```bash
 oks recall "关键词"
@@ -224,7 +251,7 @@ oks recall "关键词"
 
 ## 快速路径（text_ready=true）
 
-本地 Markdown / 纯文本跳过 Step 1-5，直接：
+本地 Markdown / 纯文本会跳过 Provider 执行，但不会跳过分级和人工审核：
 
 ```bash
 oks ingest prepare my-note.md
@@ -233,14 +260,43 @@ oks ingest prepare my-note.md
 oks raw-commit .oks/runs/<run_id>/manifest/
 # → 直接产出 Raw Bundle
 
-# 然后手写 draft → promote，同 Step 5-7
+# 然后执行 A/B/C 分级；仅 A 级生成 Candidate 并进入人工审核
 ```
 
 ## 泳道图
 
-<img src="../assets/ingest-swimlane.svg" alt="Human、CLI、Agent、Provider 四泳道展示从 Source 到 Raw Bundle、Candidate 和人工审查的完整 ingest 时序。" style="max-width:100%;height:auto;" />
+```mermaid
+sequenceDiagram
+    actor Human
+    participant Agent
+    participant CLI as oks CLI
+    participant Extractor as Agent tools / oks-connector
 
-图中分支对应上文的两条路径：`text_ready=true` 时可以直接执行 `raw-commit`；否则 Agent 需要选择 Provider、保存原始输出并填写证据协议。
+    Human->>Agent: 提供真实资料
+    Agent->>CLI: oks recall <topic>
+    CLI-->>Agent: 已有 Raw / Wiki 与 locator
+    Agent->>CLI: oks ingest prepare <source>
+    CLI-->>Agent: workspace + recipe + provider shortlist
+    alt 已有文本证据
+        Agent->>CLI: oks raw-commit <manifest-dir>
+    else 需要获取或提取
+        Agent->>Extractor: 按 policy 执行
+        Extractor-->>Agent: 原始输出 + evidence
+        Agent->>CLI: oks raw-commit <manifest-dir>
+    end
+    CLI-->>Agent: Raw Bundle
+    Agent->>Agent: A/B/C 分级
+    alt A：生成 Candidate
+        Agent-->>Human: Candidate + provenance + A4 关系
+        Human->>CLI: promote / reject
+        CLI-->>Human: Wiki 或 Reject Receipt
+    else B/C：不生成 Candidate
+        Agent-->>Human: 保留 Raw 与分级原因
+    end
+```
+
+图中分支对应两条提取路径；两条路径都会汇合到 Raw，再由 A/B/C 决定是否生成
+Candidate。只有人工批准的 Candidate 才进入 Wiki。
 
 ---
 

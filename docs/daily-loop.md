@@ -1,7 +1,7 @@
 ---
 title: 每日循环
-nav_order: 6
-parent: 概述
+nav_order: 4
+parent: 使用 OKS
 ---
 # 每日循环：训练你的知识库
 

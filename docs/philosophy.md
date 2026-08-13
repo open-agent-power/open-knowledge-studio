@@ -1,7 +1,7 @@
 ---
 title: 理念
 nav_order: 5
-parent: 概述
+parent: 内部机制
 ---
 # 理念：知识库即模型
 

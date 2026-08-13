@@ -12,7 +12,7 @@ parent: 内部机制
 | | Raw Material（raw/） | Memory（wiki/） |
 |---|---|---|
 | **是什么** | 原始文章、论文、仓库笔记或对话 | 持久的结论，经过蒸馏和策划 |
-| **谁写入** | 人类收集，LLM 只读 | LLM 通过 Dreaming 写入，人类审批 |
+| **谁写入** | 人类或采集工具；Agent 只能做可追溯的格式转换 | Agent 写 Candidate，人类审批后进入 Wiki |
 | **衰减** | 无 — raw materials 永久保留 | 类型特定 λ — 知识随时间衰减 |
 | **召回** | 关键词 + 新鲜度 | 6+1 因子相关性 + 记忆曲线 |
 | **优势** | 日期 + 来源分类、A/B/C 分级、指纹去重 | 22 域结构、衰减 tier、4 种知识关系 |
@@ -26,7 +26,9 @@ parent: 内部机制
 
 [OKS Core Architecture](architecture/oks-core-architecture.md)
 
-该图优先表达 `Source -> Raw -> Candidate -> Human Review -> Wiki -> Search / Recall -> Agent Output -> Evaluation`，并区分已验证、部分验证、尚未验证、人工边界、可选飞书控制面、Agent 执行层和外部插件/Skill 来源。
+该图优先表达 `Recall before add -> Raw -> A/B/C -> Candidate -> Human Review -> Wiki -> Recall`，
+并区分 Core、Agent、外部提取能力与人工门禁。飞书位于 `examples/feishu-loop/`
+作为参考实现，不是 Core 组件。
 
 ## 4 认知桶 + 2 基础设施层
 
@@ -45,33 +47,22 @@ parent: 内部机制
 
 ```
 open-knowledge-studio/
-├── .agents/          # Agent skill 副本（10 个，与 Claude 镜像一致）
-├── .claude/          # Claude Code skills（10 个）+ hooks + rules
-├── .codex/           # Codex 本地配置、hooks
+├── assets/           # 安装到知识实例的 skills、settings、profiles 与模板
 ├── cli/              # Python 包；提供 oks CLI（knowledge_studio）
 ├── docs/             # GitHub Pages 文档
-├── drafts/           # 仓库内示例/工作草稿；知识实例中也有 drafts/
-├── profiles/         # 画像、目标、配方
-├── raw/              # Raw materials
-├── schemas/          # Raw/capture 协议 schema（与 cli/knowledge_studio/schemas/ 镜像一致）
-├── scripts/          # feishu_base_worker（兼容入口）+ feishu_worker/ 子包（模块化拆分后）
-├── settings/         # 路由、输入源、衰减等配置
-├── templates/        # Wiki / draft 模板
-├── wiki/             # 策展知识
-├── providers/        # 17 个 Provider 定义（含 user_impact 元数据）
-├── capabilities/     # 能力动作目录（actions.yaml）
-├── recipes/          # Modality recipes（7 种）
-├── security/         # 凭证脱敏 + 敏感字段检测
-├── _meta/            # frontmatter 与学习 schema
+├── examples/         # 可选参考实现（包括 Feishu loop）
+├── records/          # 验收与历史过程证据，不发布为产品文档
+├── schemas/          # 仓库级协议 Schema 事实源
+├── SKILL.md          # Agent 可读取的一键连接契约
 ├── AGENTS.md         # Agent 操作规则
 ├── CONSTITUTION.md   # 记忆系统设计
 ├── CHANGELOG.md      # 发布历史
 └── README.md
 ```
 
-运行时目录如 `.oks/`、`.codex-tmp/`、`output/`、`tmp/` 可能出现在本地工作树中，但它们是实验或运行产物，不是公开知识结构的核心层。
-
-**基础设施（非桶）**：`cli/`、`scripts/`、`schemas/`、`templates/`、`providers/`、`capabilities/`、`recipes/`、`security/`、`docs/` 位于顶层，但装的是代码、协议、模板或文档，不是知识本体。
+`oks init` 才会在独立知识实例中生成 `profiles/`、`raw/`、`drafts/`、
+`wiki/`、`settings/`、`_meta/` 以及 Agent host 配置。不要把产品源码仓库与
+用户知识实例画成同一个目录树。
 
 ## 22 个知识域
 

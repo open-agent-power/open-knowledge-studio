@@ -80,7 +80,10 @@ oks capability status --json
 | 需登录或 JavaScript 网页 | **Firecrawl**；登录态才考虑用户浏览器 | Firecrawl API Key / MCP；或用户 Chrome profile | 不绕过 CAPTCHA、付费墙和 DRM |
 | 知乎、微信、B 站等平台 | **AgentKey**；失败时人工补证 | AgentKey MCP / OAuth | 平台反爬、加密或登录要求出现时回退人工 |
 
-## Provider 全表：当前 17 个注册能力
+## Provider 清单：以运行时状态为准
+
+Provider 会随版本变化。下面是当前版本的能力类型说明，不把条目数量作为产品承诺；
+请始终用 `oks capability status --json` 获取本机实际清单和可用性。
 
 `执行方式`说明谁运行它：`agent_native` 是 Agent 自身能力，`managed` 是本机受管理工具，`external` 是远程服务或外部系统，`human` 是人工补证。`状态`来自每个 Provider 的 action maturity，不表示所有输入都能成功。
 
@@ -151,13 +154,10 @@ oks capability install pdf --yes
 
 ### P3：团队协作与飞书
 
-仅在团队已经决定使用飞书作为采集和审核入口时安装：
-
-```bash
-oks capability install feishu --yes
-```
-
-飞书还需要用户自行管理 `lark-cli` 与授权。它不是核心依赖：未配置飞书时，本地 `raw → Candidate → 人工审核 → Wiki → recall` 闭环仍完整可用；本地 lease lock 也**不**提供多机互斥。
+飞书不是 Capability 安装项，也不再是 `oks` CLI 命令组。需要团队采集和消息审核时，参考
+[`examples/feishu-loop/`](https://github.com/open-agent-power/open-knowledge-studio/tree/main/examples/feishu-loop)
+的独立脚本，并自行管理 `lark-cli` 与授权。该参考实现不影响本地
+`raw → Candidate → 人工审核 → Wiki → recall` 闭环；其本地 lease lock 也**不**提供多机互斥。
 
 ## 已完成实验：结果应如何影响选型
 

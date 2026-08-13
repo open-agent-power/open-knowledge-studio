@@ -46,7 +46,7 @@ nav_order: 7
 
 核心链路应理解为：
 
-Source -> Raw -> Candidate -> Human Review -> Wiki -> Search / Recall -> Agent Output
+Source -> Raw -> Candidate -> Human Review -> Wiki -> Recall -> Agent Output
 
 ### 2. 检查环境
 

@@ -1,10 +1,11 @@
 ---
-title: 摄入
-nav_order: 9
+title: 收录资料
+nav_order: 1
+parent: 使用 OKS
 has_children: true
 ---
 
-# 摄入
+# 收录资料
 
 Agent-native 摄入链路：Agent 收集证据并自己写 Manifest，CLI 只做机械校验。
 

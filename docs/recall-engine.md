@@ -5,6 +5,13 @@ parent: 内部机制
 ---
 # 6+1 Factor Recall Engine（六加一因子召回引擎）
 
+`oks recall` 是唯一召回入口。默认合并 Raw episodic 与 Wiki knowledge；
+`--knowledge-only` 只查 Wiki。`raw/executions/` 和 `raw/.logs/` 是 provenance，
+不参与召回。
+
+Recall 的来源标签也受信任边界约束：`[verified]` 只能由 trace 证据
+或 `human_reviewed_at` 产生，不能从 `status`、`confidence` 或访问次数推断。
+
 *六个核心因子 + 一个可选目标因子，为 wiki 页面评分，找到最相关知识。*
 
 使用六个核心因子（外加可选的 goal boost）对 wiki 页面评分，找到最相关的知识。引擎将词项匹配、关键词匹配和图谱关联融合在一次统一的评分过程中。
@@ -17,7 +24,22 @@ parent: 内部机制
 | **Keyword（关键词）** | 精确匹配特定术语 | Substring match |
 | **Graph（图谱）** | 通过主题关联和类型加权查找 | Topic trace + type boost + review bonus |
 
-<img src="assets/recall-engine.svg" alt="Recall Engine" style="max-width:100%;height:auto;" />
+```mermaid
+flowchart TD
+    Query["查询"] --> Lexical["Token overlap"]
+    Query --> Phrase["标题 / 正文 substring"]
+    Query --> Trace["Topic trace"]
+    Lexical --> Base["base"]
+    Phrase --> Base
+    Trace --> Base
+    Base --> Type["base × type boost"]
+    Type --> Review["+ review bonus"]
+    Review --> Memory["+ memory score × 0.5"]
+    Memory --> Goal["+ optional goal boost"]
+    Goal --> Ranked["Knowledge 排序结果 + 来源标签"]
+    Raw["Raw / profiles\n关键词 + 新鲜度"] --> Merge["合并双路结果"]
+    Ranked --> Merge
+```
 
 三种模式在每次查询时自动运行。引擎把它们与记忆分数、review 加成结合，生成最终相关性评分。
 

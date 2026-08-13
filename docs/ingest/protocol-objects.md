@@ -1,7 +1,7 @@
 ---
 title: 协议对象关系
 nav_order: 2
-parent: 摄入
+parent: 收录资料
 ---
 
 # 协议对象关系
@@ -11,7 +11,13 @@ Agent-Native Ingest 路径涉及四个协议对象和一个产物。本文说明
 
 ## 对象层级
 
-<img src="../assets/protocol-objects.svg" alt="SourceEnvelope、EvidenceFragment、EvidenceManifest 和 Raw Bundle v0.2 的字段与实体关系图。" style="max-width:100%;height:auto;" />
+```mermaid
+flowchart LR
+    Source["SourceEnvelope\n1 个来源"] --> Fragment["EvidenceFragment\n1..N 个执行片段"]
+    Fragment --> Manifest["EvidenceManifest\n引用并汇总 Fragment"]
+    Manifest --> Commit["oks raw-commit\nSchema + 引用 + artifact + provenance"]
+    Commit --> Bundle["Raw Bundle v0.2\n持久化证据产物"]
+```
 
 关系方向是：一个 `SourceEnvelope` 产生 N 个 `EvidenceFragment`，Agent 再把这些 Fragment 汇总进一个 `EvidenceManifest`，最后由 `oks raw-commit` 组装成一个 Raw Bundle v0.2。
 
@@ -20,7 +26,7 @@ Agent-Native Ingest 路径涉及四个协议对象和一个产物。本文说明
 | 对象 | 谁创建 | 谁填充 | 关系 |
 |------|--------|--------|------|
 | **SourceEnvelope** | `oks ingest prepare` | CLI 预填充所有确定性字段 | 1 个源 → 1 个 Envelope |
-| **EvidenceFragment** | `oks ingest prepare`（骨架） | Agent 填 evidence 内容 | 1 个 Provider → 1 个 Fragment |
+| **EvidenceFragment** | `oks ingest prepare`（骨架） | Agent 填 evidence 内容 | 1 个执行片段 → 1 个 Fragment |
 | **EvidenceManifest** | `oks ingest prepare`（骨架） | Agent 汇总所有 Fragment | 1 个源 → 1 个 Manifest，引用 N 个 Fragment |
 | **Raw Bundle v0.2** | `oks raw-commit` | CLI 组装 | 1 个 Manifest → 1 个 Bundle |
 
@@ -58,7 +64,8 @@ Agent-Native Ingest 路径涉及四个协议对象和一个产物。本文说明
 
 **文件**: `manifest/fragments/<fragment_id>.json`
 
-描述**一个 Provider 执行产生了什么证据**。骨架由 CLI 预填充，evidence 内容由 Agent 填。
+描述**一个执行片段产生了什么证据**。执行者可以是注册 Provider、Agent runtime、
+临时工具或人工；骨架由 CLI 预填充，evidence 内容由 Agent 填。
 
 ```json
 {

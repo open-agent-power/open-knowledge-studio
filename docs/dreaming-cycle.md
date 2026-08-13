@@ -5,6 +5,10 @@ parent: 内部机制
 ---
 # Dreaming Cycle（做梦循环）
 
+`/ingest` 已在证据落盘后执行 A/B/C 分级：A 级才生成 Candidate，
+B/C 级保留判断与理由但不进入待审队列。`oks distill` 负责衰减与演化，
+不代替 Agent 的分级或人的审核。
+
 *人工审查的知识演化：raw → 蒸馏 → drafts → 审查 → wiki。*
 
 知识通过**人工审查的 draft 提案**演化 — 系统绝不自动将 raw 内容提升到 wiki。
@@ -19,11 +23,12 @@ Collect → AI Dream → Write Drafts → Human Review → Promote → Decay →
 
 ### 1. Collect（收集）
 
-Trace、对话、文章和论文在 `raw/` 中积累。这是原始材料层 — 人类收集，LLM 可读但 LLM 不写入。
+来源经人工或工具采集后在 `raw/` 中积累。Agent 可以编排采集和转换格式，但不能把
+自己的总结冒充原始材料；语义提炼必须进入 Candidate。
 
 ### 2. AI Dream（AI 做梦）
 
-`/ingest` 技能（三级路由）扫描 `raw/`，识别模式，生成候选 wiki 页面。AI 评估每个材料：
+`/ingest` 技能在证据提交后评估当前来源，并决定是否生成 Candidate：
 
 - **A 级** — 高质量，提升为 draft
 - **B 级** — 可能有用，保留在 raw 等下一轮

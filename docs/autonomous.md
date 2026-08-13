@@ -1,7 +1,7 @@
 ---
 title: 自动驾驶
 nav_order: 7
-parent: 概述
+parent: 内部机制
 ---
 # 自动驾驶：知识自动化的分级
 
@@ -63,7 +63,7 @@ OKS 核心**不内置调度器/执行器**。配方（`profiles/recipes/{slug}.m
   唤起一个 Agent 读该配方、按 Steps 执行。改调度不改 OKS 代码。
 - **`settings/input-sources.json` 是声明式订阅清单** —— 每条 source 用 `"recipe": "..."`
   绑定到具体配方；配方执行时读取其中 `enabled: true` 的源作为输入。
-- **`oks` CLI 只提供能力**（recall / search / drafts / distill…），编排始终由 Agent +
+- **`oks` CLI 只提供能力**（recall / ingest / drafts / distill…），编排始终由 Agent +
   人类在环完成（CONSTITUTION P5）。
 
 ## 现状与设计空间

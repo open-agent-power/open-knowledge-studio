@@ -9,6 +9,10 @@ has_children: true
 
 Open Knowledge Studio 的设计由一组明确的不变量驱动：认知桶架构、六型记忆、人工审查的 Dreaming 循环、类型化衰减。这些页面讲清楚系统内部如何运作。
 
+{: .note }
+当前机制以 `CONSTITUTION.md` 的 P0–P11 与 A1–A5 为边界。过程验收和历史记录位于
+`records/`，不是公开使用文档的事实源。
+
 | 页面 | 内容 |
 |------|------|
 | **[架构设计](architecture.md)** | 认知桶结构 + 记忆生命周期 + 设计原则 |

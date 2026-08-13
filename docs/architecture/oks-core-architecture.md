@@ -6,46 +6,50 @@ nav_order: 20
 
 # OKS 核心架构
 
-日期：2026-08-08（v0.4 Beta Final Engineering Closure 更新）
-
-本页是当前 OKS 架构的主事实源。它必须区分三件事：设计上存在、代码中实现、真实环境验证通过。不要把三者混成”全部可用”。
+本页描述当前职责边界；具体命令以 `oks --help` 为准，架构不变量以
+[`CONSTITUTION.md`](https://github.com/open-agent-power/open-knowledge-studio/blob/main/CONSTITUTION.md)
+为准。Provider 数量和环境可用性属于运行时信息，请用
+`oks capability status --json` 查看，不写死在架构图里。
 
 ## 主闭环
 
 ```mermaid
 flowchart TD
-    Source["Source\nURL、本地文件、人类笔记\n状态：轻量文本已验证"]:::verified
-    Providers["Providers (17)\nagent-runtime / pdf-lite / rapidocr / ffmpeg / firecrawl / ...\n状态：核心已验证，部分 experimental"]:::verified
-    RawCommit["oks raw-commit\n12 Schema 验证 → 原子提交\nRaw Bundle v0.2\n状态：Phase 2A 已验证"]:::verified
-    Distill["Agent Distill\n读取 Raw，用自己的话提炼\n状态：已验证但有发现"]:::verified
-    Candidate["Candidate\n草稿，还不是正式记忆\n状态：已验证"]:::verified
-    Review{"Human Review\naccept / edit / reject / defer\n人工门禁"}:::human
-    Wiki["Wiki\n人工批准后的策展记忆\n状态：已验证"]:::verified
-    Recall["Search / Recall\n6+1 因子召回引擎\n状态：已验证"]:::verified
-    Output["Agent Output\n带 locator 的有依据回答\n状态：部分验证"]:::partial
-    Eval["Evaluation\n质量对比与问题记录\n状态：已验证但有发现"]:::partial
+    Goal["用户目标 + Source"]:::input
+    Preflight["Recall before add\n查重并识别 A4 关系"]:::agent
+    Route{"已有文本证据？"}:::decision
+    Prepare["oks ingest prepare\n协议工作区"]:::core
+    Extract["Agent / oks-connector\n按策略获取与提取"]:::external
+    Commit["oks raw-commit\n验证并原子提交"]:::core
+    Raw["Raw Bundle\n证据与 provenance"]:::data
+    Grade{"Agent A/B/C 分级"}:::decision
+    Candidate["Candidate\ndrafts/<slug>.md"]:::data
+    NoCandidate["B/C：保留 Raw 与结果原因\n不生成 Candidate"]:::data
+    Review{"Human Review"}:::human
+    Wiki["Wiki\n人工批准的知识"]:::data
+    Receipt["Reject Receipt\n保留明确拒绝判断"]:::data
+    Recall["oks recall\nRaw episodic + Wiki knowledge"]:::core
+    Output["Agent Output\n引用 locator"]:::agent
 
-    Source --> Providers --> RawCommit --> Distill --> Candidate --> Review
-    Review -->|accept| Wiki --> Recall --> Output --> Eval
-    Review -->|edit| Candidate
-    Review -->|reject or defer| Stop["停止并保留审计记录\n状态必须保留"]:::human
+    Goal --> Preflight --> Prepare --> Route
+    Route -->|是| Commit
+    Route -->|否| Extract --> Commit
+    Commit --> Raw --> Grade
+    Grade -->|A| Candidate --> Review
+    Grade -->|B / C| NoCandidate
+    Review -->|批准或编辑后批准| Wiki --> Recall --> Output
+    Review -->|拒绝| Receipt
+    Goal -. "任务开始时召回" .-> Recall
 
-    Feishu["Optional Control Plane\n飞书 Base / 表单 / 消息审核\n状态：部分验证，非必需"]:::optional
-    AgentLayer["Agent 执行层\nClaude Code、Codex、OpenClaw、Shell Agent\n状态：混合"]:::external
-    External["外部能力来源\nClaude Code Marketplace、OpenClaw Skill Hub、\n第三方提取器、模型 API\n状态：外部复用，不在 OKS 内重做"]:::external
-    Components["可选能力组件\ndocument：已验证\npdf-lite / watch：已验证\npdf / formula：部分验证\nFeishu：部分验证"]:::partial
-    SkillInstall["技能安装\nClaude 与 Agents 技能镜像一致\n单一事实源 assets/\n构建时+运行时技能剥离\n状态：Phase 2A 已验证"]:::verified
+    Feishu["Feishu reference example\n可选 Source / Review / Result 表面"]:::optional
+    Feishu -.-> Goal
+    Feishu -.-> Review
 
-    Feishu -. "仅作为采集、状态、审核界面" .-> Source
-    Feishu -. "仅作为人工决策界面" .-> Review
-    AgentLayer -. "编排、理解、写 Candidate / 输出" .-> Distill
-    AgentLayer -. "调用 CLI 和 Skills" .-> Source
-    External -. "提供工具、Skill、Provider" .-> AgentLayer
-    Components -. "按需安装" .-> Providers
-    SkillInstall -. "oks init / init --upgrade" .-> AgentLayer
-
-    classDef verified fill:#e8f5e9,stroke:#2e7d32,color:#1b5e20;
-    classDef partial fill:#fff8e1,stroke:#f9a825,color:#5d4037;
+    classDef input fill:#eceff1,stroke:#607d8b,color:#263238;
+    classDef core fill:#e8f5e9,stroke:#2e7d32,color:#1b5e20;
+    classDef data fill:#e3f2fd,stroke:#1565c0,color:#0d47a1;
+    classDef agent fill:#fff8e1,stroke:#f9a825,color:#5d4037;
+    classDef decision fill:#fff8e1,stroke:#f9a825,color:#5d4037;
     classDef optional fill:#e3f2fd,stroke:#1565c0,color:#0d47a1;
     classDef external fill:#f5f5f5,stroke:#616161,color:#212121;
     classDef human fill:#fce4ec,stroke:#ad1457,color:#880e4f;
@@ -53,73 +57,44 @@ flowchart TD
 
 读者一分钟内应该先看懂这条线：
 
-`Source -> Providers (17) -> oks raw-commit (Raw Bundle v0.2) -> Agent Distill -> Candidate -> Human Review -> Wiki -> 6+1-factor Recall -> Agent Output -> Evaluation`
+`Recall before add -> Raw evidence -> A/B/C -> Candidate -> Human Review -> Wiki -> Recall`
 
-## 状态说明
-
-| 状态 | 含义 |
-|---|---|
-| `已验证` | 代码路径已经在真实本地或远端环境跑过。 |
-| `已验证但有发现` | 闭环可用，但报告记录了产品问题、追溯问题或操作摩擦。 |
-| `部分验证` | 某些子路径可用，但完整能力声明还没有被证明。 |
-| `尚未验证` | 可能有设计或代码，但没有合格运行证据。 |
-| `人工门禁` | 系统必须停下等待明确人工审核，不能自动继续。 |
+图只表达职责和状态转换，不表达某个版本的验收结论。特定环境的测试与验收证据
+保存在 `records/`，避免把历史快照误读为当前能力承诺。
 
 ## 什么是核心
 
 OKS 的核心是可审计的知识生命周期：
 
-- Source、Provider、Raw Bundle、Candidate、Review、Wiki、Recall、Output、Evaluation 必须是分离状态；
-- Raw Bundle 通过 `oks raw-commit` 严格验证（12 Schema、fail-closed、原子提交）；
+- Source、提取执行、Raw Bundle、Candidate、Review、Wiki、Recall 与 Output 必须是分离状态；
+- Raw Bundle 通过 `oks raw-commit` 做 Schema、交叉引用、artifact、locator 与 provenance 校验，并原子提交；
 - Skill 通过 `assets/` 作为唯一事实源安装（`_materialize_assets()` 按 `_AGENT_TARGETS` 装配）；
 - Wiki 晋升前必须有人类明确批准；
-- CLI 必须提供 `search`、`recall`、`raw-commit`、`init --upgrade`、`capability` 等生命周期能力；
+- CLI 必须提供 `recall`、`raw-commit`、`init --upgrade`、`capability` 等生命周期能力；`recall` 是唯一召回入口；
 - `failed`、`partial`、`skipped`、`environment_limited` 等状态必须保留。
 
 OKS 的核心声明不是”能提取所有媒体类型”，而是”知识可以经过可追溯、有人类门禁的闭环沉淀为可召回记忆”。
 
 ## 什么是可选
 
-飞书是可选私有控制面。它可以提供 Base、表单、消息审核等入口，用来承载采集、状态和人工审核，但它不是非飞书 CLI 闭环的必要条件。
+飞书是已迁出 Core 的参考实现。`examples/feishu-loop/` 演示 Base、表单和消息审核如何承载采集、状态和人工审核；它不随 `oks` CLI 分发，Core 也不 import 它。
 
 Claude Code Marketplace、OpenClaw Skill Hub、浏览器工具、模型 API、OCR/ASR 引擎、文档/视频提取器都是外部能力来源。OKS 应该在需要时调用或复用它们，而不是把它们重新实现成内部平台模块。
 
-## v0.4.0 关键架构变更
+## 当前边界
 
-| 变更 | v0.3.0 | v0.4.0 |
-|------|--------|--------|
-| Wheel 包 | `knowledge_studio` + `oks_connector` | 仅 `knowledge_studio` |
-| 摄入入口 | `oks-connector` CLI + `route_plan()` | `oks raw-commit` + Agent-Native `/ingest` |
-| Skill 安装源 | 仓库根 `.claude/skills/` → `_assets/` | `assets/`（唯一 canonical 源） |
-| Schema 验证 | fail-open (`try/except: pass`) | fail-closed (`SCHEMA_VALIDATOR_UNAVAILABLE`) |
-| 提交方式 | 直接写入最终目录 | 暂存目录 → 验证 → 原子 `shutil.move` |
-| Provider 发现 | 扁平 JSON 文件 | 结构化 `providers/<id>/provider.yaml` |
-| 测试 | 无跨平台门禁 | 全部通过，且三平台 × Python 3.12/3.13 的 CI 为 PR 合并门禁 |
-| 技能安装可复现性 | 不可保证 | `oks init` ≡ `oks init --upgrade`（SHA256 一致） |
-| Evidence 一致性 | 无校验 | Fragment ↔ Manifest 4 核心字段校验，fail-closed |
-| ASR 语义 | transcript 伪装 subtitle | `kind=transcript` + `method=asr_transcription` 合法 |
-| 策略配置 | 无 | `oks config set strategy` — lightweight/quality/privacy/ask_each_time |
-| Provider 影响元数据 | Agent 无法获取 | Provider 携带 `user_impact`，通过 `oks capability status --json` 暴露 |
-| 飞书采集 | 仅实时事件模式 | Pull Mode 参考实现见 `examples/feishu-loop/`（已从核心迁出） |
-
-## 当前证据
-
-| 能力 | 当前状态 | 证据 |
-|---|---|---|
-| 轻量文本核心闭环 | `已验证但有发现` | `records/acceptance/clean-server-deployment-report.md` |
-| Raw Bundle v0.2 验证管线 | `已验证` | Gate RC-PROTOCOL-01 + Phase 2A 审计 |
-| Fragment ↔ Manifest 一致性 | `已验证` | v0.4 Beta Closure Gate 1 — 10 项专用测试 |
-| ASR transcript 语义 | `已验证` | v0.4 Beta Closure Gate 2 — Schema 已接受 `kind=transcript` |
-| Guided Decision UX | `已验证（基础设施层）` | v0.4 Beta Closure Gate 3 — 策略配置 + user_impact + 技能模板 |
-| Feishu 集成 | `已迁出核心` | v0.4 验证后迁至 `examples/feishu-loop/` 作参考实现 |
-| Skill 安装闭合 | `已验证` | Phase 2A 外部 Wheel 安装验证 |
-| `document` 能力 | `已验证` | 远端干净服务器 document 安装与 ingest |
-| pdf-lite / watch | `已验证` | Provider 验收报告 |
-| 完整 E2E 闭环 | `已验证` | v0.4 Beta Closure Gate 5 — Source → Recall 全链路 |
-| Agent 最终回答 locator 纪律 | `部分验证` | B 组质量提升，但首次未满足严格 locator 阈值 |
-| 飞书控制面 | `部分验证` | `records/acceptance/feishu-e2e-status.md` |
-| pdf / formula | `部分验证 / 有产品问题` | 组件验收报告与后续修复清单 |
-| 冷启动 E2E | `部分验证` | 基础设施就位；需独立 Auditor 在干净会话中执行 |
+| 主题 | 当前边界 |
+|------|----------|
+| 包边界 | Core 包为 `knowledge_studio`；采集执行由依赖包 `oks-connector` 提供 |
+| 摄入入口 | Agent `/ingest`，或 CLI 的 `oks ingest prepare` / `oks ingest run` |
+| 召回入口 | 仅 `oks recall` |
+| Skill 安装源 | `assets/` 是安装到各 Agent host 的 canonical 源 |
+| 提交安全 | 校验失败即拒绝；最终写入使用原子替换/移动 |
+| Provider 发现 | 包内 `knowledge_studio/providers/<id>/provider.yaml`；数量以运行时状态为准 |
+| 远程处理 | URL 可访问不等于允许上传；`ask` 必须在远程处理前由用户决策 |
+| 审核 | Promote 必须有人类批准；Reject 写 receipt，不把拒绝伪装成遗忘 |
+| 飞书 | 仅 `examples/feishu-loop/` 参考实现，不随 Core CLI 分发 |
+| 导出 | `oks wiki export` 生成单向快照，不提供双向同步 |
 
 ## 架构规则
 

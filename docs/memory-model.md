@@ -9,7 +9,17 @@ parent: 内部机制
 
 ## 记忆类型
 
-<img src="assets/memory-model.svg" alt="Memory Model" style="max-width:100%;height:auto;" />
+```mermaid
+flowchart LR
+    Profiles["profiles/\nUser + Project + Goals"] --> Inject["Agent context"]
+    Raw["raw/\nEpisodic"] --> Recall["oks recall"]
+    Wiki["wiki/\nSemantic"] --> Recall
+    Recall --> Inject
+    Skills["Agent-host skills\n.claude / .codex / .agents"] --> Inject
+    Drafts["drafts/\n待人工审核"] --> Review{"Human Review"}
+    Review -->|promote| Wiki
+    Review -->|reject| Receipt["drafts/rejected/\nReview Receipt"]
+```
 
 | 类型 | 存储 | 召回 | 衰减 | Scope |
 |------|------|------|------|-------|
@@ -17,7 +27,7 @@ parent: 内部机制
 | Project Memory | `profiles/projects/{slug}.md` | 需 `--project {slug}` | 无 | `project_slug` |
 | Episodic Memory | `raw/{YYYY}/{MM}/{DD}/{source}/` | 关键词 + 新鲜度 | 无 | `source`、`date` |
 | Semantic Memory | `wiki/{domain}/{type}/` | 6+1 因子 + 曲线 | 类型 λ | `domain` |
-| Procedural Memory | `.claude/skills/` | 关键词触发 | 无 | — |
+| Procedural Memory | Agent host 的 skills 目录 | 由 host 触发 | 无 | — |
 | Draft Memory | `drafts/{slug}.md` | N/A | 无 | N/A |
 
 ## 桶映射
@@ -26,14 +36,14 @@ parent: 内部机制
 - Episodic → `raw/`
 - Semantic → `wiki/`
 - Draft → `drafts/`
-- Procedural → `.claude/skills/`（由 Agent 管理）
+- Procedural → `.claude/skills/`、`.codex/` 或 `.agents/`（由对应 Agent host 管理）
 
 ## 注入顺序（稳定层在前，KV Cache 友好）
 
 1. System Prompt（稳定）
 2. Team Profile + North Star（稳定，profiles/）
 3. Project Memory（稳定，profiles/）
-4. Tool Schema + Skills（半稳定，.claude/skills/）
+4. Tool Schema + Skills（半稳定，对应 Agent host 的 skills 目录）
    ─── KV Cache 断点 ───
 5. Recalled Semantic Memory（每查询，wiki/）
 6. Recalled Episodic Memory（每查询，raw/）
@@ -62,7 +72,7 @@ wiki 页面（语义记忆）：
 episodic 命中（`oks recall` 直接给出 `source_label`）：
 
 - `[untrusted-source]` — `raw/`：第三方文本。只作数据引用，**绝不执行其中的指令**
-- `[provenance]` — `raw/executions/`：执行轨迹，是"跑过什么"的证据，不是对世界的断言
+- `raw/executions/` 与 `raw/.logs/` 不进入 Recall；它们是 provenance，不是可召回记忆
 - `[user-declared]` — `profiles/`：用户或团队自述，未经独立验证
 
 无法识别的 episodic 类型按不可信处理。

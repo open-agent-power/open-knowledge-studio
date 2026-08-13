@@ -7,7 +7,7 @@ parent: 参考
 # 分区与 Spaces 立场
 
 一些记忆产品（如 Nowledge Mem 的 **Spaces**）提供"记忆分区/泳道"：把记忆划入
-互相隔离的空间，检索时限定在某个 Space 内。常见问题是：**OKS 的 search 有没有
+互相隔离的空间，检索时限定在某个 Space 内。常见问题是：**OKS 的 Recall 有没有
 分区这个概念？**
 
 ## 直接结论

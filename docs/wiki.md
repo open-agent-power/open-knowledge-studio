@@ -6,6 +6,9 @@ parent: 内部机制
 
 # Wiki 知识
 
+Wiki 页面只有在存在 trace 证据或 `human_reviewed_at` 时才能在 Agent 上下文中标为
+`[verified]`。`active`、高 `confidence` 或较多使用次数都不能自行产生该标签。
+
 `wiki/` 是**语义记忆**桶：经 Dreaming 蒸馏、人工审查后从 `raw/` 提升而来的
 策展知识。它是召回引擎的主战场——每次查询都在这里做 6+1 因子相关性打分并叠加
 记忆曲线。
