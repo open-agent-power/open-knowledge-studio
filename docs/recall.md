@@ -19,7 +19,7 @@ oks recall "查询" --explain --format json
 oks wiki use <slug>
 ```
 
-评分细节见[召回引擎](recall-engine.md)。
+评分细节见[召回引擎](algorithms/recall-engine.md)。
 
 ## 收录前也要 Recall
 

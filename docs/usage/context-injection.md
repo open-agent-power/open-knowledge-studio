@@ -5,7 +5,7 @@ parent: 使用 OKS
 ---
 # 上下文注入
 
-OKS 的核心定位是 **Agent 状态栏注入 + search**：召回 `wiki/` + `raw/` 的知识，注入 Agent 会话上下文。Agent 不从零开始——先看库里有没有相关知识。
+OKS 的核心定位是 **Agent 状态栏注入 + Recall 原语**：召回 `wiki/` + `raw/` 的知识，注入 Agent 会话上下文。Agent 不从零开始——先看库里有没有相关知识。
 
 ## 注入原理
 
@@ -63,13 +63,23 @@ pi 不读 settings.json，要装 extension。open-knowledge-studio 仓库已带 
 
 `user-prompt-recall.py` 的注入流程：
 
-1. 读 stdin JSON payload（`prompt` + `session_id`）
+1. 读 stdin JSON payload（`prompt` + `session_id`，可含 `cwd` + `agent_id`）
 2. **trivial 跳过**：prompt < 6 字或"你好/ok/继续"等不召回
-3. 跑 `recall(query=prompt, limit=5)`（走 config KB root：`OKS_ROOT` → `~/.oks/config.json` → cwd）
-4. **floor 过滤**：relevance >= 0.7（`OKS_RECALL_FLOOR`）才注入
-5. **cooldown 去重**：同 session 同 slug 10 轮（`OKS_RECALL_COOLDOWN`）内不重复
-6. stdout 输出 `<recalled-memory>` 块（最多 `OKS_RECALL_TOPN=3` 条）
-7. **fail open**：任何错误 exit 0，不阻塞 prompt
+3. 根据 `agent_id + cwd` 查 Registry；有绑定时把对应 `goal_slugs` 传给 Recall，没有绑定时保持默认作用域
+4. 跑 `recall(query=prompt, limit=5, goal=绑定目标)`（走 config KB root：`OKS_ROOT` → `~/.oks/config.json` → cwd）
+5. **floor 过滤**：relevance >= 0.7（`OKS_RECALL_FLOOR`）才注入
+6. **cooldown 去重**：同 session 同 slug 10 轮（`OKS_RECALL_COOLDOWN`）内不重复
+7. 按需加入绑定目标（未绑定时为 active goals）、首次使用提示和收件箱消息；Mail 是协调信息，不是 Recall 命中
+8. stdout 输出 `<recalled-memory>` 容器；容器可包含记忆、目标和协调信息，但三者语义不同
+9. 对实际注入的 Wiki 页面追加 `records/inject.jsonl` 过程记录；只存 prompt hash，不存原 prompt
+10. **fail open**：任何错误 exit 0，不阻塞 prompt
+
+`records/inject.jsonl`、`records/trace-feedback.jsonl` 和 Registry 可能包含 session、
+Agent ID、工作目录或人工评论。提交到 Git 前应按团队隐私政策检查；`oks recall`
+不返回这些记录；仅写入记录不会自动产生 `[verified]`。
+
+当前 Mail Hook 会扫描共享 inbox，尚未按 `to:` 字段隔离收件人；发送命令也不会
+写入 `mail/sent/`。多 Agent 共用知识库时，不应把当前实现当作私密投递通道。
 
 ## pi extension 做法
 
@@ -96,7 +106,12 @@ export default function (pi: ExtensionAPI) {
     if (!existsSync(script)) return;  // oks hook 未装，跳过
 
     const sessionId = ctx.sessionManager?.getSessionId?.() ?? "pi-default";
-    const payload = JSON.stringify({ prompt, session_id: sessionId });
+    const payload = JSON.stringify({
+      prompt,
+      session_id: sessionId,
+      cwd: process.cwd(),
+      agent_id: process.env.OKS_AGENT_ID ?? "",
+    });
 
     try {
       const out = execFileSync("python3", [script], {
@@ -120,6 +135,8 @@ export default function (pi: ExtensionAPI) {
 - **KB root 解析走 config**——`recall()` 内部 `OKS_ROOT → config → cwd`，所以开发仓库（wiki/ 空）也能从配置的 KB 注入。
 - **`display: true`** 测试期透明显示（用户看到注入了啥），稳定后改 `false` 静默注入。
 - **fail open**——任何错误 return（不抛），prompt 永不因 recall 失败被阻塞。
+- **作用域优先**——`OKS_AGENT_ID` → payload `agent_id` → cwd basename；Registry 只绑定当前终端作用域。
+- **过程信号不等于知识**——被注入、被使用、Mail 已读都不能提高知识可信度。
 
 ## 测试
 
@@ -237,6 +254,9 @@ feedback 进**分析**不进**评分**——confidence 只在指纹命中 +0.1�
 - rejected 的 rel 分布 → 调 floor 建议
 - 但不直接改 confidence / recall 权重（需标注数据集量化，见 [recall-evaluation](../algorithms/recall-evaluation.md)）
 
+`oks metrics --html` 会从注入和反馈记录生成本地报告；报告中的 floor 与 cooldown
+建议是观察结果，不会自动修改配置或 Recall 权重。
+
 ## 可调参数（env）
 
 | env | 默认 | 作用 |
@@ -245,6 +265,8 @@ feedback 进**分析**不进**评分**——confidence 只在指纹命中 +0.1�
 | `OKS_RECALL_TOPN` | 3 | 最多注入几条 |
 | `OKS_RECALL_MINLEN` | 6 | 最短 prompt 长度（< 此跳过） |
 | `OKS_RECALL_COOLDOWN` | 10 | 同 slug 去重轮数 |
+| `OKS_AGENT_ID` | cwd 目录名 | 当前终端 Agent 身份；需要跨机器稳定时显式设置 |
+| `OKS_MAIL_TOPN` | 3 | 最多注入的未读协调消息数 |
 
 ## 局限：无 embedding 的误命中
 

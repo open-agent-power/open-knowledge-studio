@@ -42,4 +42,4 @@ oks ingest prepare <文件或URL>
 
 - 尚未安装：前往[安装](installation.md)。
 - 已完成安装：开始[第一个知识闭环](first-knowledge-loop.md)。
-- 已经尝试过：用[确认 OKS 正在工作](verify-it-works.md)定位失败环节。
+- 已经尝试过：用[确认 OKS 正在工作](verify.md)定位失败环节。

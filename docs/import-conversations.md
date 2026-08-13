@@ -13,7 +13,7 @@ AI 对话（Claude Code / Cursor / Codex / ChatGPT 导出）在 OKS 里是一等
 2. `/archive` 存对话原文到 `raw/conversations/{YYYY}/{MM}/{DD}/{source}/`（episodic 记录，`[untrusted-source]`）
 3. `/archive` 提炼 Q&A 到 `drafts/`，等人审（`/promote`）→ `wiki/`
 
-捕获与提炼是分开的两层——对话原文是材料，提炼出的结论走人审。详见 [对话](../usage/conversations.md)。
+捕获与提炼是分开的两层——对话原文是材料，提炼出的结论走人审。详见 [对话](usage/conversations.md)。
 
 ## 手动导入外部对话
 

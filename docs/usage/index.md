@@ -5,7 +5,7 @@ has_children: true
 ---
 # 使用 OKS
 
-OKS 是 **Agent 状态栏注入 + search**：召回 `wiki/` + `raw/` 的知识，注入 Agent 会话上下文。
+OKS 是 **Agent 状态栏注入 + Recall 原语**：召回 `wiki/` + `raw/` 的知识，注入 Agent 会话上下文。
 
 - [记忆](memories.md) — `wiki/` 沉淀的知识（人审过的）
 - [对话](conversations.md) — `raw/conversations/` AI 对话原文

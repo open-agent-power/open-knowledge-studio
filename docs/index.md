@@ -11,7 +11,7 @@ nav_order: 1
 
 > 让 Agent 把资料转化为可审核、可追溯、以后能重新召回利用的知识。
 
-OKS 是一个 Agent-native、文件系统优先的知识工作台——**Agent 状态栏注入 + search**。来源先成为 Raw 证据，Agent 再提出 Candidate；只有经过人的审核，内容才进入 Wiki，并在未来任务中被 Recall 注入上下文。
+OKS 是一个 Agent-native、文件系统优先的知识工作台——**Agent 状态栏注入 + Recall 原语**。来源先成为 Raw 证据，Agent 再提出 Candidate；只有经过人的审核，内容才进入 Wiki，并在未来任务中被 Recall 注入上下文。
 
 ```text
 你的资料 → Candidate → 人工审核 → Wiki → Recall 注入
@@ -39,6 +39,7 @@ OKS 是一个 Agent-native、文件系统优先的知识工作台——**Agent �
 - 采集与提取由独立发布的 `oks-connector` 和 Agent 可用工具完成。
 - `raw/executions/` 和 `raw/.logs/` 是溯源记录，不作为记忆参与 Recall。
 - `[verified]` 只来自 trace 证据或 `human_reviewed_at`，不能由模型自行声明。
+- Mail、Registry 和 `records/*.jsonl` 由独立运行路径读取或记录；`oks recall` 不返回它们，仅发生读取或记录也不会自动产生可信标签。
 
 ## 按需要深入
 

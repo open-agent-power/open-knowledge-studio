@@ -11,18 +11,19 @@ parent: 参考
 
 | 命令 | 用途 |
 |------|------|
-| `oks init <path>` | 创建实例（物化 4 桶 + skills + profiles） |
+| `oks init <path>` | 创建实例（物化认知桶、配置、Schema 与 Agent skills） |
 | `oks status` | 知识库概览（wiki/raw 计数 + tier + 质量） |
+| `oks metrics [--html]` | 知识指标；可生成基于注入与反馈记录的本地 HTML 报告和调参建议 |
 | `oks recall "<q>"` | 召回（6+1 因子，双路 wiki + raw） |
 | `oks ingest run <src>` | 摄入材料 → Raw Bundle |
 | `oks ingest prepare <src>` | 生成 ingest 协议骨架 |
 | `oks wiki create/list/get/pin/archive/use/export` | wiki 页管理 + OKF 导出 |
 | `oks drafts list/promote/reject` | draft 候选审核 |
 | `oks distill [--dry-run]` | 衰减 + 演化（dreaming 后半） |
-| `oks capability list/install/status/doctor` | 能力注册 |
+| `oks capability list/install/status/guide` | 能力注册与选择指导 |
 | `oks hook install/status` | opt-in 自动 recall 注入 |
 | `oks trace *` | 执行追踪（provenance） |
-| `oks mail send/inbox/read/count` | Agent 间通信（inbox/sent） |
+| `oks mail send/inbox/read/count` | Agent 间消息接口；不属于 `oks recall` 结果 |
 | `oks registry list/bind/remove` | 终端注册表（agent+cwd → profile/goal） |
 | `oks lint` | 扫 wiki/ 一致性 |
 | `oks config init/show/set` | 配置 |
@@ -30,6 +31,10 @@ parent: 参考
 | `oks eval recall <dataset>` | 召回离线评测 |
 
 完整命令：`oks --help`。
+
+Registry、Mail 和 `records/*.jsonl` 使用独立的运行路径，不由 `oks recall` 返回。
+`records/inject.jsonl` 记录哪些页面被注入，`oks wiki use` 可标记其是否被实际采用；
+仅记录这些信号不会提升 `confidence`、改变审核状态或产生 `[verified]`。
 
 ## Frontmatter 字段
 

@@ -71,6 +71,9 @@ the separately packaged `oks-connector` runtime.
 - Feishu is an optional reference implementation under
   [`examples/feishu-loop`](examples/feishu-loop/), not a Core CLI command or
   dependency.
+- `mail/`, terminal Registry, and `records/*.jsonl` are loaded or recorded by
+  separate runtime paths. `oks recall` does not return them, and merely loading
+  or recording them does not create trust labels.
 - `partial`, `failed`, `skipped`, and `environment_limited` are honest outcomes,
   not states to hide.
 
@@ -78,9 +81,9 @@ the separately packaged `oks-connector` runtime.
 
 - [Start here](docs/start-here.md)
 - [Complete your first knowledge loop](docs/first-knowledge-loop.md)
-- [Verify that OKS works](docs/verify-it-works.md)
-- [Core architecture](docs/architecture/oks-core-architecture.md)
-- [Capability boundaries](docs/capability-boundaries.md)
+- [Verify that OKS works](docs/verify.md)
+- [Architecture principles](docs/concepts/constitution.md)
+- [Ingest boundaries](docs/reference/ingest.md)
 
 ---
 
@@ -136,15 +139,17 @@ oks ingest prepare <文件或URL>
 - Provider 产生证据，不直接产生 Wiki 知识；Candidate 必须经过人工审核。
 - 飞书位于 [`examples/feishu-loop`](examples/feishu-loop/)；它是可选参考实现，
   不是 Core CLI 命令或依赖。
+- `mail/`、终端 Registry 和 `records/*.jsonl` 由独立运行路径读取或记录；
+  `oks recall` 不返回它们；仅发生读取或记录不会自动产生可信标签。
 - `partial`、`failed`、`skipped`、`environment_limited` 都必须如实保留。
 
 ### 继续阅读
 
 - [从这里开始](docs/start-here.md)
 - [完成第一个知识闭环](docs/first-knowledge-loop.md)
-- [确认 OKS 正在工作](docs/verify-it-works.md)
-- [核心架构](docs/architecture/oks-core-architecture.md)
-- [能力边界](docs/capability-boundaries.md)
+- [确认 OKS 正在工作](docs/verify.md)
+- [架构原则](docs/concepts/constitution.md)
+- [摄入边界](docs/reference/ingest.md)
 
 ## License
 

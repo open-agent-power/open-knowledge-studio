@@ -140,6 +140,6 @@ JSON 响应版本 `recall-response/v1`，单条 `recall-hit/v1`。
 
 6+1 是无 embedding 下的折中方案，适合本地小到中知识库（百到千页）。优点：轻量、可解释、不调 AI、类型/失败/目标感知。局限：无语义召回（跨表述差）、无 IDF/长度归一化。语义召回需 embedding（大改，需模型+索引+标注量化），暂不做。
 
-OKS 是 **search 原语，不是 agentic search**——单次查询返回结果，不做 ReAct 多轮迭代（“搜索→评估→再搜索”）。多轮探索由 host Agent（Claude Code 等）在宿主层做：OKS 提供召回原语 + source label（防间接提示注入），Agent 决定要不要再搜。这是 OKS“Agent 状态栏注入 + search”定位的边界。
+OKS 提供的是 **Recall 原语，不是 agentic search**——单次查询返回结果，不做 ReAct 多轮迭代（“召回→评估→再召回”）。多轮探索由 host Agent（Claude Code 等）在宿主层做：OKS 提供召回原语 + source label（防间接提示注入），Agent 决定要不要继续召回。这是 OKS“Agent 状态栏注入 + Recall 原语”定位的边界。
 
 召回是只读：查询不算使用，不推 `access_count`。`oks wiki use <slug>` 才 +1 驱动记忆曲线——记忆热度反映“真被用上”而非“被搜过几次”。

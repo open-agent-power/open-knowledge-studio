@@ -7,15 +7,15 @@ parent: 概念
 
 完整文本见 [CONSTITUTION.md](https://github.com/open-agent-power/open-knowledge-studio/blob/main/CONSTITUTION.md)。下面是摘要。
 
-## A1: 四桶 + 两基础设施
+## A1: 认知桶 + 两基础设施
 
-四个认知桶 `profiles/` `raw/` `wiki/` `drafts/`，两个基础设施 `settings/` `_meta/`。记忆生命周期：Observe → Write → Store → Retrieve → Inject → Forget。
+A1 列出 `profiles/` `raw/` `wiki/` `drafts/` `mail/`，并将 `settings/` `_meta/` 作为两个基础设施层。其中 `mail/` 保存 Agent 间的短期通信，不参与 Recall 或衰减。记忆生命周期：Observe → Write → Store → Retrieve → Inject → Forget。
 
 召回索引是**可重建的派生物**——从 Git 中已审核的 `wiki/` 生成；Git 里人审过的知识才是真正来源，索引丢了重跑 `oks recall` 即可重建。这划清三层：原始证据层（`raw/`，只增不改）/ 知识层（`wiki/`，可修订）/ 服务层（召回索引，可重建）。
 
 ## A2: 六类记忆 + 注入顺序 + source labels
 
-User / Project / Episodic / Semantic / Procedural / Draft 六类，映射到四桶 + skills。每条注入的知识带 source label（`[verified]` / `[inferred]` / `[stale]` / `[untrusted-source]`），未识别类型默认 untrusted。
+User / Project / Episodic / Semantic / Procedural / Draft 六类，映射到认知桶 + skills。每条注入的知识带 source label（`[verified]` / `[inferred]` / `[stale]` / `[untrusted-source]`），未识别类型默认 untrusted。
 
 ## A3: Dreaming — 人审门控
 

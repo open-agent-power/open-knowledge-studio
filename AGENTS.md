@@ -9,11 +9,10 @@ Open Knowledge Studio is a file-based knowledge base system designed for use wit
 - **5 cognitive buckets + 2 infrastructure layers**: profiles/, raw/, wiki/, drafts/, mail/ (cognitive), settings/ (config), _meta/ (schema)
 - **Agent-Native ingestion pipeline**: Source → Provider → EvidenceFragment → EvidenceManifest → `oks raw-commit` → Raw Bundle v0.2 → Candidate → Human Review → Wiki
 - **6+1-factor recall engine**: token overlap + substring + topic trace + type boost + review bonus (failure lessons rank higher) + memory curve + optional goal boost (active goals lift on-scope pages; no-op without goals)
-- **16 Providers** across 4 execution tiers: agent_native (2), managed (8), external (4), human (1), blocked/experimental (2)
-- **18 capability actions**: source.fetch, web.fetch, document.text.extract, image.ocr, speech.transcribe, etc.
+- **Provider and capability catalogs**: inspect current Provider availability with `oks capability status`; do not copy changing counts into prose
 - **Dreaming cycle**: raw → AI distill → drafts → human review → wiki
 - **Decay system**: memory curve scoring with type-specific λ, tier classification (hot/warm/cold/evictable)
-- **CLI tool (`oks`)**: recall, raw-commit, ingest, init, skills-install, wiki CRUD, drafts, distill, lint, status, metrics, capability, schema, security, feishu, trace, eval, hook, config (run `oks --help` for the authoritative list)
+- **CLI tool (`oks`)**: run `oks --help` for the authoritative command tree; optional coordination commands include `mail` and `registry`
 
 ## Raw Material vs Memory — The Core Distinction
 
@@ -56,7 +55,7 @@ injected into Claude Code context
 
 See `CONSTITUTION.md` for the full memory design (A1-A5):
 
-- **A1**: Four cognitive buckets + two infrastructure layers + memory lifecycle (Observe→Write→Store→Retrieve→Inject→Forget)
+- **A1**: Cognitive buckets + two infrastructure layers + memory lifecycle (Observe→Write→Store→Retrieve→Inject→Forget)
 - **A2**: Six-type memory model + injection order + source labels + conflict priority
 - **A3**: Dreaming — human-reviewed knowledge evolution
 - **A4**: Knowledge evolution — supersedes, enriches, confirms, challenges
@@ -66,20 +65,20 @@ See `CONSTITUTION.md` for the full memory design (A1-A5):
 
 ```
 open-knowledge-studio/
-├── .claude/          # Claude Code skills (10) + hooks (4) + rules (2)
+├── .claude/          # Claude Code development assets
 ├── .codex/           # Codex local config, hooks
-├── .agents/          # Agent skill replicas (10 Claude + 10 Agents)
+├── .agents/          # Generic Agent skill replicas
 ├── profiles/         # ① Portraits — team, users, projects, recipes, goals
 ├── raw/              # ② Raw materials — date-based: {YYYY}/{MM}/{DD}/{source}/
-├── wiki/             # ③ Curated knowledge — 22 domains × 3 types
+├── wiki/             # ③ Curated, human-reviewed knowledge
 ├── drafts/           # ④ Dreaming candidates
-├── mail/              # ⑤ Agent communication — inbox/ + sent/
-├── settings/         # ⑥ Config layer — decay, tool registry, input sources
-├── _meta/            # ⑦ Schema layer — raw evidence, recall case, trace event
+├── mail/             # Agent communication — inbox/ + sent/
+├── settings/         # Config layer — decay, tool registry, input sources
+├── _meta/            # Schema layer — raw evidence, recall case, trace event
 ├── templates/        # concept, strategy, anti-pattern, draft
 ├── capabilities/     # Capability action catalog (actions.yaml)
 ├── recipes/          # Modality recipes (text, pdf, office, image, web, audio, video)
-├── providers/        # 16 Provider definitions (provider.yaml + SKILL.md)
+├── providers/        # Provider definitions (provider.yaml + SKILL.md)
 ├── security/         # Credential redaction + sensitive field detection
 ├── cli/              # Python CLI tool (oks); packaged assets come from assets/
 ├── docs/             # GitHub Pages site — every .md here is a published page
@@ -134,13 +133,17 @@ oks drafts list | promote <slug> | reject <slug>
 oks distill [--dry-run]
 
 # Maintenance
-oks lint | status | metrics | decay
+oks lint | status | metrics [--html] | decay
 
 # Capability
 oks capability list
 oks capability install <name> [--yes]
-oks capability catalog [--json/--text] [--verbose]
-oks capability doctor [--json/--text] [--verbose]
+oks capability status [--json/--text] [--verbose]
+oks capability guide <provider-id>
+
+# Optional coordination
+oks mail send|inbox|read|count
+oks registry list|bind|remove
 
 # Feishu (参考实现，已从核心迁出 → examples/feishu-loop/)
 # 不再随 oks CLI 分发；见 examples/feishu-loop/code/ 的 feishu_base_worker.py / feishu_setup.py
@@ -172,7 +175,7 @@ oks config init | show | set <key> <value>
 
 - **raw/** is human-collected or tool-processed. Tools preserve maximum fidelity — they convert format, not knowledge. LLM does not write knowledge to raw/.
 - **wiki/** is LLM-written, human-approved via drafts/ review.
-- **Intake is agent-direct** — OKS does not wrap tool calls. Agent checks tool availability via Bash (`which curl`, etc.).
+- **Intake is Agent-orchestrated** — `/ingest` is the recommended path. `oks ingest run` is a compatibility entry point that delegates mechanical acquisition and extraction to the separately packaged `oks-connector`.
 - **Global config** (`~/.oks/config.json`) enables cross-project access — `oks recall` works from any directory (resolution: `OKS_ROOT` env → config `knowledge_base_path` → cwd).
 - **Code repo vs instance repo** — THIS repo is the reusable tool/template: it ships clean (wiki/ & drafts/ gitignored) so others can use it. Your personal knowledge lives in a separate instance created by `oks init <path>`, which TRACKS memory in git. Practices proven in an instance flow back here as PRs.
 - **Git IS the migration** — no database, schema changes versioned through _meta/.

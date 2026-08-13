@@ -80,7 +80,7 @@ learning（召回 + 衰减 + 演化）  （沉淀成越来越懂你的知识）
 
 ## 接下来读哪里
 
-* **[案例](cases.md)**：把这套循环用在简历、GitHub、科研上具体长什么样。
+* **[案例](../cases/index.md)**：把这套循环用在简历、GitHub、科研上具体长什么样。
 * **[Dreaming 循环](constitution.md)**：AI 如何帮你从 raw 蒸馏候选，由你拍板。
 
 ---

@@ -6,9 +6,14 @@ parent: 使用 OKS
 
 # Profiles 画像
 
-`profiles/` 是四个认知桶中**唯一稳定、直接读取、不衰减**的认知桶。它承载
+`profiles/` 是认知桶中**稳定、直接读取、不衰减**的一层。它承载
 "我是谁、我在做什么、我要去哪里"——这些事实变化缓慢，因此每轮对话开头都被
 原样注入上下文，而不经过召回打分。
+
+`profiles/agents/registry.jsonl` 保存终端身份与作用域绑定：`agent_id + cwd` 指向
+profile 和 goals；`oks recall` 不检索该文件。可以使用
+`oks registry bind/list/remove` 显式管理；`/assess` 完成 profile 与 goal 建档后也会
+执行 bind，闭合首次引导流程。
 
 ## 定位
 
@@ -40,7 +45,7 @@ profiles/
 
 ## 注入顺序中的位置
 
-Profiles 分布在注入序列的**稳定段与可变段**两处（见[记忆模型](memory-model.html)）：
+Profiles 分布在注入序列的**稳定段与可变段**两处（见[记忆模型](../concepts/memory-model.md)）：
 
 1. System Prompt
 2. **Team Profile + North Star**（profiles/，稳定）

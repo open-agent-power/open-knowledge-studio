@@ -56,4 +56,4 @@ oks recall "当时为什么这样决定？"
 - Wiki 页面带有 `human_reviewed_at`；
 - `oks recall` 能用自然问题找回它。
 
-如果某一步没有发生，前往[确认 OKS 正在工作](verify-it-works.md)。
+如果某一步没有发生，前往[确认 OKS 正在工作](verify.md)。
