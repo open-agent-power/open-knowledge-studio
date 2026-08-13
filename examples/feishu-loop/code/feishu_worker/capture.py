@@ -54,12 +54,16 @@ def normalize_attachments(value: object) -> list[dict[str, Any]]:
 
 def capture_user_note(fields: dict[str, Any]) -> str | None:
     thought = str(fields.get("思考") or "").strip()
-    question = str(fields.get("希望解决的问题") or "").strip()
+    question = str(
+        fields.get("重点问题（可选）")
+        or fields.get("希望解决的问题")
+        or ""
+    ).strip()
     parts = []
     if thought:
         parts.append(thought)
     if question:
-        parts.append(f"希望解决的问题：{question}")
+        parts.append(f"重点问题：{question}")
     return "\n\n".join(parts) or None
 
 

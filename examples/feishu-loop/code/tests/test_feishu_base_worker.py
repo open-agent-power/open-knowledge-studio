@@ -124,8 +124,11 @@ def test_question_is_preserved_in_user_note_and_capture_hash():
     }
     changed = {**original, "希望解决的问题": "学完能做什么？"}
 
-    assert worker.capture_user_note(original) == "值得学习\n\n希望解决的问题：先学什么？"
+    assert worker.capture_user_note(original) == "值得学习\n\n重点问题：先学什么？"
     assert worker.capture_content_hash(original) != worker.capture_content_hash(changed)
+
+    current = {"思考": "值得学习", "重点问题（可选）": "现在先做什么？"}
+    assert worker.capture_user_note(current) == "值得学习\n\n重点问题：现在先做什么？"
 
 
 def test_downloaded_attachment_sha_changes_final_envelope_hash(tmp_path):
@@ -1252,7 +1255,7 @@ def _git_check_ignore(path: Path) -> bool:
 
 
 def test_dot_oks_is_in_gitignore():
-    gitignore = worker.ROOT / ".gitignore"
+    gitignore = Path(__file__).resolve().parents[4] / ".gitignore"
     lines = gitignore.read_text(encoding="utf-8").splitlines()
     assert ".oks/" in lines
 
@@ -1580,8 +1583,17 @@ def test_setup_accepts_current_base_create_response_envelope(monkeypatch):
             return [{"name": "每日知识采集", "id": table_id}]
         if sub == "+field-list":
             return [{"name": field["name"]} for field in USER_FIELDS]
+        if sub == "+form-list":
+            return {"data": {"forms": [{"id": "frmXYZ", "name": "OKS Daily Knowledge Intake"}]}}
         if sub == "+form-create":
             return {"data": {"form_id": "frmXYZ"}}
+        if sub == "+form-questions-list":
+            return {"data": {"items": [
+                {"id": f"q_{index}", "title": title, "required": index == 0}
+                for index, title in enumerate((
+                    "内容", "附件", "思考", "重点问题（可选）", "评级", "知识域",
+                ))
+            ]}}
         return {}
 
     monkeypatch.setattr("feishu_setup._lark", _mock_lark)
@@ -1616,10 +1628,19 @@ def test_setup_redacts_fixture_base_token_by_default(monkeypatch):
                 {"name": "思考", "type": "text"},
                 {"name": "希望解决的问题", "type": "text"},
                 {"name": "评级", "type": "select"},
-                {"name": "知识域", "type": "text"},
+                {"name": "知识域", "type": "select", "multiple": True},
             ]
+        if sub == "+form-list":
+            return {"data": {"forms": [{"id": "frmXYZ", "name": "OKS Daily Knowledge Intake"}]}}
         if sub == "+form-create":
             return {"data": {"form_id": "frmXYZ"}, "form_id": "frmXYZ"}
+        if sub == "+form-questions-list":
+            return {"data": {"items": [
+                {"id": f"q_{index}", "title": title, "required": index == 0}
+                for index, title in enumerate((
+                    "内容", "附件", "思考", "重点问题（可选）", "评级", "知识域",
+                ))
+            ]}}
         if sub == "+field-create":
             return {"field_id": "fld_new"}
         return {}
@@ -1671,10 +1692,19 @@ def test_setup_shows_fixture_token_only_with_show_credentials(monkeypatch):
                 {"name": "思考", "type": "text"},
                 {"name": "希望解决的问题", "type": "text"},
                 {"name": "评级", "type": "select"},
-                {"name": "知识域", "type": "text"},
+                {"name": "知识域", "type": "select", "multiple": True},
             ]
+        if sub == "+form-list":
+            return {"data": {"forms": [{"id": "frmXYZ", "name": "OKS Daily Knowledge Intake"}]}}
         if sub == "+form-create":
             return {"data": {"form_id": "frmXYZ"}, "form_id": "frmXYZ"}
+        if sub == "+form-questions-list":
+            return {"data": {"items": [
+                {"id": f"q_{index}", "title": title, "required": index == 0}
+                for index, title in enumerate((
+                    "内容", "附件", "思考", "重点问题（可选）", "评级", "知识域",
+                ))
+            ]}}
         if sub == "+field-create":
             return {"field_id": "fld_new"}
         return {}
@@ -1697,6 +1727,217 @@ def test_setup_shows_fixture_token_only_with_show_credentials(monkeypatch):
     assert "--show-credentials" not in output, (
         "Output must not hint about --show-credentials when already shown"
     )
+
+
+def test_reference_form_schema_is_exactly_six_user_questions():
+    from feishu_setup import FORM_QUESTIONS, USER_FIELDS, WORKER_FIELDS
+    from feishu_worker.states import KNOWLEDGE_DOMAIN_OPTIONS, RATING_OPTIONS
+
+    assert [question["title"] for question in FORM_QUESTIONS] == [
+        "内容", "附件", "思考", "重点问题（可选）", "评级", "知识域",
+    ]
+    assert [field["name"] for field in USER_FIELDS] == [
+        "内容", "附件", "思考", "重点问题（可选）", "评级", "知识域",
+    ]
+    assert FORM_QUESTIONS[0]["required"] is True
+    assert all(not question["required"] for question in FORM_QUESTIONS[1:])
+    assert [option["name"] for option in USER_FIELDS[4]["options"]] == list(RATING_OPTIONS)
+    assert USER_FIELDS[5]["multiple"] is True
+    assert [option["name"] for option in USER_FIELDS[5]["options"]] == list(KNOWLEDGE_DOMAIN_OPTIONS)
+    assert not ({field["name"] for field in USER_FIELDS} & {field["name"] for field in WORKER_FIELDS})
+
+
+def test_setup_creates_form_before_worker_fields(monkeypatch):
+    from feishu_setup import FORM_QUESTIONS, USER_FIELDS, WORKER_FIELDS, build_parser, setup
+
+    calls = []
+    questions = [{"id": "q_0", "title": "内容"}]
+
+    def _mock_lark(args, *, timeout=60.0, redact_token=None):
+        sub = args[1]
+        calls.append(sub)
+        if sub == "+base-get":
+            return {"name": "OKS Base"}
+        if sub == "+table-list":
+            return []
+        if sub == "+table-create":
+            return {"data": {"table": {"id": "tblNew"}}}
+        if sub == "+form-list":
+            return {"data": {"forms": []}}
+        if sub == "+form-create":
+            return {"data": {"form_id": "frmNew"}}
+        if sub == "+form-questions-create":
+            questions[:] = [
+                {"id": f"q_{index}", "title": item["title"], "required": item["required"]}
+                for index, item in enumerate(FORM_QUESTIONS)
+            ]
+            return {"ok": True}
+        if sub == "+form-questions-list":
+            return {"data": {"items": list(questions)}}
+        return {"ok": True}
+
+    monkeypatch.setattr("feishu_setup._lark", _mock_lark)
+    assert setup(build_parser().parse_args(["--base-token", "base-token"])) == 0
+    assert calls.index("+form-create") < calls.index("+field-create")
+    assert calls.count("+field-create") == len(WORKER_FIELDS)
+    assert "+form-questions-delete" not in calls
+
+
+def test_legacy_question_title_is_accepted_and_renamed(monkeypatch):
+    from feishu_setup import FORM_QUESTIONS, _complete_user_form, _verify_user_form
+
+    questions = [
+        {"id": f"q_{index}", "title": item["title"], "required": item["required"]}
+        for index, item in enumerate(FORM_QUESTIONS)
+    ]
+    questions[3]["title"] = "希望解决的问题"
+
+    def _mock_lark(args, *, timeout=60.0, redact_token=None):
+        if args[1] == "+form-questions-list":
+            return {"data": {"items": list(questions)}}
+        if args[1] == "+form-questions-update":
+            updates = json.loads(args[args.index("--questions") + 1])
+            for question, update in zip(questions, updates):
+                question.update(update)
+        return {"ok": True}
+
+    monkeypatch.setattr("feishu_setup._lark", _mock_lark)
+    _complete_user_form("base", "table", "form")
+    _verify_user_form("base", "table", "form")
+    assert questions[3]["title"] == "重点问题（可选）"
+
+
+def test_empty_new_form_fails_before_creating_questions(monkeypatch):
+    from feishu_setup import _complete_user_form
+
+    calls = []
+
+    def _mock_lark(args, *, timeout=60.0, redact_token=None):
+        calls.append(args[1])
+        return {"data": {"items": []}}
+
+    monkeypatch.setattr("feishu_setup._lark", _mock_lark)
+    monkeypatch.setattr("feishu_setup.time.sleep", lambda _seconds: None)
+    with pytest.raises(RuntimeError, match="未返回引导问题"):
+        _complete_user_form("base", "table", "form")
+    assert "+form-questions-create" not in calls
+
+
+def test_question_creation_waits_for_feishu_read_propagation(monkeypatch):
+    from feishu_setup import FORM_QUESTIONS, _complete_user_form
+
+    complete = [
+        {"id": f"q_{index}", "title": item["title"], "required": item["required"]}
+        for index, item in enumerate(FORM_QUESTIONS)
+    ]
+    reads = iter([
+        [{"id": "q_0", "title": "内容"}],
+        [{"id": "q_0", "title": "内容"}],
+        complete,
+    ])
+
+    def _mock_lark(args, *, timeout=60.0, redact_token=None):
+        if args[1] == "+form-questions-list":
+            return {"data": {"items": next(reads)}}
+        return {"ok": True}
+
+    monkeypatch.setattr("feishu_setup._lark", _mock_lark)
+    monkeypatch.setattr("feishu_setup.time.sleep", lambda _seconds: None)
+    _complete_user_form("base", "table", "form")
+
+
+def test_worker_fields_are_followed_by_a_second_form_verification(monkeypatch):
+    from feishu_setup import FORM_QUESTIONS, USER_FIELDS, build_parser, setup
+
+    question_reads = 0
+    worker_created = False
+
+    def _mock_lark(args, *, timeout=60.0, redact_token=None):
+        nonlocal question_reads, worker_created
+        sub = args[1]
+        if sub == "+base-get":
+            return {"name": "OKS Base"}
+        if sub == "+table-list":
+            return [{"name": "每日知识采集", "id": "table"}]
+        if sub == "+field-list":
+            return [{"name": field["name"]} for field in USER_FIELDS]
+        if sub == "+form-list":
+            return {"data": {"forms": [{"id": "form", "name": "OKS Daily Knowledge Intake"}]}}
+        if sub == "+form-questions-list":
+            question_reads += 1
+            return {"data": {"items": [
+                {"id": f"q_{index}", "title": item["title"], "required": item["required"]}
+                for index, item in enumerate(FORM_QUESTIONS)
+            ]}}
+        if sub == "+field-create":
+            worker_created = True
+        return {"ok": True}
+
+    monkeypatch.setattr("feishu_setup._lark", _mock_lark)
+    assert setup(build_parser().parse_args(["--base-token", "base"])) == 0
+    assert worker_created
+    assert question_reads >= 5
+
+
+def test_setup_fails_closed_on_polluted_form(monkeypatch):
+    from feishu_setup import FORM_QUESTIONS, USER_FIELDS, WORKER_FIELDS, build_parser, setup
+
+    calls = []
+
+    def _mock_lark(args, *, timeout=60.0, redact_token=None):
+        sub = args[1]
+        calls.append(sub)
+        if sub == "+base-get":
+            return {"name": "OKS Base"}
+        if sub == "+table-list":
+            return [{"name": "每日知识采集", "id": "tblExisting"}]
+        if sub == "+field-list":
+            return [{"name": field["name"]} for field in USER_FIELDS + WORKER_FIELDS]
+        if sub == "+form-list":
+            return {"data": {"forms": [{"id": "frmExisting", "name": "OKS Daily Knowledge Intake"}]}}
+        if sub == "+form-questions-list":
+            return {"data": {"items": [
+                *[
+                    {"id": f"q_{index}", "title": item["title"], "required": item["required"]}
+                    for index, item in enumerate(FORM_QUESTIONS)
+                ],
+                {"id": "q_worker", "title": "运行状态"},
+            ]}}
+        return {"ok": True}
+
+    monkeypatch.setattr("feishu_setup._lark", _mock_lark)
+    with pytest.raises(RuntimeError, match="额外字段|字段校验失败"):
+        setup(build_parser().parse_args(["--base-token", "base-token"]))
+    assert "+form-questions-delete" not in calls
+    assert "+field-delete" not in calls
+
+
+def test_verify_form_rejects_missing_readback(monkeypatch):
+    from feishu_setup import _verify_user_form
+
+    monkeypatch.setattr("feishu_setup._lark", lambda *_args, **_kwargs: {})
+    monkeypatch.setattr("feishu_setup.time.sleep", lambda _seconds: None)
+    with pytest.raises(RuntimeError, match="无法读取表单问题列表"):
+        _verify_user_form("base", "table", "form")
+
+
+def test_legacy_rating_aliases_are_normalized():
+    from feishu_worker.states import normalize_rating
+
+    assert normalize_rating("紧急核心") == "A"
+    assert normalize_rating("重要") == "B"
+    assert normalize_rating("普通参考") == "C"
+    assert normalize_rating("暂不处理") == "C"
+    assert normalize_rating("A") == "A"
+
+
+def test_existing_incompatible_user_field_fails_closed():
+    from feishu_setup import _validate_existing_user_fields
+
+    with pytest.raises(RuntimeError, match="知识域 类型应为 select"):
+        _validate_existing_user_fields([
+            {"name": "知识域", "type": "text"},
+        ])
 
 
 def test_setup_redacts_token_in_mocked_lark_failure(monkeypatch):
@@ -3836,7 +4077,7 @@ def test_source_router_fresh_subprocess_import():
         [
             sys.executable,
             "-c",
-            "import sys; sys.path.insert(0, 'scripts'); "
+            "import sys; sys.path.insert(0, 'code'); "
             "from feishu_worker.source_router import "
             "_connector_binary, _run_or_validate, "
             "package_local_attachment, package_routed_source, package_public_web; "

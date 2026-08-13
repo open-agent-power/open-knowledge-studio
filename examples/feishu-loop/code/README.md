@@ -49,11 +49,15 @@ cd examples/feishu-loop/code
 python -m pytest tests/
 ```
 
-> **注意**：部分测试的路径断言（`worker.ROOT`、子进程的 `sys.path`）基于
-> 该脚本原本位于仓库根 `scripts/` 的位置。迁到 `examples/` 后这些断言的
-> 相对路径需要按新位置调整——已知的两个待修项是
-> `test_dot_oks_is_in_gitignore` 与 `test_source_router_fresh_subprocess_import`。
-> 飞书功能本身的验证以手动跑通为准（见上层 `feishu-loop.md`）。
+`feishu_setup.py` 创建并读回校验一个严格的六问题用户表单：内容、附件、思考、
+重点问题（可选）、评级、知识域。Worker 控制字段只存在于底层 Base 表中；如果
+已有表单包含额外字段或顺序异常，setup 会拒绝报告成功，也不会自动删除底层字段
+或历史数据。
+
+setup 会把旧表单问题“希望解决的问题”安全更新为“重点问题（可选）”；读取层仍兼容
+旧名称，避免迁移期间丢失已有记录内容。
+旧评级文本仍可作为命令输入，并映射为 A/B/C；无法安全转换字段类型的旧表会明确
+失败，建议使用新的 `--table-name` 创建干净表单。
 
 ## 相关
 

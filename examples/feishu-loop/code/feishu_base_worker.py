@@ -115,6 +115,7 @@ from feishu_worker.review_events import (
     REVIEW_ACTIONS,
     REVIEW_ACTION_RE,
 )
+from feishu_worker.states import normalize_rating
 
 # ── Legacy wrappers: supply ROOT so callers keep one-argument API ──
 
@@ -144,7 +145,7 @@ CANDIDATE_FIELDS = [
 CAPTURE_FIELDS = [
     "内容",
     "思考",
-    "希望解决的问题",
+    "重点问题（可选）",
     "附件",
     "运行状态",
     "运行ID",
@@ -953,7 +954,7 @@ def main() -> int:
             "重试": False,
         }
         if args.rating:
-            fields["评级"] = args.rating
+            fields["评级"] = normalize_rating(args.rating)
         created = create_record(config, fields)
         print(json.dumps({
             "record_id": created_record_id(created),

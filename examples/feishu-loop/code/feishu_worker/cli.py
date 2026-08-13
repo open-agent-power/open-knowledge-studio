@@ -27,7 +27,10 @@ def parse_args() -> argparse.Namespace:
     enqueue = subcommands.add_parser("enqueue", help="Create one pending capture row.")
     enqueue.add_argument("content")
     enqueue.add_argument("--thought", default="")
-    enqueue.add_argument("--rating", choices=("A", "B", "C"))
+    enqueue.add_argument(
+        "--rating",
+        choices=("A", "B", "C", "紧急核心", "重要", "普通参考", "暂不处理"),
+    )
     once = subcommands.add_parser("run-once", help="Process at most one pending row.")
     once.add_argument("--limit", type=int, default=100)
     selected = subcommands.add_parser(

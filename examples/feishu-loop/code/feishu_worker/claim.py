@@ -41,7 +41,7 @@ ClaimLockFn = Callable[..., Any]  # context-manager callable
 _CLAIM_PROJECTION = [
     "内容",
     "思考",
-    "希望解决的问题",
+    "重点问题（可选）",
     "附件",
     "运行状态",
     "运行ID",

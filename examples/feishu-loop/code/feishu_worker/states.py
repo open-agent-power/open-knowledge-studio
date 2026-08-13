@@ -66,3 +66,24 @@ WIKI_STATUS_OPTIONS: tuple[str, ...] = (
 
 # 审核动作 — review actions accepted by review_events.py
 REVIEW_ACTION_OPTIONS: tuple[str, ...] = ("accept", "edit", "reject", "defer")
+
+# User-facing intake priority. New forms store A/B/C; legacy labels remain
+# accepted by the enqueue command so existing automation does not break.
+RATING_OPTIONS: tuple[str, ...] = ("A", "B", "C")
+RATING_ALIASES: dict[str, str] = {
+    "紧急核心": "A",
+    "重要": "B",
+    "普通参考": "C",
+    "暂不处理": "C",
+}
+
+KNOWLEDGE_DOMAIN_OPTIONS: tuple[str, ...] = (
+    "management", "transport", "finance", "production", "computing",
+    "repair", "engineering", "construction", "science", "agriculture",
+    "social", "administration", "legal", "sales", "education", "personal",
+    "media", "healthcare", "care", "maintenance", "food", "security",
+)
+
+
+def normalize_rating(value: str) -> str:
+    return RATING_ALIASES.get(value, value)
