@@ -39,16 +39,12 @@ OKS 是一个 Agent-native、文件系统优先的知识工作台——**Agent �
 - 采集与提取由独立发布的 `oks-connector` 和 Agent 可用工具完成。
 - `raw/executions/` 和 `raw/.logs/` 是溯源记录，不作为记忆参与 Recall。
 - `[verified]` 只来自 trace 证据或 `human_reviewed_at`，不能由模型自行声明。
-- Mail、Registry 和 `records/*.jsonl` 由独立运行路径读取或记录；`oks recall` 不返回它们，仅发生读取或记录也不会自动产生可信标签。
 
 ## 按需要深入
 
 - **开始使用**：[安装](installation.md) · [快速入门](quick-start.md) · [第一个知识闭环](first-knowledge-loop.md) · [导入已有对话](import-conversations.md) · [确认在工作](verify.md) · [召回](recall.md) · [审核 Candidate](review-candidates.md)
 - **使用 OKS**：[记忆](usage/memories.md) · [对话](usage/conversations.md) · [资料库](usage/library.md) · [上下文注入](usage/context-injection.md) · [你的档案](usage/profiles.md)
 - **概念**：[哲学](concepts/philosophy.md) · [宪法](concepts/constitution.md) · [记忆模型](concepts/memory-model.md) · [文件系统范式](concepts/file-system-paradigm.md)
-- **案例**：[托管你的研究](cases/research.md) · [托管你的 GitHub](cases/github.md) · [托管你的简历](cases/resume.md) · [托管你的书籍](cases/book.md)
 - **算法**：[召回引擎](algorithms/recall-engine.md) · [衰减系统](algorithms/decay-system.md) · [召回评估](algorithms/recall-evaluation.md)
 - **连接**：[备份与导出](connect/backup-export.md)
 - **参考**：[CLI](reference/cli.md) · [ingest 流程](reference/ingest.md) · [故障排除](reference/troubleshooting.md) · [社区](reference/community.md)
-
-历史工程记录保留在仓库 `records/`，不作为当前产品文档的事实源。

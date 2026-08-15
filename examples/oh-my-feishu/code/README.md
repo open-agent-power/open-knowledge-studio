@@ -6,7 +6,7 @@
 ## 这是什么
 
 `feishu_base_worker.py` + `feishu_setup.py` + `_lark_cli.py` + `feishu_worker/` 包，
-合计约 6165 行，演示完整的飞书采集→Raw→Candidate→IM 审核闭环。
+演示完整的飞书采集→Raw→Candidate→IM 审核闭环。
 
 它曾随 `oks feishu` 命令组分发，但飞书是 SaaS 控制面 + 外部 `lark-cli`，
 不属于「装完即用」的 CLI 核心（见 CONSTITUTION P4）。迁出后 OKS 核心更薄，
@@ -14,7 +14,7 @@
 
 ## 运行
 
-从 `examples/feishu-loop/` 目录运行（这样 `code/` 在相对路径上可达）：
+从 `examples/oh-my-feishu/` 目录运行（这样 `code/` 在相对路径上可达）：
 
 ```bash
 # 前置：lark-cli 已安装并认证（OKS 不代管你的飞书凭据）
@@ -45,7 +45,7 @@ export LARK_CLI_EXE="/path/to/lark-cli"   # 找不到时指定绝对路径
 ## 测试
 
 ```bash
-cd examples/feishu-loop/code
+cd examples/oh-my-feishu/code
 python -m pytest tests/
 ```
 
@@ -61,7 +61,7 @@ setup 会把旧表单问题“希望解决的问题”安全更新为“重点�
 
 ## 相关
 
-- 操作流程：[`../feishu-loop.md`](../feishu-loop.md)
+- 操作流程：[`../README.md`](../README.md)
 - 示例 goal：[`../goal.md`](../goal.md)
 - 状态机单一事实源：[`feishu_worker/states.py`](feishu_worker/states.py)
 - 架构说明：[`feishu_worker/ARCHITECTURE.md`](feishu_worker/ARCHITECTURE.md)

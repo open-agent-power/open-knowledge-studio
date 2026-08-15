@@ -81,7 +81,7 @@ downloading. The Agent selects the lowest-cost available capability at runtime
 (API → system CLI → install on demand → remote Worker).
 
 **飞书作为可选集成（已从核心迁出）：**
-飞书集成作为参考实现位于 `examples/feishu-loop/`，不随 CLI 命令分发。其 `feishu_setup.py` 自动创建 Base、采集表、表单；`feishu_base_worker.py` 处理采集→Raw→Candidate→IM 审核闭环。`oks ingest` 与 CLI 主循环不依赖飞书，独立可用。
+飞书集成作为参考实现位于 `examples/oh-my-feishu/`，不随 CLI 命令分发。其 `feishu_setup.py` 自动创建 Base、采集表、表单；`feishu_base_worker.py` 处理采集→Raw→Candidate→IM 审核闭环。`oks ingest` 与 CLI 主循环不依赖飞书，独立可用。
 
 **Do not** add AI API calls to the CLI core — `oks` handles only file
 system operations and recall scoring. External tools (L1/L2) may use AI
@@ -174,10 +174,13 @@ existed.
 
 ### A1: Five cognitive buckets + two infrastructure layers
 
-The knowledge repo separates **four cognitive buckets** — content the agent
-observes, writes, recalls, and forgets — from **two infrastructure layers**
-(config + schema) that the agent reads to know how to behave but never writes
-as knowledge. Config and schema do not decay and are not recalled by relevance.
+The knowledge repo has **five cognitive and interaction buckets**: four hold the
+knowledge lifecycle (`profiles/`, `raw/`, `wiki/`, `drafts/`), while mandatory
+`mail/` holds short-lived coordination and human-Agent evaluation evidence.
+`mail/` is not recallable knowledge and does not own task, review, or trust
+state. Two infrastructure layers (config + schema) are read to determine
+behavior but are never written as knowledge. Config and schema do not decay and
+are not recalled by relevance.
 
 | Layer | Dir | Contents | Decay | Access |
 |-------|-----|----------|-------|--------|
@@ -286,8 +289,9 @@ recall, scope, and decay:
 | Procedural Memory | `.claude/skills/{slug}/` | Keyword trigger | None | — |
 | Draft Memory | `drafts/{slug}.md` | N/A | None | N/A |
 
-**Bucket mapping:** The six types map to the four cognitive buckets + Claude Code skills
-(`settings/` and `_meta/` are infrastructure, not memory types):
+**Bucket mapping:** The six memory types map to the four knowledge-lifecycle
+buckets + Claude Code skills (`mail/` is coordination/evaluation evidence;
+`settings/` and `_meta/` are infrastructure, not memory types):
 - User/Project Memory → `profiles/` (also includes `recipes/` and `goals/`)
 - Episodic Memory → `raw/` (date-based: `{YYYY}/{MM}/{DD}/{source}/`)
 - Semantic Memory → `wiki/`

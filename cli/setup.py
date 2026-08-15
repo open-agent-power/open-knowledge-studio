@@ -38,7 +38,7 @@ def _vendor_assets() -> None:
         shutil.rmtree(dest_root)
     shutil.copytree(source, dest_root, ignore=_ASSET_IGNORE)
 
-    # Feishu intake moved to examples/feishu-loop/code/ as a reference script;
+    # Feishu intake moved to examples/oh-my-feishu/code/ as a reference script;
     # the CLI no longer ships a feishu command group, so _assets/scripts/ is
     # not created anymore.
 

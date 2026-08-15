@@ -1,8 +1,3 @@
----
-title: 托管你的 GitHub
-nav_order: 2
-parent: 案例
----
 # 托管你的 GitHub
 
 *让代码之外的东西——为什么这么做、试过什么、踩过什么坑——不再随提交记录一起被遗忘；再进一步，让沉淀下来的知识反过来驱动你的下一次贡献。*
@@ -31,8 +26,7 @@ Git 记得你**改了什么**，但记不住你**为什么这么改、当时纠�
 - **strategy**：验证有效的技术方案、调试套路、贡献策略。
 - **anti-pattern**：那些"别再这么干了"的教训。
 
-{: .tip }
-失败和踩坑尤其值得沉淀。OKS 的召回引擎**给失败经验额外加权**（见 [召回引擎](../algorithms/recall-engine.md)）——"我们试过 X，没用"往往比又一个成功案例更能防止重蹈覆辙。
+失败和踩坑尤其值得沉淀。OKS 的召回引擎**给失败经验额外加权**（见 [召回引擎](../../docs/algorithms/recall-engine.md)）——"我们试过 X，没用"往往比又一个成功案例更能防止重蹈覆辙。
 
 ## 召回复用
 
@@ -52,7 +46,6 @@ oks recall "为什么 选型 消息队列"
 
 托管到位之后，知识库里攒下的贡献策略（选仓库、静默 merge、CI 排查）和项目教训，就能反过来驱动一次贡献。这条循环被固化在配方 `profiles/recipes/oss-contribution-scan.md`，边界由 `profiles/goals/oss-contribution.md` 划定：
 
-{: .note }
 下文的召回输出、项目画像（`rocketmq.md`）和 wiki 策略页来自作者的**私有知识实例**——个人知识不随本公开仓库分发。公开仓库附带的是可复用的骨架：4 个配方 + 2 个 goal 模板。你跑通自己的循环后，会攒出自己的这些页面。
 
 ```
@@ -73,7 +66,6 @@ oks recall "开源贡献 PR 选仓库 issue 筛选 merge"
 - #10531：没查竞争 PR，提了重复的，被关。
 - #10532：提交后不监控，1 天被别人抢先 merge，17 天后才发现。
 
-{: .important }
 这两条教训不是背景故事，它们直接改写了这一轮的动作顺序——见下一步。
 
 ### Gate 1 去重前置——当场拦下 5 个 no-op
@@ -90,7 +82,6 @@ oks recall "开源贡献 PR 选仓库 issue 筛选 merge"
 
 热门仓库里"漂亮"的小 diff 几小时内就被别人摘光——这本身是条**新知识**，当场沉淀成了 wiki 策略"热门仓库先去重再 triage"。
 
-{: .tip }
 如果先打分后去重，会在 5 个已经没戏的 issue 上白烧预算。教训回流成了流程，流程在下一轮自动生效——这就是"知识库即模型"的训练闭环。
 
 ### 合法性 + issue-as-spec
@@ -98,7 +89,7 @@ oks recall "开源贡献 PR 选仓库 issue 筛选 merge"
 唯一活候选 #10617 恰好是最高 ROI 的一类：
 
 - **维护者已确认**（评论 "Confirmed, verified against the current codebase"）——合法性 100%。
-- **issue 即规范**：正文直接给出修法——`.github/workflows/coverage.yml` 里把明文 Codecov token 换成 {% raw %}`${{ secrets.CODECOV_TOKEN }}`{% endraw %}，与仓库内其它凭据写法一致。
+- **issue 即规范**：正文直接给出修法——`.github/workflows/coverage.yml` 里把明文 Codecov token 换成 `${{ secrets.CODECOV_TOKEN }}`，与仓库内其它凭据写法一致。
 - **规模**：1 文件、1 行。完美命中静默 merge 模式。
 
 ### 人类确认闸门 ⛔
@@ -109,16 +100,13 @@ oks recall "开源贡献 PR 选仓库 issue 筛选 merge"
 
 按 `apache-project-contribution.md` 约定执行：目标分支 `develop`（不是 main）、标题带 `[ISSUE #NNN]` 前缀、单行改动。最终 diff（token 已打码）：
 
-{% raw %}
 ```diff
 -          token: cf0c****-****-****-****-********da6f
 +          token: ${{ secrets.CODECOV_TOKEN }}
 ```
-{% endraw %}
 
 产出 → [apache/rocketmq#10619](https://github.com/apache/rocketmq/pull/10619)（提交当日 OPEN / MERGEABLE / +1 -1）。
 
-{: .warning }
 安全类修复有边界感：真正 rotate 泄露的 token、添加 repo secret 是**维护者**的事，贡献者的 PR 只改工作流引用。PR 正文里把这点写清楚，避免越权。
 
 ### 监控 + 复盘回流
@@ -147,9 +135,5 @@ PR 不是终点。配方 `profiles/recipes/oss-pr-monitor.md` 每 2 天查一次
 
 ## 接下来读哪里
 
-* **[托管你的研究](research.md)**：论文与实验的沉淀方式。
-* **[召回引擎](../algorithms/recall-engine.md)**：为什么失败经验会被优先召回。
-
----
-
-{% include comments.html %}
+* **[托管你的研究](../oh-my-research/README.md)**：论文与实验的沉淀方式。
+* **[召回引擎](../../docs/algorithms/recall-engine.md)**：为什么失败经验会被优先召回。

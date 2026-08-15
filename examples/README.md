@@ -1,22 +1,13 @@
-# examples/ — 真实案例与最佳实践
+# examples/ — 可复制案例与协议样例
 
 这里放**可复制的样例**，不是框架的一部分：
 
 - `assets/` 是产品（打包给每个用户的实例模板）
 - `examples/` 是示范（想用就 copy 到你自己的实例里改）
 
-分开的好处是框架仓保持干净，示例可以放心迭代——加一个案例不影响任何人的安装。
-
-## 目录
-
-| 路径 | 是什么 | 怎么用 |
-|---|---|---|
-| `feishu-loop/` | **飞书采集审核闭环**：手机提交 → 异步采集 → IM 里审核 | 读 [`feishu-loop.md`](feishu-loop/feishu-loop.md)，把 [`goal.md`](feishu-loop/goal.md) 复制到 `profiles/goals/` |
-| `goals/oss-contribution.md` | 真实 goal 范例：OSS 贡献（含 KR、ODD、召回加权说明） | 复制到 `profiles/goals/`，改 `owner` 与 `status: active` |
-| `projects/open-knowledge-studio.md` | 项目画像范例（技术栈、约定、历史 PR 表） | 复制到 `profiles/projects/` |
-| `users/example-profile.md` | 个人画像范例（偏好、技术栈、工作习惯） | 复制到 `profiles/users/<你的 id>/profile.md` |
-| `datasets/recall-v1.example.yaml` | 召回评测数据集**格式示例** | 复制后换成你自己的真实查询，再跑 `oks eval recall` |
-| `raw-bundles/` | 一个真实的 Raw Bundle 采集产物（含关键帧） | 用来理解 connector 的输出长什么样 |
+分开的好处是框架仓保持干净，示例可以独立迭代——增加或修改案例不会改变 Core，
+也不会进入安装包。每个完整场景在自己的目录中说明目标、材料和验收方式；本页只说明
+`examples/` 的边界，不维护第二份案例目录。
 
 ## 关于评测数据集
 

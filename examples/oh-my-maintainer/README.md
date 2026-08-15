@@ -1,8 +1,3 @@
----
-title: 维护案例：文档与实现的一致性
-nav_order: 5
-parent: 案例
----
 # 维护案例：文档与实现的一致性
 
 *一个 SKILL.md 里写了但代码里没有的命令，怎么被发现、修好、并借机 design check。讲给 OKS 贡献者听。*
@@ -109,4 +104,4 @@ SKILL.md 不是普通文档——是 Agent 读的机器可执行契约。写了 
 3. `oks skills-install --force` 在实例测装
 4. `pytest cli/tests/` 不破坏
 
-* 接下来读 [上下文注入](../usage/context-injection.md)（hook 怎么用 skills）+ [召回引擎](../algorithms/recall-engine.md)（`/assess` 验证 goal boost 的机制）
+* 接下来读 [上下文注入](../../docs/usage/context-injection.md)（hook 怎么用 skills）+ [召回引擎](../../docs/algorithms/recall-engine.md)（`/assess` 验证 goal boost 的机制）

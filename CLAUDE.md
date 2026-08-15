@@ -67,7 +67,7 @@ injected into Claude Code context
 
 See `CONSTITUTION.md` for the full memory design (A1-A5):
 
-- **A1**: Four cognitive buckets (profiles/raw/wiki/drafts) + two infrastructure layers (settings=config, _meta=schema) + memory lifecycle (Observe→Write→Store→Retrieve→Inject→Forget)
+- **A1**: Four knowledge-lifecycle buckets (profiles/raw/wiki/drafts), mandatory mail coordination, and two infrastructure layers (settings=config, _meta=schema)
 - **A2**: Six-type memory model + injection order + source labels + conflict priority
 - **A3**: Dreaming — human-reviewed knowledge evolution
 - **A4**: Knowledge evolution — supersedes, enriches, confirms, challenges
@@ -77,19 +77,20 @@ See `CONSTITUTION.md` for the full memory design (A1-A5):
 
 ```
 open-knowledge-studio/
-├── .claude/          # Claude Code skills (10) + hooks (4) + rules (2)
-├── .agents/          # Agent skill replicas (10 Claude + 10 Agents)
+├── .claude/          # Claude Code development assets
+├── .agents/          # Generic Agent skill replicas
 ├── .codex/           # Codex hooks config
 ├── profiles/         # ① Portraits — team, users, projects, recipes, goals
 ├── raw/              # ② Raw materials — date-based: {YYYY}/{MM}/{DD}/{source}/
-├── wiki/             # ③ Curated knowledge — 22 domains × 3 types
+├── wiki/             # ③ Curated, human-reviewed knowledge
 ├── drafts/           # ④ Dreaming candidates
-├── settings/         # ⑤ Config layer — decay, tool registry, input sources
-├── _meta/            # ⑥ Schema layer — raw evidence shape contract
+├── mail/             # ⑤ Coordination and human-Agent evaluation evidence
+├── settings/         # ⑥ Config layer — decay, tool registry, input sources
+├── _meta/            # ⑦ Schema layer — raw evidence shape contract
 ├── templates/        # concept, strategy, anti-pattern, draft
 ├── capabilities/     # Capability action catalog (actions.yaml)
-├── providers/        # 16 Provider definitions
-├── recipes/          # Modality recipes (7 modalities)
+├── providers/        # Provider definitions
+├── recipes/          # Modality recipes
 ├── security/         # Credential redaction + sensitive field detection
 ├── cli/              # Python CLI tool (oks); packaged assets come from assets/
 ├── docs/             # GitHub Pages site — every .md here is a published page

@@ -13,7 +13,7 @@
 
 | 环节 | 没有飞书 | 有飞书 |
 |---|---|---|
-| 提交来源 | 回到电脑，`oks ingest <url>` | 手机填表单，两下提交 |
+| 提交来源 | 回到电脑，由 Agent `/ingest` 或运行 `oks ingest run <url>` | 手机填表单，两下提交 |
 | 采集等待 | 前台占着终端 | worker 异步跑，完成后推送通知 |
 | 审核 | 打开终端看 draft、跑 promote | IM 里回一句 `通过` / `退回：理由` |
 
@@ -32,7 +32,7 @@ oks capability install document --yes   # Office/HTML
 oks capability install pdf --yes        # PDF
 ```
 
-以下命令均从 `examples/feishu-loop/` 目录运行，使 `code/` 在相对路径可达。
+以下命令均从 `examples/oh-my-feishu/` 目录运行，使 `code/` 在相对路径可达。
 
 ## 一次性配置
 
@@ -149,6 +149,6 @@ worker 在 Base 的「运行状态」字段流转，全部取值定义在
 
 - 参考脚本说明：[`code/README.md`](code/README.md)
 - 示例 goal：[`goal.md`](goal.md)
-- 多模态采集协议：[`docs/raw-multimodal-standard.md`](../../docs/raw-multimodal-standard.md)
-- 能力架构：[`docs/capability-architecture.md`](../../docs/capability-architecture.md)
-- Dreaming 循环（人审为什么不可跳过）：[`docs/dreaming-cycle.md`](../../docs/dreaming-cycle.md)
+- 收录资料与 Connector 边界：[`docs/reference/ingest.md`](../../docs/reference/ingest.md)
+- 架构不变量：[`docs/concepts/constitution.md`](../../docs/concepts/constitution.md)
+- Candidate 人工审核：[`docs/review-candidates.md`](../../docs/review-candidates.md)

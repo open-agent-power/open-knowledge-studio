@@ -40,7 +40,7 @@ keywords:
 
 ## Recall Influence
 
-本 goal 是 `active` 的，因此召回引擎会真实加权（第 7 因子，见 [召回引擎](../../docs/recall-engine.md)）：
+本 goal 是 `active` 的，因此召回引擎会真实加权（第 7 因子，见 [召回引擎](../../docs/algorithms/recall-engine.md)）：
 对**已经命中查询**的 wiki 页，若其 `area` ∈ 本 goal 的 domains（`computing` / `engineering`）
 则 +0.8，若页面命中任一关键词（`open source` / `pull request` / `rocketmq` /
 `silent merge` / `contribution`）再 +0.4。无 active goal 时该因子不生效。

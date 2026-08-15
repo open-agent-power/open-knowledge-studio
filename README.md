@@ -62,20 +62,13 @@ the separately packaged `oks-connector` runtime.
 
 ### Product Boundaries
 
-- The `oks` core performs filesystem operations, validation, review lifecycle,
-  and Recall scoring; it does not call AI APIs.
-- `oks-connector` is a separate PyPI dependency that performs acquisition and
-  extraction work.
-- Providers create evidence, not Wiki knowledge. Human review is the promotion
-  gate from Candidate to Wiki.
-- Feishu is an optional reference implementation under
-  [`examples/feishu-loop`](examples/feishu-loop/), not a Core CLI command or
-  dependency.
-- `mail/`, terminal Registry, and `records/*.jsonl` are loaded or recorded by
-  separate runtime paths. `oks recall` does not return them, and merely loading
-  or recording them does not create trust labels.
-- `partial`, `failed`, `skipped`, and `environment_limited` are honest outcomes,
-  not states to hide.
+- Core owns filesystem protocols, validation, human review, and Recall; it does
+  not call AI APIs.
+- `oks-connector` owns acquisition and mechanical extraction.
+- Providers create evidence, not Wiki knowledge. Candidate promotion always
+  requires human review.
+- Evidence and execution states remain traceable, including `partial`,
+  `failed`, `skipped`, and `environment_limited`.
 
 ### Learn More
 
@@ -134,14 +127,11 @@ oks ingest prepare <文件或URL>
 
 ### 产品边界
 
-- `oks` Core 负责文件操作、协议校验、审核生命周期和 Recall 评分，不调用 AI API。
-- 采集与提取由独立 PyPI 依赖 `oks-connector` 执行。
-- Provider 产生证据，不直接产生 Wiki 知识；Candidate 必须经过人工审核。
-- 飞书位于 [`examples/feishu-loop`](examples/feishu-loop/)；它是可选参考实现，
-  不是 Core CLI 命令或依赖。
-- `mail/`、终端 Registry 和 `records/*.jsonl` 由独立运行路径读取或记录；
-  `oks recall` 不返回它们；仅发生读取或记录不会自动产生可信标签。
-- `partial`、`failed`、`skipped`、`environment_limited` 都必须如实保留。
+- Core 负责文件协议、校验、人工审核和 Recall，不调用 AI API。
+- `oks-connector` 负责资料获取与机械提取。
+- Provider 产生证据，不直接产生 Wiki 知识；Candidate 晋升必须经过人工审核。
+- 证据与执行状态必须可追溯，包括 `partial`、`failed`、`skipped` 和
+  `environment_limited`。
 
 ### 继续阅读
 

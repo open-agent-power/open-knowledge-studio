@@ -1,8 +1,3 @@
----
-title: 托管你的书籍
-nav_order: 4
-parent: 案例
----
 # 托管你的书籍
 
 *让读过的技术书不再读完就忘——围绕一个主题把书的要点沉淀成可召回的记忆，开发时自动注入。*
@@ -109,4 +104,4 @@ oks recall "AI Agent 记忆体系" --knowledge-only --explain
 4. 装 hook（`oks hook install`）+ pi extension
 5. 开发时提交相关问题，看书的要点自动注入
 
-* 接下来读 [召回引擎](../algorithms/recall-engine.md)（wiki 怎么被评分召回）+ [上下文注入](../usage/context-injection.md)（hook 怎么注入 context）
+* 接下来读 [召回引擎](../../docs/algorithms/recall-engine.md)（wiki 怎么被评分召回）+ [上下文注入](../../docs/usage/context-injection.md)（hook 怎么注入 context）
