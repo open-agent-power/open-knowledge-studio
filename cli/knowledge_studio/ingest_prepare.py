@@ -131,22 +131,26 @@ def prepare_ingest(source: str, kb_root: Path | None = None) -> dict[str, Any]:
     _sensitive_redacted = False
     _redaction_count = 0
     _missing_assets: list[str] = []
-    if is_text:
+    if access_mode == "local_file":
         try:
-            raw_bytes = Path(source).read_bytes()
-            # ── Source provenance hash (original file, before sanitization) ──
-            content_hash = _sha256(raw_bytes).hexdigest()
-            # ── Deterministic sanitization (never modifies source file) ──
-            _text = raw_bytes.decode("utf-8", errors="replace")
-            _sanitized = redact_text(_text)
-            _redaction_count = _sanitized.count(REDACTED)
-            if _redaction_count > 0:
-                _sensitive_redacted = True
-                source_bytes = _sanitized.encode("utf-8")
+            if is_text:
+                raw_bytes = Path(source).read_bytes()
+                # Source provenance hash uses original bytes, before sanitization.
+                content_hash = _sha256(raw_bytes).hexdigest()
+                # ── Deterministic sanitization (never modifies source file) ──
+                _text = raw_bytes.decode("utf-8", errors="replace")
+                _sanitized = redact_text(_text)
+                _redaction_count = _sanitized.count(REDACTED)
+                if _redaction_count > 0:
+                    _sensitive_redacted = True
+                    source_bytes = _sanitized.encode("utf-8")
+                else:
+                    source_bytes = raw_bytes
+                # ── Artifact integrity hash (after sanitization, for _check_artifacts) ──
+                _artifact_hash = _sha256(source_bytes).hexdigest()
             else:
-                source_bytes = raw_bytes
-            # ── Artifact integrity hash (after sanitization, for _check_artifacts) ──
-            _artifact_hash = _sha256(source_bytes).hexdigest()
+                # Media can be many gigabytes; hash it without loading it all.
+                content_hash = _hash_file(Path(source))
         except OSError:
             source_bytes = b""
             content_hash = ""
@@ -348,7 +352,11 @@ def prepare_ingest(source: str, kb_root: Path | None = None) -> dict[str, Any]:
         _work_hash = _sha256(source_bytes).hexdigest()
 
     # ── Build candidate providers (filtered from capability registry) ──
-    candidate_providers = _build_candidate_providers(recipe, modality)
+    candidate_providers = _build_candidate_providers(
+        recipe,
+        modality,
+        remote_processing=envelope["policy"]["remote_processing"],
+    )
 
     next_step = _next_step(text_ready, run_id)
 
@@ -374,6 +382,14 @@ def prepare_ingest(source: str, kb_root: Path | None = None) -> dict[str, Any]:
 
 
 # ── helpers ─────────────────────────────────────────────────────────
+
+
+def _hash_file(path: Path, chunk_size: int = 1024 * 1024) -> str:
+    digest = _sha256()
+    with path.open("rb") as source_file:
+        while chunk := source_file.read(chunk_size):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def _write_json(path: Path, data: dict[str, Any]) -> None:
@@ -597,7 +613,10 @@ def _capability_modality(cap: str) -> str:
 
 
 def _build_candidate_providers(
-    recipe: str | None, modality: str
+    recipe: str | None,
+    modality: str,
+    *,
+    remote_processing: str = "ask",
 ) -> list[dict[str, Any]]:
     """Return 2-4 candidate providers covering required capabilities.
 
@@ -631,6 +650,11 @@ def _build_candidate_providers(
             # Find the full provider entry
             for p in status.get("providers", []):
                 if p["id"] == pid:
+                    if (
+                        remote_processing == "deny"
+                        and p.get("execution") == "external"
+                    ):
+                        break
                     candidates[pid] = {
                         "id": pid,
                         "label": p.get("label", pid),

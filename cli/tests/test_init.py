@@ -80,6 +80,16 @@ def test_init_assembles_each_agent_ecosystem(tmp_path):
     assert (target / ".codex" / "hooks.json").is_file()
 
 
+def test_init_recommends_the_current_ingest_command(tmp_path):
+    target = tmp_path / "kb"
+
+    result = runner.invoke(app, ["init", str(target), "--no-git", "--no-set-default"])
+
+    assert result.exit_code == 0, result.output
+    assert "oks ingest prepare" in result.output
+    assert "--mode quick" not in result.output
+
+
 def test_init_scaffolds_buckets_and_data_gitignore(tmp_path):
     target = tmp_path / "kb"
     result = runner.invoke(app, ["init", str(target), "--no-git", "--no-set-default"])

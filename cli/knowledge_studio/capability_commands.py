@@ -275,16 +275,39 @@ def _check_provider_health(provider: dict[str, Any]) -> list[dict[str, Any]]:
         c["required"] = False
         checks.append(c)
 
-    # Check env vars
+    managed_capabilities = {
+        "markitdown": ("document", "document"),
+        "pdf-lite": ("pdf-lite", "pdf-lite"),
+        "mineru": ("pdf", "pdf"),
+        "rapidocr": ("rapidocr", "watch"),
+        "local-asr": ("watch", "watch"),
+    }
+    managed_capability = managed_capabilities.get(pid)
+
+    # Check env vars. *_PYTHON selects an interpreter; it is not a credential
+    # and must not make an already importable managed provider look unconfigured.
     env_vars = requirements.get("env", [])
     if isinstance(env_vars, str):
         env_vars = [env_vars]
     for env_var in env_vars:
-        checks.append(_check_env_var(env_var))
+        if not (managed_capability and env_var.endswith("_PYTHON")):
+            checks.append(_check_env_var(env_var))
 
     # Check Python imports (for managed providers)
     pypi_pkg = requirements.get("python_package", "")
-    if pypi_pkg:
+    if managed_capability:
+        from oks_connector.capability_check import is_capability_available
+
+        probe_name, install_name = managed_capability
+        available, python_path = is_capability_available(probe_name)
+        checks.append({
+            "type": "python_import",
+            "name": pypi_pkg or probe_name,
+            "available": available,
+            "interpreter": str(python_path) if python_path else None,
+            "suggestion": None if available else f"oks capability install {install_name}",
+        })
+    elif pypi_pkg:
         checks.append(_check_python_import(pypi_pkg))
 
     # Special cases

@@ -168,6 +168,15 @@ EvidenceFragments — do NOT iterate per capability.
 
 ### For each chosen provider:
 
+0. Enforce the SourceEnvelope policy before touching source content:
+   - `remote_processing: deny` forbids sending source bytes, rendered pages,
+     screenshots, transcripts, or derived content to any third-party endpoint.
+   - Do not read API credentials, write ad-hoc HTTP clients, or use an
+     unregistered remote Runtime Tool to bypass this policy.
+   - If no permitted local or current-runtime path can produce the required
+     evidence, stop at L3/L4 and ask for an explicit processing decision.
+   - `ask` is not consent. Resolve it with the user before the first remote call.
+
 1. Call the tool (Bash / MCP / API / Agent vision) **once**.
 2. **IMMEDIATELY persist the Provider's raw output** to
    `.oks/runs/{run_id}/work/{provider}/output.<ext>`.
@@ -797,6 +806,7 @@ When using a Runtime Tool:
 - NEVER upgrade partial to complete
 - NEVER present agent inference as source text
 - NEVER expose API keys, cookies, or tokens
+- NEVER bypass `remote_processing` with ad-hoc scripts, direct HTTP calls, or credentials from the environment
 - NEVER expose provider IDs, capability IDs, or schema names in user-facing messages
 - ALWAYS record failure reasons honestly
 - ALWAYS preserve original tool output unmodified

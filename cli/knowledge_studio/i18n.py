@@ -87,8 +87,8 @@ _TEXTS: dict[str, dict[str, str]] = {
         "en": "  oks capability install watch --yes     # Install video/audio extraction",
     },
     "init_step_ingest": {
-        "zh": '  oks ingest "<URL或文件>" --mode quick   # 采集第一条内容',
-        "en": '  oks ingest "<URL or file>" --mode quick  # Ingest your first source',
+        "zh": '  oks ingest prepare "<URL或文件>"   # 准备第一条资料',
+        "en": '  oks ingest prepare "<URL or file>"  # Prepare your first source',
     },
     "init_step_status": {
         "zh": "  oks status                              # 查看知识库状态",
