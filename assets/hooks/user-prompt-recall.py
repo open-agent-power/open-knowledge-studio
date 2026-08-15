@@ -33,6 +33,8 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+from _persistence import append_jsonl, atomic_write_text, file_lock
+
 _TRIVIAL = {
     "你好", "谢谢", "多谢", "ok", "okay", "好", "好的", "嗯", "行", "继续",
     "hi", "hello", "thanks", "thx", "yes", "no", "是", "对", "收到",
@@ -80,7 +82,7 @@ def _load_state(path: Path) -> dict:
 
 def _save_state(path: Path, state: dict) -> None:
     try:
-        path.write_text(json.dumps(state), encoding="utf-8")
+        atomic_write_text(path, json.dumps(state))
     except Exception:
         pass
 
@@ -166,26 +168,28 @@ def _touch_registry_last_active(kb_root: Path, agent_id: str, cwd: str) -> None:
     if not path.is_file():
         return
     try:
-        lines = path.read_text(encoding="utf-8").splitlines()
-        ts = datetime.now(timezone.utc).isoformat(timespec="seconds")
-        out = []
-        changed = False
-        for line in lines:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                rec = json.loads(line)
-                if rec.get("agent_id") == agent_id and rec.get("cwd") == cwd:
-                    rec["last_active"] = ts
-                    changed = True
-                    out.append(json.dumps(rec, ensure_ascii=False))
-                else:
+        lock = kb_root / ".oks" / "locks" / "registry.lock"
+        with file_lock(lock):
+            lines = path.read_text(encoding="utf-8").splitlines()
+            ts = datetime.now(timezone.utc).isoformat(timespec="seconds")
+            out = []
+            changed = False
+            for line in lines:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    rec = json.loads(line)
+                    if rec.get("agent_id") == agent_id and rec.get("cwd") == cwd:
+                        rec["last_active"] = ts
+                        changed = True
+                        out.append(json.dumps(rec, ensure_ascii=False))
+                    else:
+                        out.append(line)
+                except Exception:
                     out.append(line)
-            except Exception:
-                out.append(line)
-        if changed:
-            path.write_text("\n".join(out) + "\n", encoding="utf-8")
+            if changed:
+                atomic_write_text(path, "\n".join(out) + "\n")
     except Exception:
         pass
 
@@ -255,8 +259,11 @@ def _write_inject_trace(kb_root: Path, session_id: str, turn: int,
         "injected_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
     }
     try:
-        with open(path, "a", encoding="utf-8") as f:
-            f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+        append_jsonl(
+            path,
+            rec,
+            lock_path=kb_root / ".oks" / "locks" / "inject.lock",
+        )
     except Exception:
         pass
 

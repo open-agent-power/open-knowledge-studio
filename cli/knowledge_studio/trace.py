@@ -10,16 +10,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from knowledge_studio.store import _atomic_write, raw_dir, repo_root
-
-try:
-    import fcntl
-except ImportError:  # Windows
-    fcntl = None
-try:
-    import msvcrt
-except ImportError:  # POSIX
-    msvcrt = None
+from knowledge_studio.store import _atomic_write, _file_lock, raw_dir, repo_root
 
 TRACE_SCHEMA = "trace-event/v1"
 MANIFEST_SCHEMA = "run-manifest/v1"
@@ -89,25 +80,8 @@ def _check_sensitive(value: Any, path: str = "payload") -> None:
 @contextlib.contextmanager
 def _append_lock(run_id: str):
     """Serialize the read-sequence-then-append critical section across processes."""
-    lock_path = _run_dir(run_id) / ".append.lock"
-    handle = lock_path.open("a+b")
-    try:
-        if fcntl is not None:
-            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
-        elif msvcrt is not None:
-            handle.seek(0)
-            msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
-        try:
-            yield
-        finally:
-            if fcntl is not None:
-                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
-            elif msvcrt is not None:
-                handle.seek(0)
-                with contextlib.suppress(OSError):
-                    msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
-    finally:
-        handle.close()
+    with _file_lock(_run_dir(run_id) / ".append.lock"):
+        yield
 
 
 def _read_events(path: Path) -> list[dict[str, Any]]:

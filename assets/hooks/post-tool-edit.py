@@ -22,6 +22,8 @@ import sys
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
+from _persistence import append_jsonl, file_lock
+
 CONFLICT_WINDOW = int(os.environ.get("OKS_CONFLICT_WINDOW", "300"))
 
 EDIT_TOOLS = {"Edit", "Write", "MultiEdit", "edit", "write", "multiedit"}
@@ -77,8 +79,11 @@ def _append_file_edit(kb_root: Path, agent_id: str, file_path: str) -> None:
         "ts": datetime.now(timezone.utc).isoformat(timespec="seconds"),
     }
     try:
-        with open(path, "a", encoding="utf-8") as f:
-            f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+        append_jsonl(
+            path,
+            rec,
+            lock_path=kb_root / ".oks" / "locks" / "file-edits.lock",
+        )
     except Exception:
         pass
 
@@ -91,21 +96,23 @@ def _check_conflict(kb_root: Path, agent_id: str, file_path: str) -> dict | None
     now = datetime.now(timezone.utc)
     window = timedelta(seconds=CONFLICT_WINDOW)
     try:
-        for line in reversed(path.read_text(encoding="utf-8").splitlines()):
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                rec = json.loads(line)
-                if rec.get("file_path") != file_path:
+        lock = kb_root / ".oks" / "locks" / "file-edits.lock"
+        with file_lock(lock):
+            for line in reversed(path.read_text(encoding="utf-8").splitlines()):
+                line = line.strip()
+                if not line:
                     continue
-                if rec.get("agent_id") == agent_id:
+                try:
+                    rec = json.loads(line)
+                    if rec.get("file_path") != file_path:
+                        continue
+                    if rec.get("agent_id") == agent_id:
+                        continue
+                    ts = datetime.fromisoformat(rec.get("ts", ""))
+                    if now - ts < window:
+                        return rec
+                except Exception:
                     continue
-                ts = datetime.fromisoformat(rec.get("ts", ""))
-                if now - ts < window:
-                    return rec
-            except Exception:
-                continue
     except Exception:
         pass
     return None

@@ -18,10 +18,19 @@ The knowledge repo is synced via `git clone/pull`. Schema changes to knowledge
 files (frontmatter fields, directory structure) are versioned through the
 `_meta/` schema docs and applied on read. There are no database migrations.
 
-### P2: Atomic file writes
+### P2: Persistent file writes
 
-All persistent writes use the `mkstemp + fsync + os.replace` pattern.
+Persistent snapshots use the `mkstemp + fsync + os.replace` pattern.
 Directory fsync after replace is required for crash safety.
+
+Append-only JSONL records are written while holding a local lock, followed by
+flush + fsync. Read-modify-write updates hold the same lock for the read and
+replace the complete snapshot atomically. Runtime lock files live under
+`.oks/locks/` and are not evidence.
+
+This contract covers Core state and shared records. Mail message-file
+semantics are a separate coordination contract and are intentionally unchanged
+by this revision.
 
 **Do not** write wiki pages or config with bare `open(path, 'w')`.
 
@@ -417,11 +426,12 @@ so injected knowledge warns the consumer that it may be outdated.
 relationship first. Every knowledge change must leave a traceable link
 to what came before.
 
-### A5: Atomic file writes
+### A5: Persistent file writes
 
-All persistent writes use the `mkstemp + fsync + os.replace` pattern.
-`store.py`'s atomic write is the reference implementation. Directory
-fsync after replace is required for crash safety.
+Persistent snapshots use the `mkstemp + fsync + os.replace` pattern.
+`store.py`'s `_atomic_write` is the reference implementation. Directory fsync
+after replace is required for crash safety. Append-only JSONL and
+read-modify-write records must use their lock for the full critical section.
 
 **Do not** write wiki pages or config with bare `open(path, 'w')`.
 

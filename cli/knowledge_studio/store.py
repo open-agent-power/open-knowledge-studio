@@ -6,6 +6,7 @@ Repo root resolved via OKS_ROOT env var or current working directory.
 """
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import logging
@@ -14,10 +15,20 @@ import os
 import re
 import tempfile
 import uuid
+from collections.abc import Callable
 from datetime import UTC, date, datetime
 from pathlib import Path
 
 import yaml
+
+try:
+    import fcntl
+except ImportError:  # Windows
+    fcntl = None
+try:
+    import msvcrt
+except ImportError:  # POSIX
+    msvcrt = None
 
 _logger = logging.getLogger(__name__)
 
@@ -135,7 +146,35 @@ def _save_access_counts(counts: dict[str, int]) -> None:
     _atomic_write(path, json.dumps(counts, indent=2))
 
 
+@contextlib.contextmanager
+def _file_lock(lock_path: Path):
+    """Serialize a local read/modify/write or append sequence."""
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    handle = lock_path.open("a+b")
+    try:
+        if fcntl is not None:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+        elif msvcrt is not None:
+            handle.seek(0, os.SEEK_END)
+            if handle.tell() == 0:
+                handle.write(b"\0")
+                handle.flush()
+            handle.seek(0)
+            msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
+        yield
+    finally:
+        if fcntl is not None:
+            with contextlib.suppress(OSError):
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+        elif msvcrt is not None:
+            handle.seek(0)
+            with contextlib.suppress(OSError):
+                msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+        handle.close()
+
+
 def _atomic_write(path: Path, content: str) -> None:
+    """Write a snapshot with fsync + atomic replace + directory fsync."""
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp = tempfile.mkstemp(dir=str(path.parent), suffix=".tmp", prefix=path.stem)
     try:
@@ -159,6 +198,39 @@ def _atomic_write(path: Path, content: str) -> None:
             except OSError:
                 pass
         raise
+
+
+def _append_jsonl(
+    path: Path,
+    record: dict,
+    *,
+    lock_path: Path | None = None,
+) -> None:
+    """Append one JSON record under a lock and fsync the file."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lock = lock_path or path.with_name(f".{path.name}.lock")
+    with _file_lock(lock):
+        with path.open("a", encoding="utf-8", newline="\n") as handle:
+            handle.write(json.dumps(record, ensure_ascii=False) + "\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+
+
+def _locked_atomic_update(
+    path: Path,
+    update: Callable[[str], str | None],
+    *,
+    lock_path: Path | None = None,
+) -> bool:
+    """Run a text read/modify/write under one lock and atomic replacement."""
+    lock = lock_path or path.with_name(f".{path.name}.lock")
+    with _file_lock(lock):
+        current = path.read_text(encoding="utf-8") if path.is_file() else ""
+        updated = update(current)
+        if updated is None:
+            return False
+        _atomic_write(path, updated)
+        return True
 
 
 def parse_wiki_file(path: Path) -> dict | None:
