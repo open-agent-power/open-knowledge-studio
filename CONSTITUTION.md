@@ -234,10 +234,11 @@ open-knowledge-studio/
 process records — not knowledge.
 
 `docs/` is the published GitHub Pages site: Jekyll publishes **every** `.md`
-under it. Process records — acceptance evidence, archived snapshots, research
-notes — belong in `records/`, never in `docs/`. Directory separation, not an
-`exclude` list: a list still leaves them in the site directory for the next
-person to add to.
+under it. The source repository keeps only explicitly required version
+acceptance evidence in `records/acceptance/`; historical plans, handoffs, and
+research notes remain in Git, Issues, or PRs. Runtime `records/*.jsonl` in a
+user instance are a separate evidence contract. None of these records are
+published product documentation.
 
 **Memory curve scoring** (wiki/):
 
