@@ -427,7 +427,7 @@ def ingest(
     formula_secondary: bool = typer.Option(False, "--formula-secondary", help="Run PaddleOCR PP-FormulaNet on PDF equation crops."),
     formula_max_regions: int = typer.Option(20, "--formula-max-regions", help="Cap equation blocks for formula secondary extraction."),
 ):
-    """Acquire one source through the built-in connector; no Wiki promotion occurs here."""
+    """Acquire one source through the installed oks-connector dependency; no Wiki promotion occurs here."""
     if mode not in {"quick", "forensic"}:
         raise typer.BadParameter("--mode must be quick or forensic")
     connector = _connector_command()

@@ -1,2 +1,2 @@
 recursive-include knowledge_studio/_assets *
-recursive-include oks_connector *.py *.json *.txt *.md
+prune oks_connector
