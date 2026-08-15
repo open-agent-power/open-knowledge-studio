@@ -1800,6 +1800,7 @@ def init(
 # so both forms are recognized.
 _RECALL_HOOK_SCRIPT_NAME = "user-prompt-recall.sh"
 _RECALL_HOOK_SCRIPTS = ("user-prompt-recall.py", "user-prompt-recall.sh", "post-tool-edit.py", "post-tool-edit.sh")
+_HOOK_SUPPORT_FILES = ("_persistence.py",)
 _POST_TOOL_SCRIPT_NAME = "post-tool-edit.sh"
 _HOOK_EDITORS = {
     "claude": ".claude/settings.json",
@@ -2127,6 +2128,17 @@ def _ensure_recall_scripts(root: Path) -> list[str]:
 
     baked = f'"${{OKS_PYTHON:-{sys.executable}}}"'
     created: list[str] = []
+    for name in _HOOK_SUPPORT_FILES:
+        dest = hooks_dir / name
+        if dest.exists():
+            continue
+        if src_dir is None or not (src_dir / name).is_file():
+            raise FileNotFoundError(
+                f"bundled hook support file not found: {name} (asset source: {src_dir})"
+            )
+        shutil.copy2(src_dir / name, dest)
+        created.append(name)
+
     for name in _RECALL_HOOK_SCRIPTS:
         dest = hooks_dir / name
         if dest.exists():

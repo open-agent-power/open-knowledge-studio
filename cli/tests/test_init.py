@@ -80,6 +80,24 @@ def test_init_assembles_each_agent_ecosystem(tmp_path):
     assert (target / ".codex" / "hooks.json").is_file()
 
 
+def test_hook_install_refreshes_persistence_support_file_for_old_instances(tmp_path):
+    """Old instances with hooks must receive the helper used by both engines."""
+    from knowledge_studio.cli import _ensure_recall_scripts
+
+    target = tmp_path / "kb"
+    hooks = target / ".claude" / "hooks"
+    hooks.mkdir(parents=True)
+    (hooks / "user-prompt-recall.py").write_text("old\n", encoding="utf-8")
+    (hooks / "post-tool-edit.py").write_text("old\n", encoding="utf-8")
+
+    created = _ensure_recall_scripts(target)
+
+    assert "_persistence.py" in created
+    assert (hooks / "_persistence.py").is_file()
+    assert (hooks / "user-prompt-recall.py").read_text(encoding="utf-8") == "old\n"
+    assert (hooks / "post-tool-edit.py").read_text(encoding="utf-8") == "old\n"
+
+
 def test_init_scaffolds_buckets_and_data_gitignore(tmp_path):
     target = tmp_path / "kb"
     result = runner.invoke(app, ["init", str(target), "--no-git", "--no-set-default"])
