@@ -6,9 +6,9 @@ parent: 使用 OKS
 
 # Profiles 画像
 
-`profiles/` 是认知桶中**稳定、直接读取、不衰减**的一层。它承载
-"我是谁、我在做什么、我要去哪里"——这些事实变化缓慢，因此每轮对话开头都被
-原样注入上下文，而不经过召回打分。
+`profiles/` 是认知桶中**稳定、不衰减**的一层。它承载“我是谁、我在做什么、我要去
+哪里”。Agent 或 Skill 可以直接读取这些文件；当前默认 hook 只读取 active goals 与
+Registry 绑定，不会在每轮对话中自动注入所有 Profile 正文。
 
 `profiles/agents/registry.jsonl` 保存终端身份与作用域绑定：`agent_id + cwd` 指向
 profile 和 goals；`oks recall` 不检索该文件。可以使用
@@ -19,9 +19,9 @@ profile 和 goals；`oks recall` 不检索该文件。可以使用
 
 | 属性 | 值 |
 |------|-----|
-| 召回方式 | 直接读取（不打分、不排序） |
+| 读取方式 | Agent / Skill 显式读取；当前 hook 自动读取 Goal 与 Registry 元数据 |
 | 衰减 | 无 |
-| 注入时机 | 对话开头，稳定层（KV Cache 友好） |
+| 注入时机 | 由 Agent host 或 Skill 决定；不是所有 Profile 每轮自动注入 |
 | 写入者 | 人 / Agent（经确认） |
 
 对比 `wiki/`（语义记忆，6+1 因子召回 + 衰减）与 `raw/`（情节记忆，关键词 +
@@ -45,7 +45,9 @@ profiles/
 
 ## 注入顺序中的位置
 
-Profiles 分布在注入序列的**稳定段与可变段**两处（见[记忆模型](../concepts/memory-model.md)）：
+宪法中的目标注入顺序把 Profiles 分布在**稳定段与可变段**两处（见
+[记忆模型](../concepts/memory-model.md)）。这是上下文组织原则，不表示当前 hook 已自动
+装载以下所有文件：
 
 1. System Prompt
 2. **Team Profile + North Star**（profiles/，稳定）

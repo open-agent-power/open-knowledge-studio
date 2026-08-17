@@ -54,15 +54,18 @@ flowchart LR
 - Draft → `drafts/`
 - Procedural → `.claude/skills/`、`.codex/` 或 `.agents/`（由对应 Agent host 管理）
 
-## 分区与软 scope
+## 分区与可选 scope
 
-OKS 无硬分区（不像某些产品的 Spaces 互隔离）。召回默认全局——不会因“空间”排除候选。提供可选 `--scope <area>` 软收窄：打分前只保留该域候选，默认仍全局。
+OKS 无持久化硬分区（不像某些产品的 Spaces 互隔离），召回默认全局。显式提供
+`--scope <area>` 或由 Registry 绑定 scope 时，会在本次查询打分前**过滤掉**其他 Wiki
+area；它是可选查询过滤器，不是权限边界或独立知识空间。
 
-- `area`（知识域）是页面字段，默认只影响归类；`--scope` 时用它收窄检索
+- `area`（知识域）默认只影响归类；显式 `--scope` 时成为 Wiki 候选硬过滤条件
 - `topic_id` 命中 discuss trace 给 +2.0 软加权（顶上同话题，不挡其他）
 - `raw/` 按时间分区，召回用 `rglob` 递归，不构成隔离；`--scope` 只作用于 wiki（语义）路，episodic（raw）保持全局
 
-所有“分组”手段（area、模态目录、时间目录）都是软的：影响排序与归类，默认不切断可见性。
+area、模态目录和时间目录默认只影响归类；只有显式 scope 会在当前查询中切断其他 Wiki
+area 的可见性。它不会改变文件位置，也不提供安全隔离。
 
 ## 轻量 vs 重型结构化索引
 

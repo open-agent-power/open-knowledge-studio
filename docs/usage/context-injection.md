@@ -65,11 +65,11 @@ pi 不读 settings.json，要装 extension。open-knowledge-studio 仓库已带 
 
 1. 读 stdin JSON payload（`prompt` + `session_id`，可含 `cwd` + `agent_id`）
 2. **trivial 跳过**：prompt < 6 字或"你好/ok/继续"等不召回
-3. 根据 `agent_id + cwd` 查 Registry；有绑定时把对应 `goal_slugs` 传给 Recall，没有绑定时保持默认作用域
-4. 跑 `recall(query=prompt, limit=5, goal=绑定目标)`（走 config KB root：`OKS_ROOT` → `~/.oks/config.json` → cwd）
+3. 根据 `agent_id + cwd` 查 Registry；有绑定时把对应 `goal_slugs` 与 `scope` 传给 Recall，没有绑定时使用默认 Goal 行为与全局 Wiki 范围
+4. 跑 `recall(query=prompt, limit=max(topn*3, 10), goal=绑定目标, scope=绑定范围, search_backend=配置后端)`（走 config KB root：`OKS_ROOT` → `~/.oks/config.json` → cwd）
 5. **floor 过滤**：relevance >= 0.7（`OKS_RECALL_FLOOR`）才注入
 6. **cooldown 去重**：同 session 同 slug 10 轮（`OKS_RECALL_COOLDOWN`）内不重复
-7. 按需加入绑定目标（未绑定时为 active goals）、首次使用提示和收件箱消息；Mail 是协调信息，不是 Recall 命中
+7. 只在绑定 goal 时加入 Goal 区块，另加首次使用提示和收件箱消息；未绑定目标不显示 Goal 区块，Mail 是协调信息，不是 Recall 命中
 8. stdout 输出 `<recalled-memory>` 容器；容器可包含记忆、目标和协调信息，但三者语义不同
 9. 对实际注入的 Wiki 页面追加 `records/inject.jsonl` 过程记录；只存 prompt hash，不存原 prompt
 10. **fail open**：任何错误 exit 0，不阻塞 prompt
@@ -205,18 +205,20 @@ Agent context 收到 `<recalled-memory>`——Claude Code 静默注入（用户�
 
 ### 首次引导
 
-新终端（registry 无记录）+ 首次 turn + 无 active goal → hook 植入询问引导：
+新 session 的首次 turn + 当前终端没有绑定 goal → hook 植入一次询问引导：
 
 ```xml
 <recalled-memory source="oks">
 ## 首次使用（新终端）
-注册表无此终端的 profile/goal 信息，且知识库无 active goal。
+注册表无此终端的 goal 绑定。
 建议反问用户确认：当前目标 / 技术栈 / 项目。
-确认后调 /assess 建档，后续 hook 从注册表快速检索。
+确认后调 /assess 建档 + `oks registry bind` 绑定 goal，后续 hook 显示 goal。
 </recalled-memory>
 ```
 
-AI 看到会反问人类 → 人类回答 → AI 调 `/assess` 建 profile/goal → Step 3.5 写 registry → 后续 hook 跳过首次引导。
+AI 看到会反问人类 → 人类回答 → AI 调 `/assess` 建 profile/goal，并通过
+`oks registry bind` 建立绑定 → 后续 turn 显示绑定 Goal。知识库中存在但没有绑定到
+当前终端的 active goals 仍可参与默认 Recall 加权，但不会显示在 Goal 区块。
 
 ### pi extension 传 cwd + agent_id
 
