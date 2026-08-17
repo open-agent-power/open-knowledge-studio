@@ -76,7 +76,7 @@ def load_recall_params(root=None):
         "recall_floor": 0.7, "recall_topn": 3, "recall_minlen": 6,
         "recall_cooldown": 10,
         "posttool_floor": 0.9, "posttool_topn": 2, "posttool_mode": "signal",
-        "posttool_recall": 1, "posttool_signal_rel_floor": 2.5,
+        "posttool_recall": 1,
         "conflict_window": 300, "search_backend": "native", "mail_topn": 3,
     }
 
@@ -99,7 +99,6 @@ def load_recall_params(root=None):
             params["posttool_topn"] = int(pc.get("topn", params["posttool_topn"]))
             params["posttool_mode"] = str(pc.get("mode", params["posttool_mode"]))
             params["posttool_recall"] = int(pc.get("recall", params["posttool_recall"]))
-            params["posttool_signal_rel_floor"] = float(pc.get("signal_rel_floor", params["posttool_signal_rel_floor"]))
             params["conflict_window"] = int(cc.get("window", params["conflict_window"]))
             params["search_backend"] = str(data.get("search_backend", params["search_backend"]))
             params["mail_topn"] = int(data.get("mail_topn", params["mail_topn"]))

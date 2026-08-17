@@ -18,7 +18,6 @@ posttool:
   topn: 2              # PostToolUse 注入最多 N 条
   mode: signal          # signal（默认，只 slug+rel）/ full（注入 body）
   recall: 1             # 1=开 recall 补位 / 0=关（保留冲突检测）
-  signal_rel_floor: 2.5 # J 模式：rel 高于此才注入 signal（极高相关）
 
 # ── 文件冲突检测 ──
 conflict:

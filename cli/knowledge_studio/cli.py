@@ -1430,7 +1430,6 @@ th {{ background: #f4f4f8; }}
 <tr><td>recall.topn</td><td>{params["recall_topn"]}</td></tr>
 <tr><td>posttool.floor</td><td>{params["posttool_floor"]}</td></tr>
 <tr><td>posttool.mode</td><td>{params["posttool_mode"]}</td></tr>
-<tr><td>posttool.signal_rel_floor</td><td>{params["posttool_signal_rel_floor"]}</td></tr>
 <tr><td>search_backend</td><td>{params["search_backend"]}</td></tr>
 </table>
 <p class="muted">settings/recall.yaml 是唯一参数真源 → git commit → 走到哪同步到哪。临时调参用 oks recall --floor 0.9。</p>
