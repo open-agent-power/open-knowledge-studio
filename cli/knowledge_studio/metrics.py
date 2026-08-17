@@ -57,7 +57,7 @@ def _compute_vitality(pages: list[dict], seven_days_ago: datetime) -> dict:
 
 def _compute_value(pages: list[dict]) -> dict:
     traced = [item for item in pages if item.get("traces")]
-    with_review = [item for item in pages if item.get("review")]
+    with_review = [item for item in pages if item.get("human_reviewed_at")]
     total_access = sum(item.get("access_count", 0) for item in pages)
     avg_access = total_access / len(pages) if pages else 0
     return {
@@ -73,7 +73,9 @@ def _compute_credibility(pages: list[dict], ninety_days_ago: datetime) -> dict:
     if total == 0:
         return {"trace_coverage": 0, "review_coverage": 0, "fresh_ratio": 0, "avg_confidence": 0, "avg_score": 0}
     traced = [item for item in pages if item.get("traces")]
-    reviewed = [item for item in pages if item.get("review")]
+    # Legacy ``review`` stores outcome/lesson data, not proof that the page
+    # passed the human promotion gate. Only the formal timestamp counts here.
+    reviewed = [item for item in pages if item.get("human_reviewed_at")]
     fresh = [item for item in pages if _parse_date(item.get("created")) >= ninety_days_ago or item.get("access_count", 0) > 0]
     avg_confidence = sum(item.get("confidence", 0.5) for item in pages) / total
     avg_score = sum(item.get("score", 0) for item in pages) / total

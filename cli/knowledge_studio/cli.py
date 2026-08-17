@@ -1297,30 +1297,36 @@ def _generate_metrics_html(root: Path) -> str:
                 except Exception:
                     continue
 
-    # 按 slug 聚合
-    slug_stats = defaultdict(lambda: {"count": 0, "used": 0, "rel_sum": 0.0})
+    # 按 slug 聚合。used=True 记为 adopted，其余记为 unknown——
+    # 缺少注入级负面反馈字段时，未标记 ≠ rejected。
+    slug_stats = defaultdict(
+        lambda: {"count": 0, "adopted": 0, "unknown": 0, "rel_sum": 0.0}
+    )
     for rec in injects:
         slugs = rec.get("slugs", [])
         rels = rec.get("rels", [])
+        state = "adopted" if rec.get("used") is True else "unknown"
         for i, slug in enumerate(slugs):
             s = slug_stats[slug]
             s["count"] += 1
+            s[state] += 1
             s["rel_sum"] += rels[i] if i < len(rels) else 0
-        if rec.get("used"):
-            for slug in slugs:
-                slug_stats[slug]["used"] += 1
 
     total = len(injects)
-    accepted = sum(1 for r in injects if r.get("used"))
-    rate = (accepted / total * 100) if total else 0
+    adopted = sum(1 for rec in injects if rec.get("used") is True)
+    # trace-feedback 只有 run_id，inject 记录没有可验证的关联键，
+    # 因此不会把 unknown 推断为 rejected。
+    unknown = total - adopted
+    observed_adoption_rate = (adopted / total * 100) if total else 0
 
     rows = []
     for slug, s in sorted(slug_stats.items(), key=lambda x: -x[1]["count"])[:20]:
         avg_rel = s["rel_sum"] / s["count"] if s["count"] else 0
-        sr = (s["used"] / s["count"] * 100) if s["count"] else 0
+        observed_rate = (s["adopted"] / s["count"] * 100) if s["count"] else 0
         rows.append(
-            f"<tr><td>{slug}</td><td>{s['count']}</td><td>{s['used']}</td>"
-            f"<td>{avg_rel:.2f}</td><td>{sr:.0f}%</td></tr>"
+            f"<tr><td>{slug}</td><td>{s['count']}</td><td>{s['adopted']}</td>"
+            f"<td>—</td><td>{s['unknown']}</td>"
+            f"<td>{avg_rel:.2f}</td><td>{observed_rate:.0f}%</td></tr>"
         )
 
     fb_path = root / "records" / "trace-feedback.jsonl"
@@ -1353,17 +1359,17 @@ def _generate_metrics_html(root: Path) -> str:
         f"<tr><td>Credibility</td><td>Avg confidence</td><td>{report['credibility']['avg_confidence']:.2f}</td></tr>",
     ]
 
-    # 调参建议：accepted/rejected rel 分布 + floor + cooldown
+    # 调参建议：adopted/unknown rel 分布 + floor + cooldown
     import statistics
     from collections import Counter
-    accepted_rels = []
-    rejected_rels = []
+    adopted_rels = []
+    unknown_rels = []
     for rec in injects:
-        used = rec.get("used", False)
+        rels = adopted_rels if rec.get("used") is True else unknown_rels
         for rel in rec.get("rels", []):
-            (accepted_rels if used else rejected_rels).append(rel)
-    acc_med = statistics.median(accepted_rels) if accepted_rels else 0
-    rej_med = statistics.median(rejected_rels) if rejected_rels else 0
+            rels.append(rel)
+    adopted_med = statistics.median(adopted_rels) if adopted_rels else None
+    unknown_med = statistics.median(unknown_rels) if unknown_rels else None
     import os as _os
     cur_floor = _os.environ.get("OKS_RECALL_FLOOR", "0.7")
     # PostToolUse 注入统计（source=posttool）
@@ -1374,7 +1380,7 @@ def _generate_metrics_html(root: Path) -> str:
     # 当前生效参数（从 settings/recall.yaml + env）
     from knowledge_studio.recall import load_recall_params
     params = load_recall_params(root)
-    suggested_floor = max(0.7, acc_med - 0.2) if accepted_rels else 0.7
+    suggested_floor = max(0.7, adopted_med - 0.2) if adopted_med is not None else 0.7
     slug_freq = Counter()
     for rec in injects:
         for slug in rec.get("slugs", []):
@@ -1384,7 +1390,8 @@ def _generate_metrics_html(root: Path) -> str:
 
     ts = datetime.now().isoformat(timespec="seconds")
     inject_table = (
-        "<table><tr><th>Slug</th><th>注入次数</th><th>被采纳</th><th>平均 rel</th><th>接受率</th></tr>"
+        "<table><tr><th>Slug</th><th>注入次数</th><th>adopted</th><th>rejected</th>"
+        "<th>unknown</th><th>平均 rel</th><th>观测采纳率</th></tr>"
         + "".join(rows) + "</table>"
     ) if rows else "<p class='muted'>无注入记录</p>"
     fb_table = (
@@ -1411,14 +1418,15 @@ th {{ background: #f4f4f8; }}
 <h1>OKS 使用记录</h1>
 <p class="muted">生成于 {ts} | KB: {root}</p>
 <h2>注入统计（inject.jsonl）</h2>
-<p>总注入 <b>{total}</b> 次，<b>{accepted}</b> 条被采纳（<b>{rate:.0f}%</b>）</p>
+<p>总注入 <b>{total}</b> 次：adopted <b>{adopted}</b>，rejected <b>N/A</b>，unknown <b>{unknown}</b>；观测采纳率 <b>{observed_adoption_rate:.0f}%</b></p>
 {inject_table}
 <h2>Trace 反馈（trace-feedback.jsonl）</h2>
 {fb_table}
 <h2>调参建议</h2>
 <table><tr><th>指标</th><th>当前</th><th>建议</th></tr>
-<tr><td>accepted rel 中位数</td><td>{acc_med:.2f}</td><td>—</td></tr>
-<tr><td>rejected rel 中位数</td><td>{rej_med:.2f}</td><td>—</td></tr>
+<tr><td>adopted rel 中位数</td><td>{f'{adopted_med:.2f}' if adopted_med is not None else '不可用'}</td><td>—</td></tr>
+<tr><td>rejected rel 中位数</td><td>不可用</td><td>需要注入级负面字段或共享关联键</td></tr>
+<tr><td>unknown rel 中位数</td><td>{f'{unknown_med:.2f}' if unknown_med is not None else '不可用'}</td><td>—</td></tr>
 <tr><td>OKS_RECALL_FLOOR</td><td>{cur_floor}</td><td>{suggested_floor:.2f}</td></tr>
 </table>
 <p>频繁注入（cooldown 可能太短）：{freq_str}</p>
