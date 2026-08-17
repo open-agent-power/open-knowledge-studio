@@ -77,6 +77,12 @@ oks drafts list
 
 这个案例保留的是研究方法和证据边界，而不是一张会快速过期的模型参数、价格或基准表。
 
+## 可复制的示例 Goal
+
+`goal.md` 是一个可复制的示例 Goal——用 OKS 审查 OKS 自己的 Core 与 Connector 职责边界；
+`sample/research-question.md` 是研究问题模板（问题 → 证据范围 → 必须回答 → 输出要求）。
+复制到你自己的实例后，先改研究问题、`owner` 和资料范围，再把 `status` 改为 `active`。
+
 ## Recall 验证
 
 隔一段时间，在真实任务里重新提问：
