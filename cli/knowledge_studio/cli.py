@@ -1364,16 +1364,15 @@ def _generate_metrics_html(root: Path) -> str:
             (accepted_rels if used else rejected_rels).append(rel)
     acc_med = statistics.median(accepted_rels) if accepted_rels else 0
     rej_med = statistics.median(rejected_rels) if rejected_rels else 0
-    import os as _os
-    cur_floor = _os.environ.get("OKS_RECALL_FLOOR", "0.7")
     # PostToolUse 注入统计（source=posttool）
     posttool_injects = [r for r in injects if r.get("source") == "posttool"]
     pt_total = len(posttool_injects)
     pt_accepted = sum(1 for r in posttool_injects if r.get("used"))
     pt_rate = (pt_accepted / pt_total * 100) if pt_total else 0
-    # 当前生效参数（从 settings/recall.yaml + env）
+    # 当前生效参数（从 settings/recall.yaml）
     from knowledge_studio.recall import load_recall_params
     params = load_recall_params(root)
+    cur_floor = params["recall_floor"]
     suggested_floor = max(0.7, acc_med - 0.2) if accepted_rels else 0.7
     slug_freq = Counter()
     for rec in injects:
@@ -1419,12 +1418,12 @@ th {{ background: #f4f4f8; }}
 <table><tr><th>指标</th><th>当前</th><th>建议</th></tr>
 <tr><td>accepted rel 中位数</td><td>{acc_med:.2f}</td><td>—</td></tr>
 <tr><td>rejected rel 中位数</td><td>{rej_med:.2f}</td><td>—</td></tr>
-<tr><td>OKS_RECALL_FLOOR</td><td>{cur_floor}</td><td>{suggested_floor:.2f}</td></tr>
+<tr><td>recall.floor</td><td>{cur_floor}</td><td>{suggested_floor:.2f}</td></tr>
 </table>
 <p>频繁注入（cooldown 可能太短）：{freq_str}</p>
 <h2>PostToolUse 注入统计</h2>
 <p>PostToolUse 注入 <b>{pt_total}</b> 次，<b>{pt_accepted}</b> 条被采纳（<b>{pt_rate:.0f}%</b>）</p>
-<h2>当前参数（settings/recall.yaml + env）</h2>
+<h2>当前参数（settings/recall.yaml）</h2>
 <table><tr><th>参数</th><th>当前值</th></tr>
 <tr><td>recall.floor</td><td>{params["recall_floor"]}</td></tr>
 <tr><td>recall.topn</td><td>{params["recall_topn"]}</td></tr>
@@ -2386,8 +2385,8 @@ def hook_install(
     console.print(
         "\n[bold]Auto-recall + conflict detection enabled.[/bold]\n"
         "New prompts inject relevant memory; file edits across agents trigger conflict mail.\n"
-        "Tune via env: OKS_RECALL_FLOOR (0.7), OKS_RECALL_TOPN (3), OKS_RECALL_MINLEN (6),\n"
-        "  OKS_CONFLICT_WINDOW (300s)."
+        "Tune via settings/recall.yaml: recall.floor / recall.topn / recall.minlen /\n"
+        "  recall.cooldown / conflict.window."
     )
 
 
