@@ -386,6 +386,44 @@ def test_episodic_recall_never_leaks_other_identities(kb_root):
     assert not any("theirs.md" in path for path in scoped)
 
 
+def test_profile_in_scope_matches_flat_and_nested_user_paths(tmp_path):
+    """User scope must accept flat ``users/{id}.md`` and nested
+    ``users/{id}/profile.md``, mirroring projects' ``{slug}`` / ``{slug}.md``.
+    """
+    from knowledge_studio.recall import _profile_in_scope
+
+    profiles = tmp_path / "profiles"
+
+    # Flat user profile (CONSTITUTION A2 declares profiles/users/{id}.md).
+    # parts[1] == "alice.md" used to fail the old ``parts[1] == user_id`` check.
+    assert _profile_in_scope(
+        profiles / "users" / "alice.md", profiles, user_id="alice", project_slug=None
+    )
+    # Nested user profile must keep working.
+    assert _profile_in_scope(
+        profiles / "users" / "alice" / "profile.md",
+        profiles,
+        user_id="alice",
+        project_slug=None,
+    )
+    # Another user's profile stays out.
+    assert not _profile_in_scope(
+        profiles / "users" / "bob.md", profiles, user_id="alice", project_slug=None
+    )
+    # No named identity excludes every user profile.
+    assert not _profile_in_scope(
+        profiles / "users" / "alice.md", profiles, user_id=None, project_slug=None
+    )
+
+    # Projects behaviour is unchanged: flat and nested both match, others don't.
+    assert _profile_in_scope(
+        profiles / "projects" / "mine.md", profiles, user_id=None, project_slug="mine"
+    )
+    assert not _profile_in_scope(
+        profiles / "projects" / "theirs.md", profiles, user_id=None, project_slug="mine"
+    )
+
+
 def test_episodic_recall_excludes_ai_written_digests(kb_root):
     """CONSTITUTION P3: an AI digest is a record, not human-collected material."""
     from knowledge_studio.distiller import write_digest

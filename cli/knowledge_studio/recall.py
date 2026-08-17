@@ -267,7 +267,7 @@ def _profile_in_scope(
     if not parts:
         return False
     if parts[0] == "users":
-        return user_id is not None and len(parts) > 1 and parts[1] == user_id
+        return user_id is not None and len(parts) > 1 and parts[1] in (user_id, f"{user_id}.md")
     if parts[0] == "projects":
         if project_slug is None or len(parts) < 2:
             return False
