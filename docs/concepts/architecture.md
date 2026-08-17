@@ -12,7 +12,7 @@ OKS 三层架构：**摄入 → 桶 → 召回**。飞书是可选集成，不�
 flowchart TD
     subgraph L1["① 摄入"]
         direction LR
-        A[Source] --> B[模态判定] --> C[Provider ×17] --> D[Evidence<br/>Fragment · Manifest] --> E[raw-commit<br/>fail-closed] --> F[Bundle v0.2] --> G[Candidate] --> H[人审] --> I[Wiki]
+        A[Source] --> B[模态判定] --> C[Provider] --> D[Evidence<br/>Fragment · Manifest] --> E[raw-commit<br/>fail-closed] --> F[Bundle v0.2] --> G[Candidate] --> H[人审] --> I[Wiki]
     end
 
     subgraph L2["② 桶 · 5 认知 + 2 基础设施"]
