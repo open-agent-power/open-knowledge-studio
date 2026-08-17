@@ -39,6 +39,6 @@ Skills。个人知识应保存在这个实例目录，而不是 OKS 工具源码
 
 - `oks --version` 返回版本号；
 - `oks status` 能读取当前知识库；
-- 当前目录包含 `raw/`、`drafts/`、`wiki/`、`settings/` 和 `_meta/`。
+- 当前目录包含 `raw/`、`wiki/`、`drafts/`、`profiles/`、`mail/`、`settings/` 和 `_meta/`。
 
 下一步：[完成第一个知识闭环](first-knowledge-loop.md)。

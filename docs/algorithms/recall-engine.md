@@ -77,9 +77,9 @@ OKS 不学主流 RAG 的稠密嵌入 / BM25 / 混合检索 / 神经重排序，�
 
 | 主流 RAG 技术 | OKS 对应 / 取舍 |
 |---------------|----------------|
-| 稠密嵌入（embedding） | 不做——要模型 + 向量索引，OKS 用 token overlap ×0.3（无 IDF、无长度归一化，已知简化） |
-| BM25（词频饱和 + 长度归一化） | 不做——要倒排索引 + IDF 统计，OKS 用无权 token 计数 |
-| 混合检索 + RRF 融合 | 不做——OKS 单路词项 + 子串 + 图谱，不并行两引擎 |
+| 稠密嵌入（embedding） | 不做——要模型 + 向量索引，OKS 用 IDF 加权 token overlap（无 embedding、无长度归一化） |
+| BM25（词频饱和 + 长度归一化） | native 不做（fts5 backend 用 SQLite FTS5 + BM25） |
+| 混合检索 + RRF 融合 | native 单路（fusion backend 并行 native + fts5 补盲） |
 | 神经重排序（跨编码器） | 不做——要 LLM 调用，OKS 用 type boost + review bonus 做规则重排 |
 | 上下文感知检索（LLM 补前缀） | **零成本平替**：OKS 的 frontmatter（title/area/tags）就是手工上下文前缀 |
 
@@ -90,7 +90,7 @@ OKS 不学主流 RAG 的稠密嵌入 / BM25 / 混合检索 / 神经重排序，�
 {: .note }
 Anthropic 的上下文感知检索在索引期调 LLM 给每个文本块补“前缀摘要”（如“[ACME 公司 2025 Q2 财报·关键业绩指标]”），锚定语义环境。OKS 不调 LLM，但 frontmatter 的 `title`/`area`/`tags` 字段就是开发者 / Agent 手工写的同等“上下文前缀”——检索时这些字段参与 token overlap + 子串匹配，效果同源。代价是要人 / Agent 主动维护 frontmatter，不像 LLM 自动生成。
 
-换来的好处：可解释（`--explain` 逐项分数）、零 AI 依赖、本地小-中知识库（百到千页）够用。代价：无语义召回（跨表述差）、无 IDF / 长度归一化。语义召回需 embedding，暂不做。
+换来的好处：可解释（`--explain` 逐项分数）、零 AI 依赖、本地小-中知识库（百到千页）够用。代价：无语义召回（跨表述差）、无长度归一化。语义召回需 embedding，暂不做。
 
 ## 对比 nowledge 搜索架构
 
@@ -149,7 +149,7 @@ JSON 响应版本 `recall-response/v1`，单条 `recall-hit/v1`。
 
 ## 结论
 
-6+1 是无 embedding 下的折中方案，适合本地小到中知识库（百到千页）。优点：轻量、可解释、不调 AI、类型/失败/目标感知。局限：无语义召回（跨表述差）、无 IDF/长度归一化。语义召回需 embedding（大改，需模型+索引+标注量化），暂不做。
+6+1 是无 embedding 下的折中方案，适合本地小到中知识库（百到千页）。优点：轻量、可解释、不调 AI、类型/失败/目标感知。局限：无语义召回（跨表述差）、无长度归一化。语义召回需 embedding（大改，需模型+索引+标注量化），暂不做。
 
 OKS 提供的是 **Recall 原语，不是 agentic search**——单次查询返回结果，不做 ReAct 多轮迭代（“召回→评估→再召回”）。多轮探索由 host Agent（Claude Code 等）在宿主层做：OKS 提供召回原语 + source label（防间接提示注入），Agent 决定要不要继续召回。这是 OKS“Agent 状态栏注入 + Recall 原语”定位的边界。
 

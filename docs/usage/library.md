@@ -13,7 +13,7 @@ parent: 使用 OKS
 oks ingest run <URL|file>
 ```
 
-产出 Raw Bundle v0.2：`content.md` + `evidence.jsonl` + `digest.md` + `metadata.json` + `quality-report.json` + `assets/original` + `extractor-output.md`。每个 bundle 带 provenance（哪来的）+ fingerprint dedup（去重）。
+产出 Raw Bundle v0.2：`bundle.json`（清单）+ `content.md`（正文）+ `source-envelope.json` + `evidence-manifest.json` + `source/`（原始文件）+ `derived/`（fragments、补充产物）。每个 bundle 带 provenance（哪来的）+ fingerprint dedup（去重）。
 
 ## 分级
 

@@ -113,13 +113,13 @@ Tier 分级（按 score）：
 | cold | ≥ 0.15 | 低优先级 |
 | evictable | < 0.15 | 归档候选 |
 
-`archive_threshold`（默认 0.15，可配）——低于此分进入归档候选，下次 `oks distill` 标 `dropped`。
+`archive_threshold`（默认 0.3，store.py 代码内置）——低于此分进入归档候选，下次 `oks distill` 标 `dropped`。
 
 ## 实验
 
 无量化衰减效果评测（需长期跟踪知识库召回质量）。λ 取 0.014/0.010/0.0 是经验值——concept 不衰（永恒）vs strategy 快衰（易过时）是知识论直觉，非数据拟合。
 
-可调：`~/.oks/config.json` 的 `decay` 段覆盖 `archive_threshold` + `pin_bonus`。
+decay 参数（archive_threshold=0.3、pin_bonus=0.5）当前是 store.py 的代码默认值，无实例级配置文件覆盖。
 
 ## 结论
 

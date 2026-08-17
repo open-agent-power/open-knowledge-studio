@@ -32,7 +32,7 @@ recall 默认只注入 L0+L1（wiki frontmatter + 正文）。`raw/`（L2）只�
 - **Agent write_file 友好**——Agent 在工作分支写 draft，人审后合入主库
 - **链接可达**——wikilink + frontmatter `relates_to` 做轻量图谱（A4 关系）
 
-代价：无向量检索（语义召回差）、无倒排索引（无 BM25/IDF）。OKS 用 6+1 因子（token + 子串 + 图谱 + 类型 + review + 记忆 + goal）做规则评分补这个缺口。
+代价：无向量检索（语义召回差）。倒排索引（BM25）由 fts5 backend 提供，native 用 IDF 加权 token。OKS 用 6+1 因子（token + 子串 + 图谱 + 类型 + review + 记忆 + goal）做规则评分补这个缺口。
 
 ## 防孤岛：链接与索引
 
