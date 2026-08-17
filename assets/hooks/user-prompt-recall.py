@@ -17,13 +17,9 @@ added in Phase 2b.
 
 Fails open: any error or empty result prints nothing and exits 0.
 
-Tunables via env:
-  OKS_AGENT_ID         agent identity (default: cwd basename)
-  OKS_RECALL_FLOOR     min knowledge relevance to inject (default 0.7)
-  OKS_RECALL_TOPN      max knowledge memories injected (default 3)
-  OKS_RECALL_MINLEN    skip prompts shorter than this many chars (default 6)
-  OKS_RECALL_COOLDOWN  turns before the same slug may be re-injected (default 10)
-  OKS_MAIL_TOPN        max unread mail injected (default 3)
+Tunables live in settings/recall.yaml (per-instance, git-synced) and are read
+through knowledge_studio.recall.load_recall_params. OKS_AGENT_ID env still names
+the agent identity (default: cwd basename).
 """
 import hashlib
 import json
@@ -274,12 +270,18 @@ def main() -> int:
     if not prompt:
         return 0
 
-    minlen = int(os.environ.get("OKS_RECALL_MINLEN", "6"))
-    if len(prompt) < minlen or prompt.lower() in _TRIVIAL:
-        return 0
-
     kb_root = _kb_root()
     if kb_root is None:
+        return 0
+
+    try:
+        from knowledge_studio.recall import load_recall_params
+        params = load_recall_params(kb_root)
+    except Exception:
+        params = {}
+
+    minlen = int(params.get("recall_minlen", 6))
+    if len(prompt) < minlen or prompt.lower() in _TRIVIAL:
         return 0
 
     session_id = str(payload.get("session_id", "") or "")
@@ -306,10 +308,10 @@ def main() -> int:
     goal_relevant = False
 
     if recall is not None:
-        floor = float(os.environ.get("OKS_RECALL_FLOOR", "0.7"))
-        topn = int(os.environ.get("OKS_RECALL_TOPN", "3"))
-        cooldown = int(os.environ.get("OKS_RECALL_COOLDOWN", "10"))
-        search_backend = os.environ.get("OKS_SEARCH_BACKEND", "native")
+        floor = float(params.get("recall_floor", 0.7))
+        topn = int(params.get("recall_topn", 3))
+        cooldown = int(params.get("recall_cooldown", 10))
+        search_backend = str(params.get("search_backend", "native"))
 
         state["n"] += 1
         turn = state["n"]
@@ -398,7 +400,7 @@ def main() -> int:
         sections.append("\n".join(lines))
 
     # Mail section
-    mail_topn = int(os.environ.get("OKS_MAIL_TOPN", "3"))
+    mail_topn = int(params.get("mail_topn", 3))
     mails = _load_unread_mail(kb_root, limit=mail_topn)
     if mails:
         lines = [f"## 通信（{len(mails)} 未读）"]

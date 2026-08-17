@@ -21,13 +21,9 @@ Two jobs (both fail-open, never block a tool):
    - Shares recall-state-{session}.json + cooldown with UserPromptSubmit so
      the same slug isn't re-injected twice.
 
-Tunables via env:
-  OKS_CONFLICT_WINDOW  seconds to consider a conflict (default 300 = 5 min)
-  OKS_AGENT_ID         agent identity (default: cwd basename)
-  OKS_POSTTOOL_FLOOR   min relevance for PostToolUse recall (default 0.9, higher than UserPromptSubmit's 0.7)
-  OKS_POSTTOOL_TOPN    max memories injected per PostToolUse (default 2, less than UserPromptSubmit's 3)
-  OKS_RECALL_COOLDOWN  shared with UserPromptSubmit (default 10 turns)
-  OKS_SEARCH_BACKEND   search backend (default native)
+Tunables live in settings/recall.yaml (posttool.* / conflict.window /
+search_backend) via load_recall_params. OKS_AGENT_ID env still names the agent
+identity (default: cwd basename).
 """
 import json
 import os
@@ -37,8 +33,6 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 from _persistence import append_jsonl, atomic_write_text, file_lock
-
-CONFLICT_WINDOW = int(os.environ.get("OKS_CONFLICT_WINDOW", "300"))
 
 EDIT_TOOLS = {"Edit", "Write", "MultiEdit", "edit", "write", "multiedit"}
 
@@ -105,12 +99,17 @@ def _append_file_edit(kb_root: Path, agent_id: str, file_path: str) -> None:
 
 
 def _check_conflict(kb_root: Path, agent_id: str, file_path: str) -> dict | None:
-    """Check if another agent edited this file within CONFLICT_WINDOW."""
+    """Check if another agent edited this file within the conflict window."""
     path = _file_edits_path(kb_root)
     if not path.is_file():
         return None
     now = datetime.now(timezone.utc)
-    window = timedelta(seconds=CONFLICT_WINDOW)
+    try:
+        from knowledge_studio.recall import load_recall_params
+        conflict_window = int(load_recall_params(kb_root).get("conflict_window", 300))
+    except Exception:
+        conflict_window = 300
+    window = timedelta(seconds=conflict_window)
     try:
         lock = kb_root / ".oks" / "locks" / "file-edits.lock"
         with file_lock(lock):
@@ -357,8 +356,8 @@ def _recall_supplement(
     # 提示模式（exposure-based）：只告知“有记忆可用”，不注入内容。
     # AI 看到信号后自主决定是否调 oks recall 取详情——token 省 90%，
     # 沉默期仍有信号（避免长任务盲区），AI 不被强制注入无关内容。
-    # OKS_POSTTOOL_MODE=full 恢复旧行为（注入完整 body）。
-    mode = os.environ.get("OKS_POSTTOOL_MODE", "signal")
+    # posttool.mode=full 恢复旧行为（注入完整 body）。
+    mode = str(p.get("posttool_mode", "signal"))
     if mode == "full":
         out = ['<recalled-memory source="oks-posttool">']
         out.append(f'<!-- query="{query}" floor={floor} (PostToolUse supplement) -->')
@@ -412,8 +411,12 @@ def main() -> int:
                 )
 
     # 2. Recall supplement (any tool — long-task blind spot)
-    # Set OKS_POSTTOOL_RECALL=0 to disable (keep conflict detection only).
-    recall_on = os.environ.get("OKS_POSTTOOL_RECALL", "1") != "0"
+    # posttool.recall=0 disables recall supplement (keeps conflict detection).
+    try:
+        from knowledge_studio.recall import load_recall_params
+        recall_on = bool(load_recall_params(kb_root).get("posttool_recall", 1))
+    except Exception:
+        recall_on = True
     if recall_on:
         query = _query_from_tool(tool_name, tool_input)
         if query:
