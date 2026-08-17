@@ -138,7 +138,7 @@ oks wiki use <slug>   # explicit "this page was used" signal (recall is read-onl
 oks drafts list | promote <slug> | reject <slug>
 oks distill [--dry-run]
 oks lint | status | metrics | decay
-oks capability list | status [--json/--text] [--verbose] | guide <provider-id>
+oks capability list | status [--json/--text] | guide <provider-id>
 oks capability install <name> [--yes]
 oks hook install [--editor claude|qoder|both] [--path DIR]   # opt-in auto-recall on prompt
 oks hook status

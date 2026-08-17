@@ -138,7 +138,7 @@ oks lint | status | metrics [--html] | decay
 # Capability
 oks capability list
 oks capability install <name> [--yes]
-oks capability status [--json/--text] [--verbose]
+oks capability status [--json/--text]
 oks capability guide <provider-id>
 
 # Optional coordination
