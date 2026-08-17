@@ -8,7 +8,7 @@ Open Knowledge Studio is a file-based knowledge base system designed for use wit
 
 **OKS 不是一个要求用户长期坐在里面写作、整理页面的笔记软件。它不试图替代 Obsidian、Notion、Roam 或用户已有的编辑器。OKS 负责的是：把用户已有的文件、网页、媒体、平台内容和主动提交的信息，经 Agent 提取、人工审核后，沉淀成可召回的文件系统知识。**
 
-- **4 cognitive buckets (profiles/, raw/, wiki/, drafts/) + 2 infrastructure layers (settings/, _meta/)**: profiles/ incl. recipes, goals
+- **5 cognitive buckets (profiles/, raw/, wiki/, drafts/, mail/) + 2 infrastructure layers (settings/, _meta/)**: profiles/ incl. recipes, goals; mail/ is short-lived coordination, not recallable knowledge
 - **Agent-Native ingestion pipeline**: Source → Provider → EvidenceFragment → EvidenceManifest → `oks raw-commit` → Raw Bundle v0.2 → Candidate → Human Review → Wiki
 - **6+1-factor recall engine**: token overlap + substring + topic trace + type boost + review bonus (failure lessons rank higher) + memory curve + optional goal boost (active goals lift on-scope pages; no-op without goals)
 - **4 knowledge relationships**: supersedes, enriches, confirms, challenges (CONSTITUTION A4)
@@ -17,7 +17,7 @@ Open Knowledge Studio is a file-based knowledge base system designed for use wit
 - **Decay system**: memory curve scoring with type-specific λ, tier classification (hot/warm/cold/evictable)
 - **Date-based raw/**: `raw/{YYYY}/{MM}/{DD}/{source}/` — auto-organized by intake date + source category
 - **Global config**: `~/.oks/config.json` enables cross-project access from any directory
-- **CLI tool (`oks`)**: recall, raw-commit, ingest, init, skills-install, wiki CRUD, drafts, distill, lint, status, metrics, capability, schema, security, feishu, trace, eval, hook, config (run `oks --help` for the authoritative list)
+- **CLI tool (`oks`)**: recall, raw-commit, ingest, init, skills-install, wiki CRUD, drafts, distill, lint, status, metrics, capability, schema, security, mail, registry, trace, eval, hook, config (run `oks --help` for the authoritative list)
 
 ## Raw Material vs Memory — The Core Distinction
 
@@ -67,7 +67,7 @@ injected into Claude Code context
 
 See `CONSTITUTION.md` for the full memory design (A1-A5):
 
-- **A1**: Four knowledge-lifecycle buckets (profiles/raw/wiki/drafts), mandatory mail coordination, and two infrastructure layers (settings=config, _meta=schema)
+- **A1**: Five cognitive buckets — four knowledge-lifecycle (profiles/raw/wiki/drafts) + mandatory mail/ coordination — and two infrastructure layers (settings=config, _meta=schema)
 - **A2**: Six-type memory model + injection order + source labels + conflict priority
 - **A3**: Dreaming — human-reviewed knowledge evolution
 - **A4**: Knowledge evolution — supersedes, enriches, confirms, challenges
@@ -138,7 +138,7 @@ oks wiki use <slug>   # explicit "this page was used" signal (recall is read-onl
 oks drafts list | promote <slug> | reject <slug>
 oks distill [--dry-run]
 oks lint | status | metrics | decay
-oks capability list | catalog [--json] [--verbose] | doctor [--json] [--verbose]
+oks capability list | status [--json/--text] [--verbose] | guide <provider-id>
 oks capability install <name> [--yes]
 oks hook install [--editor claude|qoder|both] [--path DIR]   # opt-in auto-recall on prompt
 oks hook status
