@@ -53,7 +53,7 @@ total = base × type_boost
 
 ### 可插拔 search backend
 
-Knowledge 路径的召回后端可插拔（`recall(search_backend=...)` 或 `OKS_SEARCH_BACKEND` env）：
+Knowledge 路径的召回后端可插拔（settings/recall.yaml 的 `search_backend`，或 `recall(search_backend=...)` 显式传参）：
 
 - **native**（默认）：下文 6+1 因子 + jieba + IDF + title boost，实时遍历，无新依赖
 - **fts5**（CV from TreeSearch FTS5Index）：SQLite FTS5 + BM25 + column weights（title 5x > tags 3x > body 1x > code 0.5x）+ 增量 diff（content_hash）+ 持久化索引（`.oks/fts5.db`）。大库（1000+ 页）比 native 遍历快。FTS5 不可用时降级 LIKE

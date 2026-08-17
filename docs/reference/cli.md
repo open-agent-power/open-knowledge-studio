@@ -32,23 +32,24 @@ parent: 参考
 
 完整命令：`oks --help`。
 
-### hook 可调参数（env）
+### hook 可调参数（settings/recall.yaml）
 
-| env | 默认 | 用途 |
+| 键 | 默认 | 用途 |
 |-----|------|------|
-| `OKS_RECALL_FLOOR` | 0.7 | 最小 relevance 才注入 |
-| `OKS_RECALL_TOPN` | 3 | 最多注入条数 |
-| `OKS_RECALL_COOLDOWN` | 10 | 同 slug 重注入间隔（轮）|
-| `OKS_MAIL_TOPN` | 3 | 最多注入未读 mail |
-| `OKS_CONFLICT_WINDOW` | 300 | 文件冲突检测窗口（秒）|
-| `OKS_AGENT_ID` | cwd basename | Agent 身份（registry key）|
-| `OKS_SEARCH_BACKEND` | native | search backend：`native` \| `fts5` \| `fusion` \| `<connector-name>`（见下） |
-| `OKS_POSTTOOL_FLOOR` | 0.9 | PostToolUse recall 补位最小 relevance（比 UserPromptSubmit 高，避免噪声）|
-| `OKS_POSTTOOL_TOPN` | 2 | PostToolUse 最多注入条数（比 UserPromptSubmit 少）|
+| `recall.floor` | 0.7 | 最小 relevance 才注入 |
+| `recall.topn` | 3 | 最多注入条数 |
+| `recall.cooldown` | 10 | 同 slug 重注入间隔（轮）|
+| `mail_topn` | 3 | 最多注入未读 mail |
+| `conflict.window` | 300 | 文件冲突检测窗口（秒）|
+| `search_backend` | native | search backend：`native` \| `fts5` \| `fusion` \| `<connector-name>`（见下） |
+| `posttool.floor` | 0.9 | PostToolUse recall 补位最小 relevance（比 UserPromptSubmit 高，避免噪声）|
+| `posttool.topn` | 2 | PostToolUse 最多注入条数（比 UserPromptSubmit 少）|
+
+`OKS_AGENT_ID` 仍是环境变量（cwd basename，registry key）。
 
 ### 可插拔 search backend
 
-`oks recall --search-backend <name>` 或 `OKS_SEARCH_BACKEND=<name>` 切换召回后端：
+`oks recall --search-backend <name>` 或 settings/recall.yaml 的 `search_backend` 切换召回后端：
 
 | backend | 说明 | 适用场景 |
 |---------|------|----------|

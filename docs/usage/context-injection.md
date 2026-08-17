@@ -67,8 +67,8 @@ pi 不读 settings.json，要装 extension。open-knowledge-studio 仓库已带 
 2. **trivial 跳过**：prompt < 6 字或"你好/ok/继续"等不召回
 3. 根据 `agent_id + cwd` 查 Registry；有绑定时把对应 `goal_slugs` 传给 Recall，没有绑定时保持默认作用域
 4. 跑 `recall(query=prompt, limit=5, goal=绑定目标)`（走 config KB root：`OKS_ROOT` → `~/.oks/config.json` → cwd）
-5. **floor 过滤**：relevance >= 0.7（`OKS_RECALL_FLOOR`）才注入
-6. **cooldown 去重**：同 session 同 slug 10 轮（`OKS_RECALL_COOLDOWN`）内不重复
+5. **floor 过滤**：relevance >= recall.floor（settings/recall.yaml）才注入
+6. **cooldown 去重**：同 session 同 slug recall.cooldown 轮内不重复
 7. 按需加入绑定目标（未绑定时为 active goals）、首次使用提示和收件箱消息；Mail 是协调信息，不是 Recall 命中
 8. stdout 输出 `<recalled-memory>` 容器；容器可包含记忆、目标和协调信息，但三者语义不同
 9. 对实际注入的 Wiki 页面追加 `records/inject.jsonl` 过程记录；只存 prompt hash，不存原 prompt
@@ -91,8 +91,8 @@ Agent ID、工作目录或人工评论。提交到 Git 前应按团队隐私政�
    - Edit/Write/Read/MultiEdit → file basename（stem）
    - Bash → command 前 ~6 词
    - Grep/Glob → pattern
-2. **高 floor + 少 topn**：`OKS_POSTTOOL_FLOOR=0.9`（比 UserPromptSubmit 的 0.7 高），`OKS_POSTTOOL_TOPN=2`（比 3 少）——PostToolUse 频繁触发，只注入高置信度，避免淹没 agent 执行流
-3. **共享 cooldown**：和 UserPromptSubmit 共用 `recall-state-{session}.json` + `OKS_RECALL_COOLDOWN`——同 slug 不跨两个 hook 重复注入
+2. **高 floor + 少 topn**：posttool.floor=0.9（比 UserPromptSubmit 的 0.7 高），posttool.topn=2（比 3 少）——PostToolUse 频繁触发，只注入高置信度，避免淹没 agent 执行流
+3. **共享 cooldown**：和 UserPromptSubmit 共用 `recall-state-{session}.json` + recall.cooldown——同 slug 不跨两个 hook 重复注入
 4. **inject trace**：`records/inject.jsonl` 记 `source=posttool`（区别于 `userprompt`）
 
 两个 hook 协同：
@@ -284,29 +284,30 @@ feedback 进**分析**不进**评分**——confidence 只在指纹命中 +0.1�
 1. 读 stdin JSON payload（`tool_name` + `tool_input.file_path` + `session_id` + `cwd`）
 2. 只 watch Edit/Write/MultiEdit（不 watch read/search）
 3. 写 `records/file-edits.jsonl`（agent_id + file + ts，git 共享）
-4. 查该文件最近 `OKS_CONFLICT_WINDOW`（默认 300s = 5 分钟）内是否有其他 Agent 编辑过
+4. 查该文件最近 conflict.window（默认 300s = 5 分钟）内是否有其他 Agent 编辑过
 5. 冲突 → 写 `mail/inbox/`（type=conflict, priority=urgent, action=review）给当前 Agent
 
 `oks hook install` 同时 wire UserPromptSubmit（recall）+ PostToolUse（冲突检测）到 settings.json，幂等。
 
-可调：`OKS_CONFLICT_WINDOW`（300s）、`OKS_AGENT_ID`（默认 cwd basename）。
+可调：conflict.window（300s）、`OKS_AGENT_ID`（默认 cwd basename）。
 
-## 可调参数（env）
+## 可调参数（settings/recall.yaml）
 
-| env | 默认 | 作用 |
+| 键 | 默认 | 作用 |
 |-----|------|------|
-| `OKS_RECALL_FLOOR` | 0.7 | 最低 relevance 才注入（调高减误命中，但漏低分真相关） |
-| `OKS_RECALL_TOPN` | 3 | 最多注入几条 |
-| `OKS_RECALL_MINLEN` | 6 | 最短 prompt 长度（< 此跳过） |
-| `OKS_RECALL_COOLDOWN` | 10 | 同 slug 去重轮数 |
-| `OKS_AGENT_ID` | cwd 目录名 | 当前终端 Agent 身份；需要跨机器稳定时显式设置 |
-| `OKS_MAIL_TOPN` | 3 | 最多注入的未读协调消息数 |
+| `recall.floor` | 0.7 | 最低 relevance 才注入（调高减误命中，但漏低分真相关） |
+| `recall.topn` | 3 | 最多注入几条 |
+| `recall.minlen` | 6 | 最短 prompt 长度（< 此跳过） |
+| `recall.cooldown` | 10 | 同 slug 去重轮数 |
+| `mail_topn` | 3 | 最多注入的未读协调消息数 |
+
+`OKS_AGENT_ID` 仍是环境变量（默认 cwd 目录名），不随 recall.yaml 分发；需要跨机器稳定时显式设置。
 
 ## 局限：无 embedding 的误命中
 
 token overlap 无 IDF/语义判别，会误命中 token 重叠但不相关的页。例：查"git branch 命名"可能召回 `citation-system`（"命名"重叠）+ `pr-review-protocol`（"测试"重叠），rel=0.78 略过 floor 0.7。
 
-调高 `OKS_RECALL_FLOOR`（如 1.0）减误命中，但会漏低分真相关页。语义召回需 embedding（暂不做，见 [召回引擎取舍](../algorithms/recall-engine.md#技术取舍)）。
+调高 recall.floor（如 1.0）减误命中，但会漏低分真相关页。语义召回需 embedding（暂不做，见 [召回引擎取舍](../algorithms/recall-engine.md#技术取舍)）。
 
 ## 手动召回
 
