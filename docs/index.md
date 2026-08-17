@@ -44,6 +44,7 @@ OKS 是一个 Agent-native、文件系统优先的知识工作台——**Agent �
 
 - **开始使用**：[安装](installation.md) · [快速入门](quick-start.md) · [第一个知识闭环](first-knowledge-loop.md) · [导入已有对话](import-conversations.md) · [确认在工作](verify.md) · [召回](recall.md) · [审核 Candidate](review-candidates.md)
 - **使用 OKS**：[记忆](usage/memories.md) · [对话](usage/conversations.md) · [资料库](usage/library.md) · [上下文注入](usage/context-injection.md) · [你的档案](usage/profiles.md)
+- **案例**（可复制的真实场景，源码见 `examples/`）：[书籍](https://github.com/open-agent-power/open-knowledge-studio/tree/main/examples/oh-my-book) · [飞书](https://github.com/open-agent-power/open-knowledge-studio/tree/main/examples/oh-my-feishu) · [GitHub](https://github.com/open-agent-power/open-knowledge-studio/tree/main/examples/oh-my-github) · [维护者](https://github.com/open-agent-power/open-knowledge-studio/tree/main/examples/oh-my-maintainer) · [研究](https://github.com/open-agent-power/open-knowledge-studio/tree/main/examples/oh-my-research) · [简历](https://github.com/open-agent-power/open-knowledge-studio/tree/main/examples/oh-my-resume)
 - **概念**：[哲学](concepts/philosophy.md) · [宪法](concepts/constitution.md) · [记忆模型](concepts/memory-model.md) · [文件系统范式](concepts/file-system-paradigm.md)
 - **算法**：[召回引擎](algorithms/recall-engine.md) · [衰减系统](algorithms/decay-system.md) · [召回评估](algorithms/recall-evaluation.md)
 - **连接**：[备份与导出](connect/backup-export.md)
