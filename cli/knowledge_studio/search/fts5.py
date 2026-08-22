@@ -150,6 +150,10 @@ class FTS5Backend:
         if db_path is None and root:
             db_path = os.path.join(root, ".oks", "fts5.db")
         self._db_path = db_path or ":memory:"
+        if self._db_path != ":memory:":
+            # sqlite3.connect() does not create missing parent directories.
+            # Create only the local derived-state directory before opening it.
+            os.makedirs(os.path.dirname(os.path.abspath(self._db_path)), exist_ok=True)
         self._weights = {**_DEFAULT_WEIGHTS, **(weights or {})}
         self._conn = sqlite3.connect(self._db_path)
         self._conn.execute("PRAGMA journal_mode=WAL")
@@ -159,8 +163,6 @@ class FTS5Backend:
         self._indexed = False
 
     def _init_db(self) -> None:
-        if self._db_path != ":memory:":
-            os.makedirs(os.path.dirname(os.path.abspath(self._db_path)), exist_ok=True)
         # v0.6.0: schema version 检测——node-level schema 不匹配则强制重建
         self._conn.execute(
             "CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT)"

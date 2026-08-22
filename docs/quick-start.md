@@ -189,7 +189,7 @@ AI: "基于你的知识库（Kimi K3 实测），我的建议是：
 ### 🎓 深入学习
 - [从这里开始](start-here.md) - 理解核心概念
 - [首次知识循环](first-knowledge-loop.md) - 完整操作流程
-- [最佳实践](https://github.com/open-agent-power/open-knowledge-studio/blob/main/docs/best-practices.md) - 优化使用技巧
+- [最佳实践](best-practices.md) - 优化使用技巧
 
 ### 📚 查看案例
 - [托管你的研究](../examples/oh-my-research/) - AI 研究者的论文管理

@@ -33,7 +33,7 @@ cd ./my-knowledge
 
 ✅ **完成信号**：看到 `Initialized OKS repository`
 
-> **装不上？** 看 [安装故障排查](../reference/troubleshooting.md#安装)
+> **装不上？** 看 [安装故障排查](reference/troubleshooting.md)
 
 ---
 
@@ -206,7 +206,7 @@ CLI 命令（`oks status`, `oks recall`）是：
 2. **[看真实案例](examples.md)**  
    B 站视频 → Wiki → 技术方案（7 分钟）
 
-3. **[学习最佳实践](../best-practices.md)**  
+3. **[学习最佳实践](best-practices.md)**  
    三个阶段，三个核心原则
 
 ---

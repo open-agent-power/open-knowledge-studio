@@ -5,7 +5,7 @@ parent: 概念
 ---
 # 宪法（A1-A5 架构不变量）
 
-完整文本见 [CONSTITUTION.md](https://github.com/open-agent-power/open-knowledge-studio/blob/main/CONSTITUTION.md)。下面是摘要。
+完整文本见仓库根目录 `CONSTITUTION.md`。下面是摘要。
 
 ## A1: 认知桶 + 两基础设施
 

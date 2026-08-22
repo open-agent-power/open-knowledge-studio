@@ -6,9 +6,9 @@ parent: 参考
 # 社区与支持
 
 - **GitHub Issues** — [反馈 bug、提 feature](https://github.com/open-agent-power/open-knowledge-studio/issues)
-- **CONSTITUTION** — [架构不变量全文](https://github.com/open-agent-power/open-knowledge-studio/blob/main/CONSTITUTION.md)
-- **SKILL.md 安装契约** — [给 AI 工具读的接入 URL](https://raw.githubusercontent.com/open-agent-power/open-knowledge-studio/main/SKILL.md)
-- **AGENTS.md** — [项目贡献指南](https://github.com/open-agent-power/open-knowledge-studio/blob/main/AGENTS.md)
+- **CONSTITUTION** — 架构不变量全文（仓库根目录）
+- **SKILL.md** — 给 AI 工具读的接入契约（仓库根目录）
+- **AGENTS.md** — 项目贡献指南（仓库根目录）
 
 ## 贡献
 

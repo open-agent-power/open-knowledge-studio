@@ -30,6 +30,37 @@ def test_health_check_valid_page(kb_root):
     assert result["summary"]["errors"] == 0
 
 
+def test_health_check_accepts_legacy_published_status_without_rewriting(kb_root):
+    from knowledge_studio.health import run_health_check
+
+    wiki = kb_root / "wiki" / "computing" / "concepts"
+    page = wiki / "legacy.md"
+    _write_page(page, {
+        "title": "Legacy Page", "type": "concept", "area": "computing",
+        "status": "published", "tags": "legacy",
+    })
+    before = page.read_text(encoding="utf-8")
+
+    result = run_health_check()
+
+    assert not any("legacy.md" in warning and "invalid 'status'" in warning
+                   for warning in result["warnings"])
+    assert page.read_text(encoding="utf-8") == before
+
+
+def test_health_check_rejects_unknown_status(kb_root):
+    from knowledge_studio.health import run_health_check
+
+    wiki = kb_root / "wiki" / "computing" / "concepts"
+    _write_page(wiki / "invalid-status.md", {
+        "title": "Invalid Status", "type": "concept", "area": "computing",
+        "status": "unknown", "tags": "testing",
+    })
+
+    warnings = "\n".join(run_health_check()["warnings"])
+    assert "invalid 'status'" in warnings
+
+
 def test_health_check_missing_frontmatter(kb_root):
     from knowledge_studio.health import run_health_check
     wiki = kb_root / "wiki" / "computing" / "concepts"

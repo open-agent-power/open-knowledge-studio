@@ -148,7 +148,7 @@ oks recall "关键词"
 oks recall "关键词" --explain
 ```
 
-> [召回调优指南](../best-practices.md#阶段-3召回-recall)
+> [召回调优指南](best-practices.md#阶段-3召回-recall---用自然语言提问)
 
 ---
 

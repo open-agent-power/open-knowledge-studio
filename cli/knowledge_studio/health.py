@@ -15,7 +15,9 @@ from knowledge_studio.store import repo_root, wiki_dir, drafts_dir, raw_dir
 _logger = logging.getLogger(__name__)
 
 WIKI_TYPES = {"concept", "strategy", "anti-pattern"}
-WIKI_STATUSES = {"provisional", "active", "stale", "dropped", "superseded"}
+# ``published`` was used by older KB instances. Keep accepting it so lint is
+# compatible with existing files; new writes continue to use ``active``.
+WIKI_STATUSES = {"provisional", "active", "stale", "dropped", "superseded", "published"}
 RELATIONSHIPS = {"supersedes", "enriches", "confirms", "challenges"}
 
 
