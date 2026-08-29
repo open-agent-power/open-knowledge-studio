@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime, timedelta
 
-from knowledge_studio.store import list_wiki_pages, wiki_dir
+from knowledge_studio.store import list_wiki_pages, repo_root, wiki_dir
 
 
 def get_knowledge_report() -> dict:

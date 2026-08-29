@@ -128,8 +128,7 @@ def set_recall_yaml_param(kb_root: Path, location: tuple[str | None, str], value
     keys (search_backend, mail_topn). Coerces value to int/float/bool/str
     like load_recall_params does. Used by `oks config set` so recall params
     land in the single source of truth, not ~/.oks/config.json."""
-    import tempfile
-    import os
+    import tempfile, os
     import yaml as _yaml
     section, field = location
     ypath = kb_root / "settings" / "recall.yaml"
@@ -184,6 +183,7 @@ def load_recall_params(root=None):
     Per-instance tunable params. Users edit settings/recall.yaml, commit it,
     and the params travel with their knowledge base. OKS only ships defaults.
     """
+    import os
     from pathlib import Path
 
     params = {

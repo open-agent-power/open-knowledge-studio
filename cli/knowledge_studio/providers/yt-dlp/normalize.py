@@ -63,7 +63,7 @@ def normalize(
         content_md = subtitle_text
     elif subtitle_text.strip():
         evidence_records.append({
-            "evidence_id": "ev-sub-0000",
+            "evidence_id": f"ev-sub-0000",
             "artifact_id": "subtitle",
             "kind": "text",
             "method": "platform_subtitle",
