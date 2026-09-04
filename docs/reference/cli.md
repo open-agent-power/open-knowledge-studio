@@ -19,6 +19,7 @@ parent: 参考
 | `oks ingest run <src>` | 摄入材料 → Raw Bundle |
 | `oks ingest prepare <src>` | 生成 ingest 协议骨架 |
 | `oks wiki create/list/get/pin/archive/use/export` | wiki 页管理 + OKF 导出 |
+| `oks workbuddy doctor [--kb-root PATH]` | 只读检查 WorkBuddy 本地 Agent 的 OKS 工作流是否就绪 |
 | `oks drafts list/promote/reject` | draft 候选队列与状态变更；完整内容通过 `/promote` Skill 审阅，晋升与拒绝都必须保留人工决定 |
 | `oks distill [--dry-run]` | 衰减 + 演化（dreaming 后半） |
 | `oks capability list/install/status/guide` | 能力注册与选择指导 |

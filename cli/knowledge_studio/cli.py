@@ -35,6 +35,7 @@ from knowledge_studio.recall import (
     recall_knowledge,
 )
 from knowledge_studio.vfs import FS_RESPONSE_SCHEMA, VfsError, VfsService
+from knowledge_studio.workbuddy import inspect_workbuddy_adapter
 
 # ── ingest: connector is a regular PyPI dependency (oks-connector>=0.2.0) ──
 from oks_connector.raw_bundle_adapter import (
@@ -184,6 +185,9 @@ mail_app = typer.Typer(help="Agent-to-agent mail (inbox/sent).")
 registry_app = typer.Typer(help="Terminal registry (agent+cwd -> profile/goal).")
 eval_app = typer.Typer(help="Offline recall evaluation and run comparison.")
 trace_app = typer.Typer(help="Append-only execution traces and feedback.")
+workbuddy_app = typer.Typer(
+    help="WorkBuddy local Agent workflow.", no_args_is_help=True,
+)
 fs_app = typer.Typer(
     help="Read-only virtual context filesystem.", no_args_is_help=True
 )
@@ -226,6 +230,7 @@ app.add_typer(mail_app, name="mail")
 app.add_typer(registry_app, name="registry")
 app.add_typer(eval_app, name="eval")
 app.add_typer(trace_app, name="trace")
+app.add_typer(workbuddy_app, name="workbuddy")
 app.add_typer(fs_app, name="fs")
 
 app.add_typer(capability_app, name="capability")
@@ -1244,6 +1249,48 @@ def wiki_use(slug: str = typer.Argument(help="Slug of a page that was actually u
     )
     if used:
         console.print(f"[dim]inject trace: marked used=1 for recent injection of {slug}[/dim]")
+
+
+# ── WorkBuddy ─────────────────────────────────────────────────────
+
+@workbuddy_app.command("doctor")
+def workbuddy_doctor(
+    kb_root: Optional[Path] = typer.Option(
+        None,
+        "--kb-root",
+        help="Knowledge base root (default: OKS_ROOT or configured knowledge base)",
+    ),
+    output_format: str = typer.Option("text", "--format", help="text or json"),
+):
+    """Check that the local WorkBuddy read-only OKS workflow is ready.
+
+    This never calls WorkBuddy and never writes Wiki, configuration, or the
+    project Skill.
+    """
+    output_format = output_format.lower().strip()
+    if output_format not in {"text", "json"}:
+        console.print("[red]--format must be text or json[/red]")
+        raise typer.Exit(2)
+    root = kb_root.expanduser().resolve() if kb_root is not None else store.repo_root()
+    result = inspect_workbuddy_adapter(root)
+    if output_format == "json":
+        _emit_json(result)
+    else:
+        table = Table(show_header=True, header_style="bold yellow")
+        table.add_column("Check")
+        table.add_column("State")
+        table.add_column("Details")
+        checks = result["checks"]
+        table.add_row("wiki", "ready" if checks["wiki"]["ready"] else "missing", checks["wiki"]["path"])
+        skill = checks["project_skill"]
+        table.add_row("project Skill", "ready" if skill["ready"] else "not ready", skill["path"])
+        reviewed = checks["reviewed_wiki"]
+        table.add_row("reviewed Wiki", "ready" if reviewed["ready"] else "not ready", str(reviewed["page_count"]))
+        console.print(table)
+        if result["issues"]:
+            console.print("[yellow]Issues:[/yellow] " + "; ".join(result["issues"]))
+    if result["status"] != "ready":
+        raise typer.Exit(1)
 
 
 @wiki_app.command("export")
