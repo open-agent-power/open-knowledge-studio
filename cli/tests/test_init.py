@@ -1,6 +1,7 @@
 """Tests for `oks init` — instance scaffolding + asset materialization."""
 import json
 from pathlib import Path
+import shutil
 
 import pytest
 from typer.testing import CliRunner
@@ -17,7 +18,7 @@ EXPECTED_BUCKETS = [
     "raw", "wiki", "drafts",
 ]
 EXPECTED_TOP_LEVEL = {
-    ".claude", ".qoder", ".pi", ".codex", ".agents", "_meta", "settings", "templates",
+    ".claude", ".qoder", ".pi", ".codex", ".agents", ".codebuddy", ".workbuddy", "_meta", "settings", "templates",
     "profiles", "raw", "wiki", "drafts", "mail", ".gitignore", "AGENTS.md",
 }
 
@@ -72,13 +73,46 @@ def test_init_assembles_each_agent_ecosystem(tmp_path):
     for dest_name, spec in _AGENT_TARGETS.items():
         dest = target / dest_name
         assert dest.is_dir(), f"{dest_name} was not assembled"
-        assert (dest / "skills").is_dir() is spec["skills"]
+        assert (dest / "skills").is_dir() is bool(spec["skills"] or spec.get("skill_names"))
         assert (dest / "hooks").is_dir() is spec["hooks"]
         assert (dest / "rules").is_dir() is spec["rules"]
 
     # Per-agent config lands at the ecosystem root, not under a nested dir.
     assert (target / ".claude" / "settings.json").is_file()
     assert (target / ".codex" / "hooks.json").is_file()
+    for directory in (".codebuddy", ".workbuddy"):
+        assert (target / directory / "README.md").is_file()
+    assert (target / ".codebuddy" / "skills" / "oks-knowledge" / "SKILL.md").is_file()
+    assert not (target / ".workbuddy" / "skills").exists()
+    assert not (target / ".codebuddy" / "skills" / "promote").exists()
+
+
+def test_skills_install_adds_workbuddy_skill_to_existing_instances(tmp_path, monkeypatch):
+    target = tmp_path / "kb"
+    assert runner.invoke(app, ["init", str(target), "--no-git", "--no-set-default"]).exit_code == 0
+    shutil.rmtree(target / ".codebuddy")
+    monkeypatch.chdir(target)
+
+    result = runner.invoke(app, ["skills-install"], catch_exceptions=False)
+
+    assert result.exit_code == 0, result.output
+    assert (target / ".codebuddy" / "skills" / "oks-knowledge" / "SKILL.md").is_file()
+    assert not (target / ".codebuddy" / "skills" / "promote").exists()
+
+
+def test_workbuddy_skill_requires_read_only_cli_recall(tmp_path):
+    target = tmp_path / "kb"
+    assert runner.invoke(app, ["init", str(target), "--no-git", "--no-set-default"]).exit_code == 0
+
+    skill = (target / ".codebuddy" / "skills" / "oks-knowledge" / "SKILL.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'oks recall "<query>" --knowledge-only --format json --limit 3' in skill
+    assert 'oks fs read "<oks-uri>" --format json' in skill
+    assert "human_reviewed_at" in skill
+    assert "`uri` (not `oks_uri`)" in skill
+    assert "oks raw-commit" in skill
 
 
 def test_hook_install_refreshes_persistence_support_file_for_old_instances(tmp_path):

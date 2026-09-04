@@ -1931,6 +1931,24 @@ _AGENT_TARGETS = {
     ".pi": {"config": "pi", "skills": False, "hooks": False, "rules": False},
     ".codex": {"config": "codex", "skills": False, "hooks": True, "rules": False},
     ".agents": {"config": None, "skills": True, "hooks": False, "rules": False},
+    # WorkBuddy 5.4.7 discovers project Skills from .codebuddy.  Keep the
+    # compatibility tree so local projects have one stable place for
+    # WorkBuddy-specific guidance as the host evolves.
+    ".codebuddy": {
+        "config": "workbuddy",
+        "skills": False,
+        "skill_names": ("oks-knowledge",),
+        "hooks": False,
+        "rules": False,
+        "install_config": True,
+    },
+    ".workbuddy": {
+        "config": "workbuddy",
+        "skills": False,
+        "hooks": False,
+        "rules": False,
+        "install_config": True,
+    },
 }
 
 
@@ -2014,6 +2032,12 @@ def _materialize_assets(root: Path, base: Path, overwrite: bool) -> list[str]:
             config_dir = base / "agent-config" / spec["config"]
             if config_dir.is_dir():
                 wrote |= copy_into(config_dir, dest)
+        skill_names = spec.get("skill_names", ())
+        if skill_names:
+            for skill_name in skill_names:
+                src = base / "skills" / skill_name
+                if src.is_dir():
+                    wrote |= copy_into(src, dest / "skills" / skill_name)
         for component in ("skills", "hooks", "rules"):
             src = base / component
             if spec[component] and src.is_dir():
@@ -2403,7 +2427,7 @@ def _migrate_codex_hook_paths(settings_path: Path, root: Path) -> bool:
 def skills_install(
     force: bool = typer.Option(False, "--force", help="Overwrite existing skills"),
 ) -> None:
-    """Materialize bundled skills into .claude/skills/ + .agents/skills/ (current KB).
+    """Materialize bundled skills into supported Agent directories (current KB).
 
     Use after upgrading oks to refresh skills (e.g. /assess replacing /start),
     without re-running full `oks init`.
@@ -2419,7 +2443,8 @@ def skills_install(
     import shutil
     done: list[str] = []
     for dest_name, spec in _AGENT_TARGETS.items():
-        if not spec.get("skills"):
+        skill_names = tuple(spec.get("skill_names", ()))
+        if not spec.get("skills") and not skill_names:
             continue
         dest = root / dest_name / "skills"
         if force and dest.exists():
@@ -2429,6 +2454,8 @@ def skills_install(
         src = base / "skills"
         if src.is_dir():
             for item in sorted(src.rglob("*")):
+                if skill_names and item.relative_to(src).parts[0] not in skill_names:
+                    continue
                 target = dest / item.relative_to(src)
                 if item.is_dir():
                     target.mkdir(parents=True, exist_ok=True)
