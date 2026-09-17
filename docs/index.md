@@ -5,11 +5,26 @@ nav_order: 1
 
 <div class="oks-hero">
   <p class="oks-eyebrow">OPEN KNOWLEDGE STUDIO</p>
-  <h1>托管你的学习</h1>
-  <p class="oks-lead">你给目标、材料和反馈，Agent 负责执行与整理。OKS 把经过确认的判断保存下来，让下一次任务接着做，而不是从头解释。</p>
+  <h1>让 Agent 记住团队已经确认的判断</h1>
+  <p class="oks-lead">你给目标、材料和反馈，Agent 负责执行与整理。OKS 把来源、审核结果和可复用知识保存下来，让下一次任务接着做，而不是从头解释。</p>
   <div class="oks-actions">
     <a class="btn btn-primary" href="{{ '/first-knowledge-loop.html' | relative_url }}">教 Agent 学会一件事</a>
     <a class="btn" href="{{ '/oh-my/' | relative_url }}">查看真实案例</a>
+  </div>
+</div>
+
+<div class="oks-proof-strip" aria-label="OKS 的三个保证">
+  <div>
+    <strong>有来源</strong>
+    <span>重要判断可以回到具体材料</span>
+  </div>
+  <div>
+    <strong>先审核</strong>
+    <span>Agent 只能提出 Candidate，不能自我批准</span>
+  </div>
+  <div>
+    <strong>可复用</strong>
+    <span>下一次任务直接召回已确认的经验</span>
   </div>
 </div>
 
@@ -55,6 +70,10 @@ flowchart LR
 ```
 
 Agent 可以提出知识，但不能批准自己的提议。被使用很多次也只能说明它常被需要，不能证明它一定正确。
+
+## Mail 是协作侧车，不是第二个产品
+
+跨 Session、Agent 或机器确实需要留下的交接、结果、阻塞、批注和知识引用，会进入 OKS Mail；Thread 只是这段事实的详情上下文。Mail 不复制 Wiki，不代表在线或执行完成，也不会在没有 Host Adapter 时唤醒 Agent。详见[产品边界与协作模型](concepts/product-boundary.html)和 [Mail 协议](reference/mail-protocol.html)。
 
 ## 使用时，你只需要做三件事
 

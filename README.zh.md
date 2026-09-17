@@ -26,6 +26,10 @@ Open Knowledge Studio（OKS）是一个开源的**文件化外部记忆**，面�
 你的来源 → Candidate → 人工审核 → Wiki → 召回 → 注入 Agent 上下文
 ```
 
+### OKS Mail 是协作侧车
+
+Mail 只保留需要跨 Session、Agent、Host 或机器留下的协作事实：交接、结果、阻塞、批注，以及指向现有 Wiki/Candidate/Trace 的引用。它不是第二知识库、任务引擎、聊天替代品或唤醒服务。Agent 可以通过 Skill 写入、读取和回复；没有独立 Host Adapter 时，这不代表会启动进程、创建 Session 或完成任务。Thread 是这些记录的持久上下文，不是工作流状态。详见[产品边界](https://open-agent-power.github.io/open-knowledge-studio/concepts/product-boundary/)和 [Mail 协议](https://open-agent-power.github.io/open-knowledge-studio/reference/mail-protocol/)。
+
 ## 为什么选 Open Knowledge Studio
 
 - **一套文件系统装下所有记忆。** profiles、raw、wiki、drafts、mail 各占一个目录，有不同的信任边界。Agent 确定性地定位和操作上下文，就像开发者操作文件一样。→ [架构总览](https://open-agent-power.github.io/open-knowledge-studio/concepts/architecture/) · [宪法](https://open-agent-power.github.io/open-knowledge-studio/concepts/constitution/)
@@ -34,7 +38,7 @@ Open Knowledge Studio（OKS）是一个开源的**文件化外部记忆**，面�
 - **知识像真实记忆一样衰减。** 不用的页面沿着 hot → warm → cold → evictable 降温；用过的页面会浮现。`importance × e^(-λ×days) + ln(1+access) + pin_bonus`。→ [衰减系统](https://open-agent-power.github.io/open-knowledge-studio/algorithms/decay-system/)
 - **每次召回都可观测。** 每个查询都保留各因子分数和匹配路径（`oks recall "<q>" --explain`）；每次注入都记到 `records/inject.jsonl`。结果看着不对时，你能看到是哪个因子产生的。→ [评估](https://open-agent-power.github.io/open-knowledge-studio/algorithms/recall-evaluation/)
 
-各部分怎么拼一起：[架构](https://open-agent-power.github.io/open-knowledge-studio/architecture/oks-core-architecture/)。设计背后的思考：[CONSTITUTION.md](./CONSTITUTION.md)。
+各部分怎么拼一起：[架构](https://open-agent-power.github.io/open-knowledge-studio/concepts/architecture/)。产品与协作边界见[产品边界](https://open-agent-power.github.io/open-knowledge-studio/concepts/product-boundary/)。设计背后的思考：[CONSTITUTION.md](./CONSTITUTION.md)。
 
 ```
 open-knowledge-studio/
@@ -144,18 +148,18 @@ oks skills-install                # 打包 skills + agent-config 到 .claude/.qo
 
 接下来：
 
-- CLI 参考、hook 配置、评估：[CLI 文档](https://open-agent-power.github.io/open-knowledge-studio/reference/cli/) · [上下文注入](https://open-agent-power.github.io/open-knowledge-studio/usage/context-injection/)
+- CLI 参考、hook 配置、评估：[CLI 文档](https://open-agent-power.github.io/open-knowledge-studio/reference/cli/)
 - 备份、导出、会话：[备份与导出](https://open-agent-power.github.io/open-knowledge-studio/connect/backup-export/)
 
 ## 跟你的 Agent 一起用
 
 OKS 在每次 prompt 注入人审过的记忆（UserPromptSubmit），并在每次工具调用后检测冲突（PostToolUse → `mail/`）：
 
-- [Claude Code](https://open-agent-power.github.io/open-knowledge-studio/usage/context-injection/) —— `.claude/hooks/` + `settings.json`
-- [Codex](https://open-agent-power.github.io/open-knowledge-studio/usage/context-injection/) —— `.codex/hooks.json`
-- [qoder](https://open-agent-power.github.io/open-knowledge-studio/usage/context-injection/) —— `.qoder/settings.json`（共享 `.claude/hooks/`）
-- [pi](https://open-agent-power.github.io/open-knowledge-studio/usage/context-injection/) —— `.pi/extensions/*.ts`（TS extension，共享 `.claude/hooks/`）
-- [其他 shell](https://open-agent-power.github.io/open-knowledge-studio/usage/context-injection/) —— 任何能跑 shell hook 的宿主
+- **Claude Code** —— `.claude/hooks/` + `settings.json`
+- **Codex** —— `.codex/hooks.json`
+- **qoder** —— `.qoder/settings.json`（共享 `.claude/hooks/`）
+- **pi** —— `.pi/extensions/*.ts`（TS extension，共享 `.claude/hooks/`）
+- **其他 shell** —— 任何能跑 shell hook 的宿主
 
 每个的设置：`oks hook install --editor <claude|qoder|codex|both>` 然后 `oks skills-install`。
 
