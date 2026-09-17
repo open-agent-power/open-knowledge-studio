@@ -1,6 +1,6 @@
 remote_theme: just-the-docs/just-the-docs
 title: Open Knowledge Studio
-description: 托管你的学习 — 维护一套 Agent 可使用、可审核的外部文件化知识模型
+description: 让 Agent 记住团队已经确认的判断 — 维护一套可审核、可复用、可追溯的外部文件化知识模型
 baseurl: "/open-knowledge-studio"
 url: "https://open-agent-power.github.io"
 lang: zh-CN

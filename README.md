@@ -26,6 +26,10 @@ Open Knowledge Studio (OKS) is an open-source **filesystem-first external memory
 your source → Candidate → human review → Wiki → Recall → injected into Agent context
 ```
 
+### OKS Mail is the collaboration sidecar
+
+Mail preserves only durable collaboration facts that must cross a Session, Agent, Host, or machine: handoffs, results, blockers, notes, and references to existing Wiki/Candidate/Trace artifacts. It is not a second knowledge base, task engine, chat replacement, or wake-up service. A message can be written and later read or replied to by an Agent's Skill; without a separate Host Adapter, that does not start a process, create a Session, or claim execution. Threads are durable context for the records, not workflow state. See the [product boundary](https://open-agent-power.github.io/open-knowledge-studio/concepts/product-boundary/) and [Mail protocol](https://open-agent-power.github.io/open-knowledge-studio/reference/mail-protocol/).
+
 ## Why Open Knowledge Studio
 
 - **One filesystem for all memory.** Profiles, raw materials, curated wiki, drafts, and agent mail each get a directory with a different trust boundary. An Agent locates and manipulates context deterministically, like a developer working with files. → [Architecture](https://open-agent-power.github.io/open-knowledge-studio/concepts/architecture/) · [Constitution](https://open-agent-power.github.io/open-knowledge-studio/concepts/constitution/)
@@ -34,7 +38,7 @@ your source → Candidate → human review → Wiki → Recall → injected into
 - **Knowledge decays like real memory.** Unused pages cool down through hot → warm → cold → evictable tiers; used pages resurface. `importance × e^(-λ×days) + ln(1+access) + pin_bonus`. → [Decay system](https://open-agent-power.github.io/open-knowledge-studio/algorithms/decay-system/)
 - **Every recall is observable.** Each query preserves its factor scores and match path (`oks recall "<q>" --explain`); every injection is logged to `records/inject.jsonl`. When a result looks wrong, you see exactly which factor produced it. → [Evaluation](https://open-agent-power.github.io/open-knowledge-studio/algorithms/recall-evaluation/)
 
-How the pieces fit together: [Architecture](https://open-agent-power.github.io/open-knowledge-studio/architecture/oks-core-architecture/). The thinking behind the design: [CONSTITUTION.md](./CONSTITUTION.md).
+How the pieces fit together: [Architecture](https://open-agent-power.github.io/open-knowledge-studio/concepts/architecture/). The product and collaboration boundaries are in the [product boundary](https://open-agent-power.github.io/open-knowledge-studio/concepts/product-boundary/). The thinking behind the design: [CONSTITUTION.md](./CONSTITUTION.md).
 
 ```
 open-knowledge-studio/
@@ -144,18 +148,18 @@ oks skills-install                # bundle skills + agent-config into .claude/.q
 
 Next steps:
 
-- CLI reference, hook configuration, and evaluation: [CLI docs](https://open-agent-power.github.io/open-knowledge-studio/reference/cli/) · [Context injection](https://open-agent-power.github.io/open-knowledge-studio/usage/context-injection/)
+- CLI reference, hook configuration, and evaluation: [CLI docs](https://open-agent-power.github.io/open-knowledge-studio/reference/cli/)
 - Backup, export, and conversations: [Backup & export](https://open-agent-power.github.io/open-knowledge-studio/connect/backup-export/)
 
 ## Use it with your agent
 
 OKS injects reviewed memory into your Agent's context on every prompt (UserPromptSubmit) and detects conflicts after each tool call (PostToolUse → `mail/`):
 
-- [Claude Code](https://open-agent-power.github.io/open-knowledge-studio/usage/context-injection/) — `.claude/hooks/` + `settings.json`
-- [Codex](https://open-agent-power.github.io/open-knowledge-studio/usage/context-injection/) — `.codex/hooks.json`
-- [qoder](https://open-agent-power.github.io/open-knowledge-studio/usage/context-injection/) — `.qoder/settings.json` (shares `.claude/hooks/`)
-- [pi](https://open-agent-power.github.io/open-knowledge-studio/usage/context-injection/) — `.pi/extensions/*.ts` (TS extension, shares `.claude/hooks/`)
-- [Other shells](https://open-agent-power.github.io/open-knowledge-studio/usage/context-injection/) — any host that runs a shell hook
+- **Claude Code** — `.claude/hooks/` + `settings.json`
+- **Codex** — `.codex/hooks.json`
+- **qoder** — `.qoder/settings.json` (shares `.claude/hooks/`)
+- **pi** — `.pi/extensions/*.ts` (TS extension, shares `.claude/hooks/`)
+- **Other shells** — any host that runs a shell hook
 
 Setup for each: `oks hook install --editor <claude|qoder|codex|both>` then `oks skills-install`.
 

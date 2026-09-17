@@ -2611,8 +2611,8 @@ def _instance_root(path: str | None) -> Path:
     return get_kb_root()
 
 
-def _mail_agent_id() -> str:
-    explicit = os.environ.get("OKS_AGENT_ID", "").strip()
+def _mail_agent_id(explicit_value: str = "", *, fallback: str = "human") -> str:
+    explicit = explicit_value.strip() or os.environ.get("OKS_AGENT_ID", "").strip()
     if explicit:
         return explicit
     # Native Claude launches child shell commands without the OKS-specific
@@ -2622,7 +2622,7 @@ def _mail_agent_id() -> str:
         return "claude"
     if os.environ.get("CODEX_SESSION_ID", "").strip() or os.environ.get("CODEX_CLI", "").strip():
         return "codex"
-    return "human"
+    return fallback
 
 
 def _mail_session_id(value: str = "") -> str:
@@ -2658,6 +2658,7 @@ def _mail_action_result(result: dict[str, Any], *, sender_kind: str, notify: boo
         "recipients": [str(recipient) for recipient in result["recipients"]],
         "sender_kind": sender_kind,
         "origin_machine_id": str(result.get("meta", {}).get("origin_machine_id", "unknown")),
+        "record_kind": str(result.get("meta", {}).get("record_kind", "message")),
         "evidence_refs": result.get("evidence_refs", []),
         "attention": {
             "requested": notify,
@@ -2687,16 +2688,18 @@ def mail_send(
     thread: str = typer.Option("", "--thread", help="Existing Thread ID (for a reply)"),
     session_id: str = typer.Option("", "--session-id", help="Originating Agent session ID"),
     delivery_reason: str = typer.Option("direct", "--delivery-reason", help="direct | conflict | review_request | handoff | system"),
+    record_kind: str = typer.Option("message", "--record-kind", help="message | handoff | result | blocked | note | knowledge_ref"),
     notify: bool = typer.Option(False, "--notify/--no-notify", help="Request host notification; safe queued fallback when unsupported"),
     session_policy: str = typer.Option("next_prompt", "--session-policy", help="next_prompt | wait | notify"),
     sender_kind: str = typer.Option("", "--sender-kind", help="Message provenance: human | agent | unknown"),
+    from_id: str = typer.Option("", "--from", help="Explicit sender identity; use human only for a human-authored CLI message"),
     evidence_ref: list[str] = typer.Option([], "--evidence-ref", help="Evidence ref JSON object; repeatable"),
     output_format: str = typer.Option("text", "--format", help="text | json"),
     path: Optional[str] = typer.Option(None, "--path", help="Instance root (default: active KB)"),
 ) -> None:
     """Write one canonical message and recipient projections."""
     root = _instance_root(path)
-    sender = _mail_agent_id()
+    sender = _mail_agent_id(from_id, fallback="unknown")
     try:
         resolved_sender_kind = mail_domain.normalise_sender_kind(sender_kind, sender)
     except ValueError as exc:
@@ -2726,6 +2729,7 @@ def mail_send(
             origin_machine_id=mid,
             evidence_refs=refs,
             delivery_reason=delivery_reason,
+            record_kind=record_kind,
             notify=notify,
             session_policy=session_policy,
         )
@@ -2752,6 +2756,7 @@ def mail_delegate(
     context: str = typer.Option("", "--context", help="Relevant context, files, or prior decisions"),
     acceptance: str = typer.Option("", "--acceptance", help="Observable acceptance criteria"),
     session_id: str = typer.Option("", "--session-id", help="Originating Agent session ID"),
+    from_id: str = typer.Option("", "--from", help="Explicit sender identity; use human only for a human-authored CLI message"),
     notify: bool = typer.Option(False, "--notify/--no-notify", help="Request host notification; safe queued fallback when unsupported"),
     sender_kind: str = typer.Option("agent", "--sender-kind", help="Message provenance: human | agent | unknown"),
     evidence_ref: list[str] = typer.Option([], "--evidence-ref", help="Evidence ref JSON object; repeatable"),
@@ -2760,7 +2765,7 @@ def mail_delegate(
 ) -> None:
     """Submit a task handoff without requiring callers to assemble Mail fields."""
     root = _instance_root(path)
-    sender = _mail_agent_id()
+    sender = _mail_agent_id(from_id, fallback="unknown")
     try:
         resolved_sender_kind = mail_domain.normalise_sender_kind(sender_kind, sender)
     except ValueError as exc:
@@ -2889,13 +2894,15 @@ def mail_reply(
     session_id: str = typer.Option("", "--session-id", help="Replying Agent session ID"),
     notify: bool = typer.Option(False, "--notify/--no-notify", help="Request host notification"),
     sender_kind: str = typer.Option("", "--sender-kind", help="Message provenance: human | agent | unknown"),
+    from_id: str = typer.Option("", "--from", help="Explicit sender identity; use human only for a human-authored CLI message"),
     evidence_ref: list[str] = typer.Option([], "--evidence-ref", help="Evidence ref JSON object; repeatable"),
+    record_kind: str = typer.Option("message", "--record-kind", help="message | handoff | result | blocked | note | knowledge_ref"),
     output_format: str = typer.Option("text", "--format", help="text | json"),
     path: Optional[str] = typer.Option(None, "--path", help="Instance root (default: active KB)"),
 ) -> None:
     """Append a message to an existing Thread."""
     root = _instance_root(path)
-    sender = _mail_agent_id()
+    sender = _mail_agent_id(from_id, fallback="unknown")
     try:
         resolved_sender_kind = mail_domain.normalise_sender_kind(sender_kind, sender)
     except ValueError as exc:
@@ -2937,6 +2944,7 @@ def mail_reply(
             origin_machine_id=mid,
             evidence_refs=refs,
             delivery_reason="thread_reply",
+            record_kind=record_kind,
             notify=notify,
             session_policy="notify" if notify else "next_prompt",
         )
@@ -3491,8 +3499,8 @@ _HOOK_RECALL_STATUSES = {
 }
 
 
-def _hook_recall_error(reason: str) -> dict:
-    return {
+def _hook_recall_error(reason: str, *, diagnostic: str = "") -> dict:
+    result = {
         "schema": _HOOK_RECALL_SCHEMA,
         "status": "error",
         "context": "",
@@ -3504,6 +3512,11 @@ def _hook_recall_error(reason: str) -> dict:
         },
         "reason": reason,
     }
+    if diagnostic and os.environ.get("OKS_HOOK_DIAGNOSTICS", "").lower() in {
+        "1", "true", "yes"
+    }:
+        result["diagnostic"] = diagnostic[-1000:]
+    return result
 
 
 def _valid_hook_number(value: object, *, allow_none: bool = False) -> bool:
@@ -3566,6 +3579,10 @@ def _run_hook_recall(
     env = os.environ.copy()
     env["OKS_ROOT"] = str(root)
     env["OKS_HOOK_OUTPUT"] = "json"
+    # The bridge exchanges JSON with a Python child process. Do not inherit a
+    # Windows console code page that cannot round-trip Chinese prompts/results.
+    env["PYTHONIOENCODING"] = "utf-8"
+    env["PYTHONUTF8"] = "1"
     package_root = str(Path(__file__).resolve().parents[1])
     inherited_pythonpath = env.get("PYTHONPATH", "")
     env["PYTHONPATH"] = os.pathsep.join([package_root, inherited_pythonpath]).rstrip(os.pathsep)
@@ -3584,13 +3601,18 @@ def _run_hook_recall(
             check=False,
         )
         if completed.returncode != 0:
-            raise RuntimeError(f"hook exited {completed.returncode}")
+            detail = f"hook exited {completed.returncode}"
+            stderr = str(getattr(completed, "stderr", "") or "").strip()
+            if stderr:
+                detail += f": {stderr[-1000:]}"
+            raise RuntimeError(detail)
         data = _validate_hook_recall_response(json.loads(completed.stdout))
         if data is None:
             raise ValueError("invalid hook response")
         return data
-    except Exception:
-        return _hook_recall_error("hook_bridge_failed")
+    except Exception as exc:
+        diagnostic = f"{type(exc).__name__}: {exc}"
+        return _hook_recall_error("hook_bridge_failed", diagnostic=diagnostic)
 
 
 def _read_hook_history(root: Path, limit: int, session_id: str, cwd: str) -> dict:

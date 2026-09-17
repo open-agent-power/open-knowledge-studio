@@ -165,6 +165,36 @@ h4 { font-weight: 500; }
   font-size: 0.94rem;
 }
 
+.oks-proof-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin: -1.5rem 0 2.5rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid #dbe4f0;
+  border-radius: 0.75rem;
+  background: #f8fafc;
+}
+
+.oks-proof-strip div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.2rem 0.75rem;
+  border-left: 2px solid #2563eb;
+}
+
+.oks-proof-strip strong {
+  color: #0f172a;
+  font-size: 0.94rem;
+}
+
+.oks-proof-strip span {
+  color: #64748b;
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
 .main-content img {
   border: 1px solid #e2e8f0;
   border-radius: 0.6rem;
@@ -191,6 +221,11 @@ h4 { font-weight: 500; }
 
   .oks-card-grid {
     grid-template-columns: 1fr;
+  }
+
+  .oks-proof-strip {
+    grid-template-columns: 1fr;
+    margin-top: -1rem;
   }
 }
 
