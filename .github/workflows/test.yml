@@ -28,7 +28,7 @@ jobs:
       matrix:
         # CONSTITUTION P0: the runtime requires Python >= 3.12.
         os: [ubuntu-latest, macos-latest, windows-latest]
-        python: ["3.12", "3.13"]
+        python: ["3.12", "3.13", "3.14"]
     steps:
       - uses: actions/checkout@v4
 
@@ -75,13 +75,41 @@ jobs:
       - name: Assert the artifacts carry every required asset
         run: python cli/scripts/check_dist.py dist
 
-      - name: Install the wheel into a clean environment and initialize a KB
-        # `oks init` reads packaged assets, so this fails if the wheel ships an
-        # incomplete _assets/ tree even when the source tree looks right.
-        # --no-set-default keeps the probe from rewriting ~/.oks/config.json,
-        # which would make this check mutate state it does not own.
-        run: |
-          python -m venv /tmp/probe
-          /tmp/probe/bin/python -m pip install --quiet dist/*.whl
-          /tmp/probe/bin/oks init /tmp/probe-kb --no-set-default
-          /tmp/probe/bin/oks --help > /dev/null
+      - uses: actions/upload-artifact@v4
+        with:
+          name: distributions
+          path: dist/*
+          if-no-files-found: error
+
+  installed:
+    name: installed artifacts (${{ matrix.os }}, py${{ matrix.python }})
+    needs: package
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python: ["3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: distributions
+          path: dist
+      - name: Install and exercise wheel and sdist outside the checkout
+        # The harness creates separate clean environments and records imported
+        # module paths, artifact hashes and real CLI results. No editable install.
+        run: python cli/scripts/smoke_installed.py dist --work-dir "${{ runner.temp }}/oks-installed"
+      - name: Preserve installation and smoke evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: installed-${{ matrix.os }}-py${{ matrix.python }}
+          path: |
+            ${{ runner.temp }}/oks-installed/report.json
+            ${{ runner.temp }}/oks-installed/*/*.log
+            ${{ runner.temp }}/oks-installed/*/probe.json
+          if-no-files-found: warn

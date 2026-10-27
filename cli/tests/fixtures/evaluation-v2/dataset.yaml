@@ -1,0 +1,53 @@
+schema_version: recall-case/v2
+dataset_id: synthetic-boundary-audit
+version: '1'
+provenance:
+  origin: Handwritten synthetic fixture; no user or customer data
+  license: CC0-1.0
+  annotation: Deterministic labels for evaluator contract tests; not a retrieval quality benchmark
+assets:
+  alpha:
+    asset_id: guide
+    version: '2'
+    source_group: guide-family
+    user_scope: shared
+    available_at: '2026-01-01T00:00:00Z'
+  old:
+    asset_id: guide
+    version: '1'
+    source_group: guide-family
+    user_scope: shared
+    available_at: '2025-01-01T00:00:00Z'
+  future:
+    asset_id: future-guide
+    version: '1'
+    source_group: guide-family
+    user_scope: shared
+    available_at: '2027-01-01T00:00:00Z'
+  bob:
+    asset_id: bob-guide
+    version: '1'
+    source_group: guide-family
+    user_scope: bob
+    available_at: '2026-01-01T00:00:00Z'
+cases:
+  - case_id: answer
+    query: boundarytoken
+    answerability: answerable
+    relevant: [alpha]
+    forbidden: [old, future, bob]
+    user_scope: alice
+    as_of: '2026-06-01T00:00:00Z'
+    split: test
+    source_group: guide-family
+    expected_versions: {guide: '2'}
+  - case_id: no-answer
+    query: zxqnonexistenttoken
+    answerability: unanswerable
+    relevant: []
+    forbidden: []
+    user_scope: alice
+    as_of: '2026-06-01T00:00:00Z'
+    split: test
+    source_group: guide-family
+    expected_versions: {}
