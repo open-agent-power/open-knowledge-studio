@@ -7,6 +7,12 @@ description: Record and read explicit durable collaboration facts in OKS Mail, i
 
 This is the collaboration sidecar of OKS, not the knowledge system itself. Use `/query`, `/ingest`, `/compile`, and `/promote` for knowledge learning and reuse; use this Skill only when a durable collaboration fact must be saved or read.
 
+When the user has enabled native collaboration capture (`oks hook install
+--editor claude|codex --collaboration`), normal host subagent start/stop events
+already save role profiles, a handoff and the returned report. Do not issue
+extra Mail commands to simulate that automation or duplicate its records.
+Use this Skill for explicit cross-session messages outside those events.
+
 This Skill is bundled with OKS and is materialized by `oks init`; do not ask the
 user to install it again.  When the Agent runs inside an OKS knowledge-base clone,
 the native `oks mail` commands already know the active KB and host identity.

@@ -230,7 +230,7 @@ def _atomic_write(path: Path, content: str | bytes) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp = tempfile.mkstemp(dir=str(path.parent), suffix=".tmp", prefix=path.stem)
     try:
-        with os.fdopen(fd, "wb" if isinstance(content, bytes) else "w", **({} if isinstance(content, bytes) else {"encoding": "utf-8"})) as f:
+        with os.fdopen(fd, "wb" if isinstance(content, bytes) else "w", **({} if isinstance(content, bytes) else {"encoding": "utf-8", "newline": ""})) as f:
             f.write(content)
             f.flush()
             os.fsync(f.fileno())
@@ -387,7 +387,8 @@ def compute_quality(meta: dict) -> int:
 
 
 def _fingerprint(content: str) -> str:
-    return hashlib.sha256(content.encode("utf-8")).hexdigest()[:16]
+    canonical = content.replace("\r\n", "\n").replace("\r", "\n")
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:16]
 
 
 def _fingerprint_index_path() -> Path:
@@ -586,7 +587,7 @@ def _merge_worker_records(file_path: Path, incoming: list[dict]) -> None:
 _CANDIDATE_EVIDENCE_FIELDS = (
     "source_url", "source_bundle_id", "source_raw_bundle", "source_article_date",
     "source_capture_id", "agent_observation", "claim_ids", "evidence_refs",
-    "source_candidates",
+    "source_candidates", "workflow_source", "reviewed_source", "workflow_reviews",
 )
 
 
@@ -599,10 +600,20 @@ def _merge_candidate_metadata(current: dict, incoming: dict) -> dict:
         if key == "summary":
             if not isinstance(value, str):
                 raise ValueError("Candidate summary must be a string; candidate retained")
-        elif key in {"claim_ids", "evidence_refs", "source_candidates"}:
+        elif key in {"claim_ids", "evidence_refs", "source_candidates", "workflow_reviews"}:
             if not isinstance(value, list) or not isinstance(current.get(key, []), list):
                 raise ValueError(f"Invalid {key}; candidate retained")
-            value = list(current.get(key, [])) + [item for item in value if item not in current.get(key, [])]
+            existing = list(current.get(key, []))
+            if key == 'workflow_reviews' and not existing and isinstance(current.get('reviewed_source'), dict):
+                existing.append({'workflow_source': current.get('workflow_source'), 'reviewed_source': current['reviewed_source'], 'reviewed_at': current.get('human_reviewed_at')})
+            value = existing + [item for item in value if item not in existing]
+        elif key in {'workflow_source', 'reviewed_source'}:
+            if not isinstance(value, dict):
+                raise ValueError(f'Matching content has conflicting {key}; Draft retained')
+            if current.get(key) not in (None, value):
+                if not isinstance(incoming.get('workflow_reviews'), list):
+                    raise ValueError(f'Matching content has conflicting {key}; Draft retained')
+                value = current[key]  # Old readers keep the first approved origin.
         elif current.get(key) not in (None, "", value):
             raise ValueError(f"Matching content has conflicting {key}; review its sources explicitly; candidate retained")
         merged[key] = value
@@ -875,7 +886,11 @@ def list_drafts() -> list[dict]:
         return []
 
     drafts: list[dict] = []
+    from .task_workflow import _promotions, _rejections, candidate_disposition
+    promotions, rejections = _promotions(repo_root()), _rejections(repo_root())
     for f in sorted(dd.glob("*.md")):
+        if candidate_disposition(repo_root(), f.relative_to(repo_root()).as_posix(), promotions=promotions, rejections=rejections):
+            continue
         meta = parse_wiki_file(f)
         if not meta:
             continue
@@ -938,11 +953,16 @@ def promote_draft(
             inspected = draft(repo_root(), 'drafts/' + slug + '.md')
             if inspected['sha256'] != expected_sha256:
                 raise ValueError('Draft changed; read it again before promotion')
-            return _reviewed_promotion(slug, title, wiki_type, area, tags, slug_hint, inspected['text'])
+            if inspected.get('review_status') == 'promoted':
+                raise ValueError('Draft already reviewed; open its Wiki instead')
+            original = _draft_path(slug).read_bytes()
+            if hashlib.sha256(original).hexdigest() != expected_sha256:
+                raise ValueError('Draft changed; read it again before promotion')
+            return _reviewed_promotion(slug, title, wiki_type, area, tags, slug_hint, inspected['text'], original)
     return _reviewed_promotion(slug, title, wiki_type, area, tags, slug_hint)
 
 
-def _reviewed_promotion(slug, title, wiki_type, area, tags, slug_hint, reviewed_text=None):
+def _reviewed_promotion(slug, title, wiki_type, area, tags, slug_hint, reviewed_text=None, reviewed_bytes=None):
     from knowledge_studio.feedback import export_guard
     snapshot_meta = _parse_wiki_text(reviewed_text, _draft_path(slug)) if reviewed_text is not None else None
     with export_guard(repo_root(), _draft_path(slug), reviewed_meta=snapshot_meta):
@@ -951,8 +971,8 @@ def _reviewed_promotion(slug, title, wiki_type, area, tags, slug_hint, reviewed_
         if meta.get("artifact_kind") == "skill":
             from knowledge_studio.skills import _inside, _root
             with _file_lock(_inside(_root(), ".oks/locks/skills.lock")):
-                return _promote_draft(slug, title, wiki_type, area, tags, slug_hint, reviewed_text=reviewed_text)
-        return _promote_draft(slug, title, wiki_type, area, tags, slug_hint, reviewed_text=reviewed_text)
+                return _promote_draft(slug, title, wiki_type, area, tags, slug_hint, reviewed_text=reviewed_text, reviewed_bytes=reviewed_bytes)
+        return _promote_draft(slug, title, wiki_type, area, tags, slug_hint, reviewed_text=reviewed_text, reviewed_bytes=reviewed_bytes)
 
 
 def _promote_draft(
@@ -964,12 +984,16 @@ def _promote_draft(
     slug_hint: str | None = None,
     *,
     reviewed_text: str | None = None,
+    reviewed_bytes: bytes | None = None,
 ) -> str:
     draft_path = _draft_path(slug)
     if not draft_path.exists():
         raise FileNotFoundError(f"Draft not found: {slug}")
 
-    meta = _parse_wiki_text(reviewed_text, draft_path) if reviewed_text is not None else parse_wiki_file(draft_path)
+    if reviewed_text is None:
+        reviewed_bytes = draft_path.read_bytes()
+        reviewed_text = reviewed_bytes.decode('utf-8-sig')
+    meta = _parse_wiki_text(reviewed_text, draft_path)
     if not meta:
         raise ValueError(
             f"Draft '{slug}' has no valid YAML frontmatter. "
@@ -983,6 +1007,15 @@ def _promote_draft(
             f"Draft '{slug}' has empty body. "
             f"Refusing to promote a draft with no content — check Candidate generation."
         )
+    if re.fullmatch(r'task-learning-[0-9a-f]{28}', slug) and not isinstance(meta.get('workflow_source'), dict):
+        raise ValueError('Task learning source markers missing; Draft retained')
+    if meta.get('workflow_source'):
+        from knowledge_studio.task_workflow import require_current_draft, preserve_review, candidate_disposition
+        if candidate_disposition(repo_root(), draft_path.relative_to(repo_root()).as_posix(), reviewed_bytes) is not None:
+            raise ValueError('Draft already reviewed; original evidence retained')
+        require_current_draft(repo_root(), reviewed_text)
+        meta['reviewed_source'] = preserve_review(repo_root(), draft_path.relative_to(repo_root()).as_posix(), reviewed_bytes if reviewed_bytes is not None else reviewed_text.encode('utf-8'))
+        meta['workflow_reviews'] = [{'workflow_source': meta['workflow_source'], 'reviewed_source': meta['reviewed_source'], 'reviewed_at': datetime.now(UTC).isoformat()}]
 
     final_title = title or meta.get("title", slug)
     from knowledge_studio.knowledge_policy import is_source_material, validate_classification
@@ -1056,6 +1089,12 @@ def _promote_draft(
                             "source_candidates": [draft_path.relative_to(repo_root()).as_posix()]},
     )
 
+    if meta.get('workflow_source'):
+        # An external editor need not honor our lock. Do not unlink a shared
+        # path after checking it: a concurrent edit could otherwise be lost.
+        # Exact reviewed bytes are excluded from pending projections; any new
+        # bytes at this path remain a separate, unapproved revision.
+        return path.stem
     unchanged = reviewed_text is None
     if reviewed_text is not None:
         try:
@@ -1077,8 +1116,12 @@ def reject_draft(slug: str) -> Path:
     if not draft_path.exists():
         raise FileNotFoundError(f"Draft not found: {slug}")
 
-    draft_content = draft_path.read_text(encoding="utf-8")
+    draft_bytes = draft_path.read_bytes()
+    draft_content = draft_bytes.decode('utf-8').replace('\r\n', '\n').replace('\r', '\n')
     draft_meta = parse_wiki_file(draft_path) or {}
+    from .task_workflow import candidate_disposition
+    if candidate_disposition(repo_root(), draft_path.relative_to(repo_root()).as_posix(), draft_bytes):
+        raise ValueError('Draft already reviewed; original evidence retained')
     decided_at = datetime.now(UTC).isoformat()
     receipt = {
         "decision": "rejected",
@@ -1086,7 +1129,8 @@ def reject_draft(slug: str) -> Path:
         "draft_slug": slug,
         "draft_title": draft_meta.get("title", slug),
         "draft_path": str(draft_path.relative_to(repo_root())),
-        "draft_sha256": hashlib.sha256(draft_content.encode("utf-8")).hexdigest(),
+        "draft_sha256": hashlib.sha256(draft_content.encode('utf-8')).hexdigest(),
+        "draft_bytes_sha256": hashlib.sha256(draft_bytes).hexdigest(),
     }
     receipt_name = (
         f"{datetime.now(UTC).strftime('%Y%m%dT%H%M%S%fZ')}-"
@@ -1094,7 +1138,8 @@ def reject_draft(slug: str) -> Path:
     )
     receipt_path = dd / "rejected" / receipt_name
     _atomic_write(receipt_path, json.dumps(receipt, ensure_ascii=False, indent=2) + "\n")
-    draft_path.unlink()
+    if not re.fullmatch(r'task-learning-[0-9a-f]{28}', slug):
+        draft_path.unlink()
     return receipt_path
 
 

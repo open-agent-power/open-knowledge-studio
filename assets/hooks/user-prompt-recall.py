@@ -496,6 +496,18 @@ def main() -> int:
     if kb_root is None:
         return _finish_hook(_hook_response("error", reason="knowledge_base_unavailable"))
 
+    # Native explicit start intent must be selected before any recall reads the
+    # previous workspace binding. The separate workflow handler can run in parallel.
+    if payload.get('hook_event_name') == 'UserPromptSubmit':
+        try:
+            from knowledge_studio import task_workflow
+            owner = Path(__file__).resolve().parent.parent.name.lower()
+            host = owner[1:] if owner in {'.claude', '.codex'} else ('codex' if os.environ.get('CODEX_SESSION_ID') else 'claude')
+            if task_workflow.enabled(kb_root, host):
+                task_workflow._explicit_goal(kb_root, cwd, payload, host)
+        except Exception:
+            return _finish_hook(_hook_response('error', reason='confirmed_goal_setup_failed'))
+
     try:
         from knowledge_studio.recall import load_recall_params
         params = load_recall_params(kb_root)

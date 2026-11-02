@@ -435,12 +435,16 @@ def knowledge_map(root: Path, limit: int = 400, *, worker_snapshot: dict | None 
     limit = max(1, min(int(limit or 400), 2000))
     paths: list[tuple[Path, str]] = [(path, "wiki") for path in _scan(root, "wiki")]
     paths += [(path, "candidate") for path in _scan(root, "drafts")]
+    from .task_workflow import candidate_disposition, _promotions, _rejections
+    promotions, rejections = _promotions(root), _rejections(root)
 
     points: list[dict] = []
     bodies: dict[str, str] = {}
     original_metadata: dict[str, dict] = {}
     hidden = 0
     for path, kind in paths:
+        if kind == 'candidate' and candidate_disposition(root, path.relative_to(root).as_posix(), promotions=promotions, rejections=rejections):
+            continue
         parsed = store.parse_wiki_file(path) or {}
         body = str(parsed.pop("body", "") or "")
         if not _is_visible(parsed):

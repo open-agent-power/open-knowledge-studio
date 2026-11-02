@@ -18,6 +18,33 @@ Use this Skill as the Agent-facing router for the OKS knowledge-compounding work
 7. Distill reusable knowledge or capability candidates only when repeated evidence and a clear review path exist.
 8. Stop when the requested outcome and its acceptance evidence are satisfied.
 
+## Begin once, then work normally
+
+After the user confirms a concrete execution goal, inspect the selected task.
+If a new task is needed, use `oks task begin --title "..." --goal "..."`
+once; it creates the Goal and selects it in this workspace. When working
+outside the KB, use the knowledge-base path supplied by the hook as `--path`.
+Do not ask the user to create Goal files or assemble Mail JSON.
+
+With `oks hook install --editor claude|codex --workflow` enabled, native
+successful file writes are automatically recorded as output evidence, and
+returned work updates the task without replacing human-written progress.
+Do not duplicate this with manual Mail or checkpoint calls. Task completion
+and business acceptance remain explicit decisions.
+
+Keep the states distinct: a connected session is not observed execution, a
+returned report is not accepted work, and a learning Draft is not approved
+knowledge. Related suggestions may be grouped for reading; each decision still
+belongs to its exact candidate. Use review metadata and preserved evidence for
+the current state, not pending wording copied from an earlier proposal.
+
+If actual work yields a reusable lesson, place an explicit `## 学习建议`
+section in the final response: concrete change, applicability, and evidence
+files. Write `无` when there is no lesson. The workflow prepares a source-backed
+Draft for human review; it never approves or promotes it. Private feedback
+scopes do not automatically export lessons into shared Drafts. Reuse approved
+Wiki through ordinary query, preserving task and source-version checks.
+
 ## Route collaboration by intent
 
 When the user wants to involve another team member, keep the interaction in the
@@ -36,7 +63,11 @@ that Thread.
 This is durable asynchronous collaboration, not a live chat or execution call.
 Do not claim that saving a record wakes, invokes, or completes the recipient.
 High-frequency communication inside one Agent Session belongs to the host's
-subagent/message mechanism and should not be written to Mail.
+subagent/message mechanism. With an explicitly enabled `oks hook install
+--editor claude|codex --collaboration`, native subagent start/stop events
+automatically persist the bounded handoff and returned report to Mail and
+register observed role profiles. Do not duplicate them with manual Mail calls.
+This is event capture, not host scheduling, task completion or human approval.
 
 ## Non-negotiable boundaries
 
