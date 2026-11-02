@@ -89,3 +89,78 @@ def test_cli_checkpoint_and_skill_search_return_explicit_record_ids(linked):
         '--artifact','report.md','--retrieval-id',identifier,'--used-source',hit['source_path']])
     assert result.exit_code==0,result.output
     assert json.loads(result.output)['uses'][0]['source_path']==hit['source_path']
+
+
+def test_overview_projects_native_reads_without_changing_legacy_query_records(linked):
+    root,hit,identifier=linked
+    legacy=debug.record(root,'unlinked',{'task':None},[hit])
+    task_record=debug.record(root,'linked',{'task':{'scope':'report'}},[hit])
+    run_dir=root/'.oks/workflow-runs';run_dir.mkdir(parents=True)
+    read={'event_id':'a'*64,'task_id':'report','run_id':'claude-'+'b'*40,'host':'claude',
+          'revision':1,'source_path':'wiki/example.md','source_sha256':'c'*64,
+          'title':'Example','observed_at':'2026-10-29T01:02:03+00:00'}
+    (run_dir/'public.json').write_text(json.dumps({'schema_version':'task-native-run/v1','run_id':read['run_id'],
+        'host':'claude','task_id':'report','native_reads':[read]}),encoding='utf-8')
+    (run_dir/'private.json').write_text(json.dumps({'schema_version':'task-native-run/v1','run_id':'claude-'+'d'*40,
+        'host':'claude','task_id':'report','private_scope':True,'native_reads':[dict(read,event_id='e'*64)]}),encoding='utf-8')
+    result=debug.overview(root,task_id='report')
+    assert result['knowledge_base']==str(root.resolve()) and result['task_filter']=='report'
+    assert [item['event_id'] for item in result['native_reads']]==['a'*64]
+    assert {item['id'] for item in result['records']}=={task_record,identifier}
+    assert legacy not in {item['id'] for item in result['records']}
+    assert result['records'][0]['hits'][0]['source_path']==hit['source_path']
+    # Tool IDs are local to a native session. Another run can reuse the ID.
+    another=dict(read,run_id='claude-'+'f'*40)
+    (run_dir/'another-public.json').write_text(json.dumps({'run_id':another['run_id'],
+        'host':'claude','task_id':'report','native_reads':[another]}),encoding='utf-8')
+    reads=debug.overview(root,task_id='report')['native_reads']
+    assert len(reads)==2 and {item['run_id'] for item in reads}=={read['run_id'],another['run_id']}
+
+
+def test_native_use_requires_current_cited_output_and_excludes_private_runs(linked):
+    root,hit,identifier=linked
+    source=root/'wiki/source.md'
+    source.write_text('---\ntype: concept\ntitle: Source\nstatus: active\n---\nReviewed source.\n',encoding='utf-8')
+    source_sha=hashlib.sha256(source.read_bytes()).hexdigest()
+    run_id='claude-'+'a'*40
+    out_rel=f'outputs/{run_id}/result.md'
+    output=root/out_rel;output.parent.mkdir(parents=True)
+    output.write_text('[Source](/wiki/source.md)\n',encoding='utf-8')
+    artifact=tasks._artifact(root,out_rel)
+    run_dir=root/'.oks/workflow-runs';run_dir.mkdir(parents=True,exist_ok=True)
+    read={'event_id':'b'*64,'task_id':'report','run_id':run_id,'host':'claude','revision':1,
+          'source_path':'wiki/source.md','source_sha256':source_sha,'title':'Source','observed_at':'2026-10-29T01:02:03+00:00'}
+    run_path=run_dir/f'{run_id}.json'
+    run={'schema_version':'task-native-run/v1','run_id':run_id,'host':'claude','task_id':'report',
+         'workspace':str(root),'phase':'returned','status':'returned','private_scope':False,
+         'artifacts':[artifact],'native_reads':[read]}
+    run_path.write_text(json.dumps(run),encoding='utf-8')
+    captured=tasks.capture_outputs(root,'report',tasks.show(root,'report')['agreement']['sha256'],
+        'native-output',[artifact],host='claude',run_id=run_id)
+    run['task_revision']=captured['revision'];run_path.write_text(json.dumps(run),encoding='utf-8')
+    private=dict(run,run_id='claude-'+'c'*40,private_scope=True,
+        native_reads=[dict(read,event_id='d'*64,run_id='claude-'+'c'*40)])
+    private['artifacts']=[]
+    (run_dir/f"{private['run_id']}.json").write_text(json.dumps(private),encoding='utf-8')
+
+    uses=debug.overview(root,task_id='report')['native_uses']
+    assert len(uses)==1 and len(uses[0]['event_id'])==64
+    assert [{**use,'event_id':None} for use in uses]==[{'event_id':None,'task_id':'report','revision':captured['revision'],
+        'source_path':'wiki/source.md','source_sha256':source_sha,'title':'Source',
+        'artifact':artifact,'verification':'output_citation'}]
+    # A later public continuation can cite a source read earlier in this task.
+    newer=dict(run,run_id='claude-'+'e'*40,native_reads=[])
+    new_rel=f"outputs/{newer['run_id']}/result.md";new_path=root/new_rel;new_path.parent.mkdir(parents=True)
+    new_path.write_text('[Source](/wiki/source.md)\nA corrected continuation.\n',encoding='utf-8')
+    new_ref=tasks._artifact(root,new_rel);newer['artifacts']=[new_ref]
+    new_run_path=run_dir/f"{newer['run_id']}.json";new_run_path.write_text(json.dumps(newer),encoding='utf-8')
+    new_capture=tasks.capture_outputs(root,'report',tasks.show(root,'report')['agreement']['sha256'],
+        'native-continuation',[new_ref],host='claude',run_id=newer['run_id'])
+    newer['task_revision']=new_capture['revision'];new_run_path.write_text(json.dumps(newer),encoding='utf-8')
+    uses=debug.overview(root,task_id='report')['native_uses']
+    assert len(uses)==1 and uses[0]['artifact']==new_ref
+    source.write_text(source.read_text(encoding='utf-8')+'Changed.\n',encoding='utf-8')
+    assert debug.overview(root,task_id='report')['native_uses']==[]
+    source.write_text('---\ntype: concept\ntitle: Source\nstatus: active\n---\nReviewed source.\n',encoding='utf-8')
+    new_path.write_text('No citation now.\n',encoding='utf-8')
+    assert debug.overview(root,task_id='report')['native_uses']==[]

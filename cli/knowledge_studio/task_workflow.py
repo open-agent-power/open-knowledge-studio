@@ -30,13 +30,74 @@ def enabled(root, host=None):
 
 
 def instructions(task, root=None):
-    goal = frontmatter.loads(task['agreement']['goal']['text']).content
-    return (f"当前任务：{task['task_id']}\n{goal[:6000]}\n\n" +
-            (f'知识库：{root}\n' if root else '') +
-            '请实际写出用户要求的产物，不要把知识直接写入Wiki。'
-            '宿主会自动登记实际写出的产物与返回，不需要手写Mail或重复checkpoint。'
-            '完成后若确有可复用经验，请在最终回答中用“## 学习建议”单独写出：具体改法、适用条件、依据文件。'
-            '没有经验就明确写“无”，不凑建议。建议只会进入待审草稿，不能代签人工审核。')
+    context = tasks.continuation(task)
+    goal = frontmatter.loads(context['goal_text']).content
+    status = '待确认' if context['awaiting_confirmation'] else '当前' if context['status'] == 'current' else '来源变化，停止接续'
+    lines = [f"当前任务：{context['task_id']}（修订 {context['revision']}，{status}）",
+             f"目标：\n{goal[:6000]}",
+             f"当前进度（{context.get('progress_origin') or '未标记来源'}）：\n{context['progress'] or '未记录'}",
+             f"下一步：\n{context['next_action'] or '未记录'}"]
+    if context['judgment_basis']:
+        lines.append('已固定的判断依据（路径、版本与选项）：')
+        lines.extend(f"- {item['title'] or item['path']} · {item['path']} · {item['sha256']} · " +
+                     json.dumps(item['options'], ensure_ascii=False) for item in context['judgment_basis'])
+    if context['uses']:
+        lines.append('已记录的来源使用声明（不代表执行验证）：')
+        lines.extend(f"- {item['source_path']} · {item['source_sha256']} · {item['verification']}"
+                     for item in context['uses'])
+    if context['artifacts']:
+        lines.append('已记录产物（需自行阅读核对）：')
+        for item in context['artifacts']:
+            issue = next((entry['code'] for entry in context['artifact_issues'] if entry['path'] == item['path']), None)
+            lines.append(f"- {item['path']} · SHA-256 {item['sha256']}" + (f' · {issue}' if issue else ''))
+    if context['awaiting_confirmation']:
+        lines.append('待确认：宿主返回的产物尚待阅读核对；返回记录不证明正确或完成。')
+    if context['issues']:
+        lines.append('目标/来源变化：' + '; '.join(f"{item.get('path', '')} ({item.get('code', 'needs_review')})" for item in context['issues']))
+        if context['current_goal_text'] and context['current_goal_text'] != context['goal_text']:
+            lines.append('当前目标文件已变化。请先检查并由操作者明确更新，不要按新内容继续。')
+    if context['host_handoff']:
+        note = context['host_handoff']
+        lines.append(f"上一会话修订 {note.get('revision', '未知')} 的交接文字（助手声明，未独立验证）：")
+        for label, key in [('进度', 'progress'), ('下一步', 'next_action'),
+                           ('判断依据', 'judgment'), ('待确认', 'pending')]:
+            if note.get(key): lines.append(f'- {label}：{note[key]}')
+        if not note.get('pending'):
+            lines.append('该声明未记录待确认事项；先检查已有产物和下一步，必要信息确实缺失时再询问。')
+    else:
+        lines.append('尚无工作交接声明；按已有目标、进度、产物和下一步接续，必要信息确实缺失时再询问。')
+    lines.extend(['', f'知识库：{root}' if root else '',
+                  '请遵循当前用户要求，并实际检查产物。不要把知识直接写入Wiki。',
+                  '宿主可登记实际写出的产物与返回，但不判断正确性，也不结束业务任务。',
+                  '完成后若确有可复用经验，请在最终回答中用“## 学习建议”单独写出具体改法、适用条件和依据文件。',
+                  '没有经验就明确写“无”，不凑建议；候选仍需人工审核。'])
+    return '\n'.join(line for line in lines if line is not None)
+
+
+def _handoff_declaration(text):
+    """Extract only explicit fields from the assistant's handoff section."""
+    if not isinstance(text, str):
+        return None
+    match = re.search(r'^##\s+工作交接(?:\s*[:：].*)?\s*\n([\s\S]*?)(?=^##\s|\Z)', text, re.M)
+    if not match:
+        return None
+    labels = {'当前进度': 'progress', '进度': 'progress', '下一步': 'next_action',
+              '判断依据': 'judgment', '判断': 'judgment', '待确认': 'pending', '未决问题': 'pending'}
+    result = {'progress': '', 'next_action': '', 'judgment': '', 'pending': ''}
+    current = None
+    for line in match.group(1).splitlines():
+        field = re.match(r'^\s*(?:[-*]\s+)?(?:\*\*|__)?(当前进度|进度|下一步|判断依据|判断|待确认|未决问题)(?:\*\*|__)?\s*[:：](?:\*\*|__)?\s*(.*)$', line)
+        if field:
+            current = labels[field.group(1)]
+            value = field.group(2).strip()
+        elif current and line.strip():
+            value = line.strip()
+        else:
+            continue
+        value = redact_text(value)
+        if value:
+            result[current] = (result[current] + '\n' + value).strip()[:2000]
+    return result if any(result.values()) else None
 
 
 def _selection(root, cwd):
@@ -100,6 +161,56 @@ def _writes(payload):
     return []
 
 
+def _native_read(root, cwd, payload, task, run_id, host):
+    """Return a metadata-only receipt for one successful, reviewed Wiki Read."""
+    if (payload.get('hook_event_name') != 'PostToolUse'
+            or payload.get('tool_name') not in {'Read', 'read'}
+            or (isinstance(payload.get('tool_response'), dict)
+                and payload['tool_response'].get('is_error'))):
+        return None
+    data = payload.get('tool_input')
+    value = data.get('file_path') or data.get('path') if isinstance(data, dict) else None
+    if not isinstance(value, str) or not value:
+        return None
+    candidate = Path(value)
+    if not candidate.is_absolute():
+        candidate = Path(cwd) / candidate
+    try:
+        # Match the output path guard: reject lexical aliases and symlinks.
+        if candidate != candidate.resolve(strict=True):
+            return None
+        resolved = candidate.resolve(strict=True)
+        root = Path(root).resolve()
+        if not resolved.is_relative_to(root / 'wiki') or not resolved.is_file():
+            return None
+        relative = resolved.relative_to(root).as_posix()
+        raw = handoff._read(root, relative, 'wiki')
+        meta = handoff._meta(raw)
+        if not handoff._reviewed(meta):
+            return None
+        agreement = handoff.prepare(root, task['agreement']['goal']['path'], [relative], task['task_id'])
+        if handoff.check(root, agreement, task['task_id'])['status'] != 'current':
+            return None
+        task_id = payload.get('tool_use_id')
+        if isinstance(task_id, str) and task_id and len(task_id) <= 512:
+            event_id = hashlib.sha256(task_id.encode('utf-8')).hexdigest()
+        else:
+            # Conservative identity for hosts that omit tool_use_id: same run,
+            # source, version and task revision collapse to one observation.
+            event_id = hashlib.sha256(json.dumps(
+                ['missing-tool-use-id', run_id, relative, hashlib.sha256(raw).hexdigest(), task['revision']],
+                ensure_ascii=False, separators=(',', ':')).encode('utf-8')).hexdigest()
+        title = meta.get('title') or Path(relative).stem
+        if not isinstance(title, str):
+            title = Path(relative).stem
+        return {'event_id': event_id, 'task_id': task['task_id'], 'run_id': run_id,
+                'host': host, 'revision': task['revision'], 'source_path': relative,
+                'source_sha256': hashlib.sha256(raw).hexdigest(), 'title': title[:300],
+                'observed_at': datetime.now(UTC).isoformat()}
+    except (OSError, ValueError, UnicodeError, TypeError):
+        return None
+
+
 def _sensitive_structure(value):
     if isinstance(value, dict):
         names = {name.casefold().replace('-', '_') for name in SENSITIVE_KEYS}
@@ -160,7 +271,22 @@ def _lesson(text):
     if not match:
         return ''
     value = redact_text(match.group(1)).strip()[:3000]
-    return '' if re.fullmatch(r'(无|暂无|无可复用经验|暂无可复用经验|none)[。.!！\s]*', value, re.I) else value
+    no_proposal = r'(?:无|暂无|无可复用经验|暂无可复用经验|none)'
+    if re.fullmatch(no_proposal + r'[。.!！\s]*', value, re.I):
+        return ''
+    first, _, remainder = value.partition('\n')
+    no_proposal_first_line = re.fullmatch(no_proposal +
+        r'\s*(?:（[^（）()\n]{0,120}）|\([^（）()\n]{0,120}\))?[。.!！\s]*', first, re.I)
+    actionable = r'具体改法|适用条件|依据|改为|改用|下次|建议\s*[:：]|建议(?:采用|使用|增加|保留)|should|recommend'
+    if no_proposal_first_line and not re.search(actionable, first + '\n' + remainder, re.I):
+        return ''
+    explanation = re.fullmatch(no_proposal +
+        r'\s*(?:（(?P<cjk>[^（）()\n]{1,120})）|\((?P<ascii>[^（）()\n]{1,120})\))[。.!！\s]*', value, re.I)
+    if explanation:
+        comment = explanation.group('cjk') or explanation.group('ascii')
+        if not re.search(actionable, comment, re.I):
+            return ''
+    return value
 
 
 def _all_outputs(root, run):
@@ -240,6 +366,12 @@ def _rejections(root):
     return result
 
 
+def no_learning_candidate(text):
+    """Recognize explicit no-proposal content; never approve, reject or erase it."""
+    meta = frontmatter.loads(text)
+    return isinstance(meta.get('workflow_source'), dict) and not _lesson('## 学习建议\n' + meta.content)
+
+
 def candidate_disposition(root, relative, raw=None, *, promotions=None, rejections=None, sha256=None):
     """Classify retained originals by exact reviewed/rejected bytes, not their path."""
     if not re.fullmatch(r'drafts/task-learning-[0-9a-f]{28}\.md', relative):
@@ -258,7 +390,17 @@ def candidate_disposition(root, relative, raw=None, *, promotions=None, rejectio
     if len(exact) == 1:
         return 'promoted'
     receipt = (rejections if rejections is not None else _rejections(root)).get(relative, {})
-    return 'rejected' if receipt.get('draft_bytes_sha256') == digest else None
+    if receipt.get('draft_bytes_sha256') == digest:
+        return 'rejected'
+    try:
+        if raw is None:
+            with tasks._inside(root, relative).open('rb') as handle:
+                raw = handle.read(tasks.MAX_BYTES + 1)
+        if len(raw) <= tasks.MAX_BYTES and hashlib.sha256(raw).hexdigest() == digest and no_learning_candidate(raw.decode('utf-8-sig')):
+            return 'not_proposed'
+    except (OSError, ValueError, TypeError, UnicodeError, yaml.YAMLError):
+        pass
+    return None
 
 
 def preserve_review(root, relative, raw):
@@ -306,7 +448,8 @@ def observe(root, payload, host, *, thread_id=None):
         return {'status': 'disabled'}
     event = payload.get('hook_event_name')
     paths = _writes(payload)
-    if event not in {'SessionStart', 'UserPromptSubmit', 'SubagentStart', 'Stop', 'SubagentStop'} and not paths:
+    is_read_event = event == 'PostToolUse' and payload.get('tool_name') in {'Read', 'read'}
+    if event not in {'SessionStart', 'UserPromptSubmit', 'SubagentStart', 'Stop', 'SubagentStop'} and not paths and not is_read_event:
         return {'status': 'skipped'}
     session, child, _ = _identity(payload, host)
     cwd = payload.get('cwd')
@@ -320,6 +463,14 @@ def observe(root, payload, host, *, thread_id=None):
                    f'oks task begin --title "任务名称" --goal "已确认的目标与验收要求" --path "{root}"。'
                    '普通问答不要自动创建任务；已有任务先检查，不覆盖、不擅自接受来源变化。')
         return {'status': 'no_task', **({'context': context} if event in {'SessionStart','UserPromptSubmit'} else {})}
+    if task['lifecycle'] != 'active':
+        return {'status': 'closed_task', 'task_id': task['task_id'],
+                **({'context': '所选任务已结束。不会自动重新打开；请明确选择其他任务，或经操作者确认后重新打开。'}
+                   if event in {'SessionStart', 'UserPromptSubmit'} else {})}
+    if task['status'] != 'current':
+        return {'status': 'source_changed', 'task_id': task['task_id'], 'issues': task['issues'],
+                **({'context': '所选任务目标或来源已变化。请先检查并由操作者明确更新；不会自动接受新内容。'}
+                   if event in {'SessionStart', 'UserPromptSubmit'} else {})}
     if not private and event in {'SessionStart', 'UserPromptSubmit'}:
         from .host_collaboration import _profile
         _profile(root, host, f'{host.title()} 协调者', '执行已确认任务并提交产物与学习建议')
@@ -342,6 +493,11 @@ def observe(root, payload, host, *, thread_id=None):
                    'agreement_sha256': task['agreement']['sha256'], 'title': frontmatter.loads(task['agreement']['goal']['text']).get('title', task['task_id']),
                    'phase': 'working', 'status': 'working', 'artifacts': [], 'draft_paths': [],
                    'draft_path': None, 'thread_id': None, 'learning_status': 'not_proposed', 'return_events': []}
+        if not isinstance(run.get('native_reads'), list):
+            run['native_reads'] = []
+        else:
+            run['native_reads'] = [item for item in run['native_reads'] if isinstance(item, dict)][:100]
+        run['private_scope'] = bool(private)
         run['updated_at'] = datetime.now(UTC).isoformat()
         if thread_id:
             run['thread_id'] = thread_id
@@ -349,6 +505,10 @@ def observe(root, payload, host, *, thread_id=None):
             run.update(phase='partial', status='source_changed', learning_status='source_changed', warning='任务或来源已变化，自动归档暂停；请先核对。')
             tasks._save(path, run)
             return run
+        if is_read_event and not private and len(run['native_reads']) < 100:
+            receipt = _native_read(root, cwd, payload, task, run_id, host)
+            if receipt and not any(item.get('event_id') == receipt['event_id'] for item in run['native_reads'] if isinstance(item, dict)):
+                run['native_reads'].append(receipt)
         for output in paths:
             try:
                 candidate_path = Path(output)
@@ -368,6 +528,7 @@ def observe(root, payload, host, *, thread_id=None):
                 run.update(phase='partial', warning='部分写入文件不在可归档范围、超出大小限制或已变化；原文件保留。')
         if event in {'Stop', 'SubagentStop'}:
             text = payload.get('last_assistant_message') or ''
+            handoff_note = None if private else _handoff_declaration(text)
             event_id = hashlib.sha256(json.dumps([run_id, text, run['artifacts']], sort_keys=True).encode()).hexdigest()
             if event_id not in run['return_events']:
                 refs = _all_outputs(root, run)
@@ -376,10 +537,13 @@ def observe(root, payload, host, *, thread_id=None):
                     for ref in refs:
                         if tasks._artifact(root, ref['path']) != ref:
                             raise ValueError('Observed output changed')
-                    if refs:
-                        captured = tasks.capture_outputs(root, task['task_id'], run['agreement_sha256'], event_id, refs, host=host, run_id=run_id)
+                    if refs or handoff_note:
+                        captured = tasks.capture_outputs(root, task['task_id'], run['agreement_sha256'], event_id, refs,
+                            host=host, run_id=run_id, handoff_declaration=handoff_note)
                         run['task_revision'] = captured['revision']
                         run['artifacts'] = refs
+                    if handoff_note:
+                        run['handoff_declaration'] = handoff_note | {'verification': 'assistant_declared', 'execution_verified': False}
                     lesson = _lesson(text)
                     if private:
                         run['learning_status'] = 'private_scope'
@@ -425,6 +589,13 @@ def draft_context(root, text):
 
 def require_current_draft(root, text):
     context = draft_context(root, text)
+    if context:
+        try:
+            meta = frontmatter.loads(text)
+            if no_learning_candidate(text):
+                raise ValueError('Task learning candidate has no proposed content; original retained')
+        except (UnicodeError, TypeError):
+            pass
     if context and context['source_status'] != 'current':
         raise ValueError('Task learning sources changed; candidate retained for re-review')
 
@@ -467,6 +638,8 @@ def overview(root, task_id):
                         item.update(status='promoted', wiki_path=exact['wiki_path'], reviewed_sha256=item['sha256'])
                     elif disposition == 'rejected':
                         item['status'] = 'rejected'
+                    elif disposition == 'not_proposed' or item['status'] == 'draft' and no_learning_candidate(raw.decode('utf-8-sig')):
+                        item['status'] = 'not_proposed'
                 else:
                     approved = promotions.get(relative, [])
                     if relative in rejections:

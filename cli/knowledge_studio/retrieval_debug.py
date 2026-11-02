@@ -135,8 +135,15 @@ def record(root: Path, query: str, diagnostics: dict, hits: list[dict], *, stage
     return identifier
 
 
-def overview(root: Path) -> dict:
+def overview(root: Path, task_id: str | None = None) -> dict:
     result = read_records(root)
+    if task_id is not None:
+        from .tasks import _id
+        task_id = _id(task_id)
+    result['knowledge_base'] = str(Path(root).resolve())
+    result['task_filter'] = task_id
+    result['native_reads'] = []
+    native_runs = []
     # Task checkpoints are caller-reported associations, not execution receipts.
     from . import tasks
     by_id = {r.get('id'): r for r in result['records']}
@@ -161,6 +168,100 @@ def overview(root: Path) -> dict:
                                             'revision': revision['revision'], 'artifacts': assets})
         except (OSError, ValueError, KeyError, TypeError):
             result['usage_error'] = 'Some task usage records could not be read'
+    # Native Read receipts are independent of retrieval records. They say only
+    # that the host reported a successful Read of this exact reviewed Wiki file.
+    folder = root / '.oks/workflow-runs'
+    if folder.is_dir() and folder.resolve().is_relative_to(root.resolve()):
+        seen = set()
+        for path in sorted(folder.glob('*.json'))[:100]:
+            try:
+                run = tasks._read(tasks._inside(root, path.relative_to(root).as_posix()))
+                if run.get('private_scope') is True or (task_id and run.get('task_id') != task_id):
+                    continue
+                if run.get('run_id') == path.stem:
+                    native_runs.append(run)
+                reads = run.get('native_reads', [])
+                if not isinstance(reads, list):
+                    continue
+                for item in reads[:100]:
+                    if not isinstance(item, dict):
+                        continue
+                    event_id = item.get('event_id')
+                    identity = (run.get('run_id'), event_id)
+                    if not isinstance(event_id, str) or not event_id or identity in seen:
+                        continue
+                    row = {key: item.get(key) for key in (
+                        'event_id', 'task_id', 'run_id', 'host', 'revision',
+                        'source_path', 'source_sha256', 'title', 'observed_at')}
+                    if (row['task_id'] != run.get('task_id')
+                            or row['run_id'] != run.get('run_id')
+                            or row['host'] != run.get('host')):
+                        continue
+                    seen.add(identity)
+                    result['native_reads'].append(row)
+            except (OSError, ValueError, KeyError, TypeError):
+                continue
+    result['native_reads'].sort(key=lambda item: str(item.get('observed_at') or ''), reverse=True)
+    # Link only a current, registered returned artifact that visibly cites a
+    # source read in the same native task. The response contains metadata only.
+    result['native_uses'] = []
+    from . import workspace, tasks
+    current_by_task = {}
+    reads_by_task = {}
+    checked_outputs, seen_native_uses = set(), set()
+    for read in result['native_reads']:
+        reads_by_task.setdefault(read['task_id'], []).append(read)
+    for run in sorted(native_runs, key=lambda item: str(item.get('updated_at') or ''), reverse=True):
+        if len(checked_outputs) >= 100:
+            result['native_uses_truncated'] = True
+            break
+        tid, run_id, revision = run.get('task_id'), run.get('run_id'), run.get('task_revision')
+        if (not isinstance(tid, str) or not isinstance(run_id, str) or type(revision) is not int
+                or revision < 1 or run.get('phase') != 'returned' or run.get('status') != 'returned'):
+            continue
+        reads = reads_by_task.get(tid, [])
+        if not reads:
+            continue
+        try:
+            if tid not in current_by_task:
+                task = tasks._load(root, tid)
+                current_by_task[tid] = tasks._current_artifacts(root, tid, task['artifacts'])
+            current = {(ref['path'], ref['sha256']) for ref in current_by_task[tid]}
+            refs = run.get('artifacts', [])
+            if not isinstance(refs, list):
+                continue
+            for ref in refs[:16]:
+                if not isinstance(ref, dict) or (ref.get('path'), ref.get('sha256')) not in current:
+                    continue
+                output_key = (tid, ref['path'], ref['sha256'])
+                if output_key in checked_outputs:
+                    continue
+                if len(checked_outputs) >= 100:
+                    result['native_uses_truncated'] = True
+                    break
+                checked_outputs.add(output_key)
+                if tasks._artifact(root, ref['path']) != ref:
+                    continue
+                artifact = workspace.artifact(root, tid, ref['path'], revision)
+                if artifact['status'] != 'unchanged':
+                    continue
+                linked = set(workspace.artifact_source_links(root, ref['path'], artifact['text']).values())
+                for read in reads:
+                    source = read.get('source_path')
+                    if (source not in linked or not isinstance(source, str) or not source.startswith('wiki/')
+                            or tasks._artifact(root, source)['sha256'] != read.get('source_sha256')):
+                        continue
+                    identity = (tid, ref['path'], ref['sha256'], source, read['source_sha256'])
+                    if identity in seen_native_uses:
+                        continue
+                    seen_native_uses.add(identity)
+                    event_id = hashlib.sha256(json.dumps(identity, ensure_ascii=False).encode()).hexdigest()
+                    result['native_uses'].append({'event_id': event_id, 'task_id': tid,
+                        'revision': revision, 'source_path': source, 'source_sha256': read['source_sha256'],
+                        'title': read['title'], 'artifact': {'path': ref['path'], 'sha256': ref['sha256']},
+                        'verification': 'output_citation'})
+        except (OSError, ValueError, KeyError, TypeError, UnicodeError):
+            continue
     # Deployment is its own observed fact, never inferred from a search hit.
     receipts = root / ".oks/skill-loads.json"
     result["deployments"] = []
@@ -176,4 +277,8 @@ def overview(root: Path) -> dict:
                                       for k, v in values.items() if isinstance(v, dict)]
         except (OSError, ValueError, AttributeError):
             result["deployment_error"] = "Cannot read deployment receipts"
+    if task_id is not None:
+        result['records'] = [record for record in result['records']
+                             if ((record.get('diagnostics') or {}).get('task') or {}).get('scope') == task_id
+                             or any(item.get('task_id') == task_id for item in record.get('usage', []) if isinstance(item, dict))]
     return result

@@ -53,7 +53,9 @@ def test_previews_are_read_only_and_do_not_invent_old_wiki_body(kb):
     assert not source['historical_bytes_available'] and 'text' not in source['before']
     assert 'Updated content' in source['current']['text']
     assert source['before']['sha256']!=source['current']['sha256']
-    assert json.loads(handoff['text'].split('\n\n',1)[1])['resume_command'] is None
+    assert '# 接手说明：report' in handoff['text']
+    assert '来源变化已阻止接续' in handoff['text']
+    assert 'resume_command' not in handoff['text']
 
 
 @pytest.mark.parametrize('changed',['goal','wiki'])
@@ -140,13 +142,16 @@ def test_progress_handoff_and_artifact_versions_remain_traceable(kb):
     root,work=kb;before=tasks.binding(root,work)
     saved=workspace.save_task_progress(root,progress(root));assert saved['revision']==2 and not saved.get('uses')
     artifact=workspace.artifact(root,'report','reports/report.md',2);assert artifact['status']=='unchanged'
-    text=workspace.task_handoff(root,'report',2)['text'];payload=json.loads(text.split('\n\n',1)[1])
-    assert payload['next_action']=='Review sources' and payload['artifacts']==saved['artifacts'] and not payload['execution_verified']
+    text=workspace.task_handoff(root,'report',2)['text']
+    assert 'Review sources' in text
+    assert all(item['path'] in text and item['sha256'] in text for item in saved['artifacts'])
+    assert tasks.show(root,'report')['agreement']['sha256'] in text
+    assert '执行验证：未验证' in text
     assert tasks.binding(root,work)==before
     assert not list((root/'mail').rglob('*.md'))
     with pytest.raises(ValueError,match='revision'):workspace.task_handoff(root,'report',1)
     tasks.transition(root,'report',2,'cancel','Synthetic')
-    text=workspace.task_handoff(root,'report',3)['text'];assert 'resume_command' not in text
+    text=workspace.task_handoff(root,'report',3)['text'];assert '# 已结束任务：report' in text and 'oks task show --task-id report' in text and 'resume_command' not in text
 
 
 def test_truncated_choices_do_not_drop_pinned_source(kb):

@@ -1011,7 +1011,10 @@ def _promote_draft(
         raise ValueError('Task learning source markers missing; Draft retained')
     if meta.get('workflow_source'):
         from knowledge_studio.task_workflow import require_current_draft, preserve_review, candidate_disposition
-        if candidate_disposition(repo_root(), draft_path.relative_to(repo_root()).as_posix(), reviewed_bytes) is not None:
+        disposition = candidate_disposition(repo_root(), draft_path.relative_to(repo_root()).as_posix(), reviewed_bytes)
+        if disposition == 'not_proposed':
+            raise ValueError('No proposed learning content; original record retained')
+        if disposition is not None:
             raise ValueError('Draft already reviewed; original evidence retained')
         require_current_draft(repo_root(), reviewed_text)
         meta['reviewed_source'] = preserve_review(repo_root(), draft_path.relative_to(repo_root()).as_posix(), reviewed_bytes if reviewed_bytes is not None else reviewed_text.encode('utf-8'))
@@ -1120,7 +1123,10 @@ def reject_draft(slug: str) -> Path:
     draft_content = draft_bytes.decode('utf-8').replace('\r\n', '\n').replace('\r', '\n')
     draft_meta = parse_wiki_file(draft_path) or {}
     from .task_workflow import candidate_disposition
-    if candidate_disposition(repo_root(), draft_path.relative_to(repo_root()).as_posix(), draft_bytes):
+    disposition = candidate_disposition(repo_root(), draft_path.relative_to(repo_root()).as_posix(), draft_bytes)
+    if disposition == 'not_proposed':
+        raise ValueError('No proposed learning content; original record retained')
+    if disposition:
         raise ValueError('Draft already reviewed; original evidence retained')
     decided_at = datetime.now(UTC).isoformat()
     receipt = {
