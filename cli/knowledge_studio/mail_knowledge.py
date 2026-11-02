@@ -17,6 +17,7 @@ Everything is derived from real files. Nothing is invented:
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import posixpath
@@ -436,6 +437,7 @@ def knowledge_map(root: Path, limit: int = 400, *, worker_snapshot: dict | None 
     paths: list[tuple[Path, str]] = [(path, "wiki") for path in _scan(root, "wiki")]
     paths += [(path, "candidate") for path in _scan(root, "drafts")]
     from .task_workflow import candidate_disposition, _promotions, _rejections
+    from .draft_review import disposition as ordinary_review
     promotions, rejections = _promotions(root), _rejections(root)
 
     points: list[dict] = []
@@ -444,6 +446,8 @@ def knowledge_map(root: Path, limit: int = 400, *, worker_snapshot: dict | None 
     hidden = 0
     for path, kind in paths:
         if kind == 'candidate' and candidate_disposition(root, path.relative_to(root).as_posix(), promotions=promotions, rejections=rejections):
+            continue
+        if kind == 'candidate' and ordinary_review(root, path.relative_to(root).as_posix(), hashlib.sha256(path.read_bytes()).hexdigest()):
             continue
         parsed = store.parse_wiki_file(path) or {}
         body = str(parsed.pop("body", "") or "")
@@ -536,8 +540,13 @@ def knowledge_map(root: Path, limit: int = 400, *, worker_snapshot: dict | None 
                 path = _inside(root.resolve(), value, "drafts")
             except ValueError:
                 continue
-            if path.suffix.lower() == ".md" and not path.exists():
-                origins.setdefault(value, []).append(item)
+            if path.suffix.lower() == '.md':
+                reviewed = None
+                if path.is_file():
+                    from . import draft_review
+                    reviewed = draft_review.disposition(root, value, hashlib.sha256(path.read_bytes()).hexdigest())
+                if not path.exists() or (reviewed and reviewed.get('decision') == 'promoted' and reviewed.get('wiki_path') == item['id']):
+                    origins.setdefault(value, []).append(item)
     for value, matches in origins.items():
         if len(matches) == 1:
             matches[0]["source_candidates"].append(value)

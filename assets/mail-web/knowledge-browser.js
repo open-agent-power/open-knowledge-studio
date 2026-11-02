@@ -1,5 +1,5 @@
 'use strict';
-const knowledgeModeNames={domains:'知识域',tags:'全部标签',skills:'Skills 插拔',materials:'来源资料'};
+const knowledgeModeNames={domains:'知识域',tags:'全部标签',skills:'可复用方法',materials:'来源资料'};
 const skillTypeNames={concept:'概念',strategy:'策略','anti-pattern':'反策略',unclassified:'未分类'};
 function goDomainGraph(id){state.knowledgeMode='domains';goTagGraph('domain:'+id);}
 function goSkillGraph(type){state.knowledgeMode='skills';goTagGraph('skills:'+type);}
@@ -24,7 +24,7 @@ function openWorkerRecord(record){const title=VM.short(record.fields?.['总结']
 function itemWorkerFacts(item){
  const details=append(e('details','secondary-records worker-item-facts'),e('summary',null,item.isMaterial?'资料状态与采集来源':item.isSkill?'Skill 治理与来源':'知识状态与采集来源'));
  details.append(e('p',null,(item.isMaterial?'本地资料状态：':'本地知识状态：')+(item.status||'未记录')),e('p',null,item.isMaterial?'文字校对：'+(item.metadata?.ocr_review_status==='unreviewed'?'未经校对':'以原文记录为准'):'人工审核：'+(item.review?.label||'审核记录未知')));
- if(item.isSkill){const type=item.governance?.type;details.append(e('p',null,'插拔类型：'+(skillTypeNames[type]||type||'未记录')),e('p',null,'身份来自文件中的明确 Skill 元数据，类型不用于普通知识分类。'));}
+ if(item.isSkill){const type=item.governance?.type;details.append(e('p',null,'方法类型：'+(skillTypeNames[type]||type||'未记录')),e('p',null,'身份来自文件中的明确 Skill 元数据，类型不用于普通知识分类。'));}
  else details.append(e('p',null,'分类依据：'+(item.classification?.source||'未记录')+' · '+(item.classification?.raw_values||[]).join('、')));
  if(item.classification?.source_disagrees)details.append(e('p','candidate-note','采集端分类与本次审核分类不同；当前采用审核分类，历史值保留为来源记录。'));
  if(!item.workerRecords?.length)details.append(e('p',null,'未关联飞书采集记录。'));
@@ -51,10 +51,10 @@ function sourceMaterialCollectionCover(collection){
 }
 function renderKnowledgeOverview(scroll){
  const mode=state.knowledgeMode||'domains';state.fieldFilters=state.fieldFilters||{};
- const box=e('div','tag-hub'),head=e('header','tag-hub-head');head.append(append(e('div'),e('h2',null,mode==='materials'?'来源资料':mode==='skills'?'Skills 插拔':mode==='tags'?'知识标签':'知识域')));
+ const box=e('div','tag-hub'),head=e('header','tag-hub-head');head.append(append(e('div'),e('h2',null,mode==='materials'?'来源资料':mode==='skills'?'可复用方法':mode==='tags'?'知识标签':'知识域')));
   const actions=e('div','tag-hub-actions');actions.append(button(mode==='skills'?'全部 Skills 图谱 ↗':'全部知识图谱 ↗','button',()=>mode==='skills'?goSkillGraph('all'):goTagGraph('全部知识')));if(mode!=='materials')head.append(actions);box.append(head,knowledgeSourceNote());if(mode==='materials')box.append(sourceMaterialCollectionCover(VM.sourceMaterialCollection(wikiItems)));
  const tabs=e('div','inline-tabs knowledge-tabs');Object.entries(knowledgeModeNames).forEach(([id,name])=>tabs.append(button(name,mode===id?'active':'',()=>{state.knowledgeMode=id;state.query='';state.fieldFilters={};history.replaceState(null,'','#wiki-overview&mode='+id);render();})));box.append(tabs);
- const tools=e('div','tag-hub-tools'),count=e('span'),cards=e('div','tag-cards');tools.append(makeSearch(mode==='materials'?'搜索来源资料':mode==='skills'?'搜索 Skill':'搜索知识域、标签或知识标题',fill),count);box.append(tools);
+ const tools=e('div','tag-hub-tools'),count=e('span'),cards=e('div','tag-cards');tools.append(makeSearch(mode==='materials'?'搜索来源资料':mode==='skills'?'搜索方法':'搜索知识域、标签或知识标题',fill),count);box.append(tools);
  const filters=e('div','knowledge-filters');if(!['skills','materials'].includes(mode))for(const key of ['评级','质量状态','Wiki状态']){const values=VM.fieldOptions(wikiItems.filter(p=>!p.isSkill&&!p.isMaterial),key,state.fieldFilters[key]);if(!values.length)continue;const label=e('label',null,VM.fieldLabels[key]),select=e('select');select.setAttribute('aria-label','筛选'+VM.fieldLabels[key]);const all=e('option',null,'全部');all.value='';select.append(all);for(const value of values){const option=e('option',null,value==='__missing'?'未记录':value);option.value=value;option.selected=state.fieldFilters[key]===value;select.append(option);}select.onchange=()=>{state.fieldFilters[key]=select.value;fill();};label.append(select);filters.append(label);}if(filters.childElementCount)box.append(filters);box.append(cards);scroll.append(box);
  function fill(){cards.replaceChildren();const base=wikiItems.filter(p=>mode==='materials'?p.isMaterial:!p.isMaterial&&p.isSkill===(mode==='skills')).filter(p=>VM.matchesFields(p,state.fieldFilters));let groups;
   if(mode==='materials'){const q=state.query.trim().toLocaleLowerCase();const matched=base.filter(p=>[p.title,p.summary,p.body,...p.tags].join(' ').toLocaleLowerCase().includes(q));count.textContent=matched.length+' 份来源资料';matched.forEach(item=>{const card=button('','tag-card material-card',()=>openWikiReader(item));card.append(e('strong',null,item.title),e('p',null,item.summary),e('small',null,'机器提取资料 · '+(item.metadata?.ocr_review_status==='unreviewed'?'文字未校对':'校对状态以原文为准')),e('span',null,'查看原图与提取文字 →'));cards.append(card);});if(!matched.length)cards.append(e('p','tag-empty','没有匹配的来源资料。'));return;}

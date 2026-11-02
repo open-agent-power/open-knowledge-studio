@@ -3,7 +3,8 @@ import pytest
 import yaml
 from typer.testing import CliRunner
 
-from knowledge_studio import cli, store, mail_knowledge
+from knowledge_studio import cli, store, mail_knowledge, draft_review
+import hashlib
 from knowledge_studio.knowledge_policy import is_source_material
 from knowledge_studio.recall import recall_knowledge
 from knowledge_studio.search.fts5 import FTS5Backend
@@ -36,12 +37,16 @@ def test_invalid_classification_preserves_candidate(tmp_path, monkeypatch, field
 
 def test_explicit_review_corrects_legacy_classification(tmp_path, monkeypatch):
     monkeypatch.setenv("OKS_ROOT", str(tmp_path))
-    write(tmp_path, "drafts/c.md", title="Reviewed science", type="strategy", area="ai")
+    candidate = write(tmp_path, "drafts/c.md", title="Reviewed science", type="strategy", area="ai")
+    original = candidate.read_bytes()
     slug = store.promote_draft("c", area="science", wiki_type="strategy")
     page = store.get_wiki_page(slug)
     assert page["area"] == "science" and page["type"] == "strategy"
     assert page["human_reviewed_at"]
-    assert not (tmp_path / "drafts/c.md").exists()
+    assert candidate.read_bytes() == original
+    receipt = draft_review.read_receipt(tmp_path, "c", hashlib.sha256(original).hexdigest())
+    assert receipt["decision"] == "promoted"
+    assert draft_review.read_original(tmp_path, receipt) == original
 
 
 @pytest.mark.parametrize("marker", [{"source_type": "local-ocr-import"}, {"content_role": "source_material"}])

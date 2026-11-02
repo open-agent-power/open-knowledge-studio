@@ -65,13 +65,16 @@ def test_import_preserves_full_assets_raw_evidence_and_is_idempotent(kb, source)
 @pytest.mark.parametrize("kind", skills.TYPE_DIRS)
 def test_promotion_keeps_identity_assets_and_independent_hierarchy(kb, source, kind):
     result = skills.import_skill(source, kind=kind, category="development/java")
+    original = Path(result['entry']['file_path']).read_bytes()
     page = promote(result)
     assert Path(page["file_path"]).parent == kb / "wiki/skills" / skills.TYPE_DIRS[kind] / "development/java"
     assert page["type"] == kind and page["area"] == "skills"
     assert page["artifact_kind"] == "skill" and page["human_reviewed_at"]
     assert page["skill_dependencies"] == ["python"]
     assert skills._unpack(page)["image.png"] == (source / "image.png").read_bytes()
-    assert not Path(result["entry"]["file_path"]).exists()
+    assert Path(result['entry']['file_path']).read_bytes() == original
+    assert not any(item['slug'] == result['entry']['slug'] for item in store.list_drafts())
+    assert not any(item.get('status') == 'draft' for item in skills.entries())
     assert skills.import_skill(source, kind=kind, category="development/java")["duplicate"]
 
 

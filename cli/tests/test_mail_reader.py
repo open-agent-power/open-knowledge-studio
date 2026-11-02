@@ -301,6 +301,21 @@ def test_promoted_candidate_history_opens_reviewed_wiki_without_writes(kb, monke
     assert filesystem_snapshot(kb) == before
 
 
+def test_edited_retained_candidate_does_not_inherit_old_review(kb, monkeypatch):
+    from knowledge_studio import store
+    monkeypatch.setenv('OKS_ROOT', str(kb))
+    path = kb / 'drafts/memory.md'
+    path.write_text('---\ntitle: Memory\ndraft_type: concept\ndraft_area: computing\n---\nOriginal source.', encoding='utf-8')
+    store.promote_draft('memory')
+    path.write_text(path.read_text(encoding='utf-8') + '\nUnreviewed addition.', encoding='utf-8')
+    before = filesystem_snapshot(kb)
+    with serving(kb) as (base, _):
+        item = get_json(base, '/api/mail/memory/item?path=drafts/memory.md')
+        assert item['path'] == 'drafts/memory.md'
+        assert 'Unreviewed addition.' in item['body']
+    assert filesystem_snapshot(kb) == before
+
+
 @pytest.mark.parametrize("status,reviewed", [("provisional", True), ("active", False)])
 def test_missing_candidate_cannot_resolve_to_unreviewed_page(kb, status, reviewed):
     (kb / "wiki/memory.md").write_text(

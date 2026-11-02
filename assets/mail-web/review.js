@@ -126,6 +126,8 @@ async function describeTask() {
 function canWrite() { return localReview; }
 function updateDraftControls() {
   $('promote').disabled = !(canWrite() && draft && $('confirmReview').checked);
+  $('rejectDraft').disabled = !(canWrite() && draft);
+  $('rejectDraft').hidden = !draft;
   $('confirmReview').disabled = !(localReview && draft);
   $('readDraft').disabled = !$('draftPath').value.trim();
 }
@@ -380,6 +382,18 @@ $('confirmShare').addEventListener('change', renderCandidates);
 $('draftPath').addEventListener('input', updateDraftControls);
 $('draftForm').addEventListener('submit', event => { event.preventDefault(); loadDraft($('draftPath').value.trim()); });
 $('confirmReview').addEventListener('change', updateDraftControls);
+$('rejectDraft').addEventListener('click', async () => {
+  if (!canWrite() || !draft) return;
+  const selected = {...draft}; $('rejectDraft').disabled = true; $('promote').disabled = true;
+  setStatus('promoteStatus','正在保存不收录决定…');
+  try {
+    await jsonPost('/api/learning/reject',{path:selected.path,expected_sha256:selected.sha256,confirm_reject:true});
+    if (draft?.path !== selected.path || draft?.sha256 !== selected.sha256) return;
+    draft = null; $('confirmReview').checked = false; updateDraftControls();
+    await loadDraft(selected.path); await loadInbox();
+    setStatus('promoteStatus','本版本不收录，原稿已保留；后续改稿需要重新审核。');
+  } catch(error) {setStatus('promoteStatus',error.message,'error');updateDraftControls();}
+});
 $('promote').addEventListener('click', async () => {
   if (!canWrite() || !draft || !$('confirmReview').checked) return;
   const reviewedPath = draft.path;

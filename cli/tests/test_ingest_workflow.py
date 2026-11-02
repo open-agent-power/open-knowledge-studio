@@ -231,7 +231,7 @@ def test_isolated_skill_to_ingest_review_and_recall_lifecycle(tmp_path, monkeypa
 
 
 @pytest.mark.parametrize("field,value", [("source_bundle_id", "bundle:wrong"),
-    ("source_candidates", ["drafts/other.md"]), ("human_reviewed_at", None),
+    ("source_candidates", ["drafts/other.md"]), ("source_candidates", 'drafts/takeaway.md'), ("human_reviewed_at", None),
     ("status", "provisional"), ("archived", True)])
 def test_finalization_rejects_unproven_promotion(workflow, field, value):
     from knowledge_studio import store
@@ -244,6 +244,34 @@ def test_finalization_rejects_unproven_promotion(workflow, field, value):
     assert not checked["valid"]
     assert checked["workflow_status"] == "incomplete"
     assert checked["promoted_pages"] == {}
+
+
+def test_retained_review_only_completes_the_exact_approved_candidate(workflow):
+    from knowledge_studio import store
+    root, result, save = workflow
+    record_handoffs(root, result)
+    save()
+    candidate = root / result['candidate_path']
+    original = candidate.read_bytes()
+    store.promote_draft('takeaway')
+    assert candidate.read_bytes() == original
+    assert validate_workflow('run-example', collaboration=True)['workflow_status'] == 'complete'
+    candidate.write_bytes(original + b'\nNew unreviewed material.\n')
+    checked = validate_workflow('run-example', collaboration=True)
+    assert checked['valid'] and checked['workflow_status'] == 'awaiting_human_review'
+    assert checked['promoted_pages'] == {}
+
+
+def test_wiki_labels_without_original_do_not_prove_finalized_review(workflow):
+    from knowledge_studio import store
+    root, result, save = workflow
+    record_handoffs(root, result)
+    save()
+    store.promote_draft('takeaway')
+    (root / result['candidate_path']).unlink()
+    checked = validate_workflow('run-example', collaboration=True)
+    assert not checked['valid'] and checked['promoted_pages'] == {}
+    assert 'candidate_missing:drafts/takeaway.md' in checked['errors']
 
 
 def test_finalize_requires_real_handoffs_and_saves_incomplete(workflow):

@@ -48,6 +48,18 @@ def dispatch(operation, request):
         slug = store.promote_draft(Path(inspected['path']).stem, expected_sha256=expected)
         page = store.get_wiki_page(slug)
         return {'status': 'promoted', 'slug': slug, 'path': Path(page['file_path']).relative_to(root).as_posix()}
+    if operation == 'reject':
+        if request.get('confirm_reject') is not True:
+            raise ValueError('Choose not to retain the exact Draft before rejection')
+        inspected = workspace.draft(root, request.get('path'))
+        if inspected.get('review_status') != 'draft':
+            raise ValueError('This Draft revision already has a decision')
+        expected = request.get('expected_sha256')
+        if not isinstance(expected, str) or len(expected) != 64:
+            raise ValueError('Read the exact Draft revision before rejection')
+        receipt = store.reject_draft(Path(inspected['path']).stem, expected_sha256=expected)
+        return {'status': 'rejected', 'path': inspected['path'],
+                'receipt': receipt.relative_to(root).as_posix()}
     if operation in {'versions', 'diff', 'bundled-diff', 'import-bundled'}:
         from . import skills
         if operation == 'versions':

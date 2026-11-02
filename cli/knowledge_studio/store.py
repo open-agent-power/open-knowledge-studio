@@ -887,9 +887,16 @@ def list_drafts() -> list[dict]:
 
     drafts: list[dict] = []
     from .task_workflow import _promotions, _rejections, candidate_disposition
+    from . import draft_review
     promotions, rejections = _promotions(repo_root()), _rejections(repo_root())
     for f in sorted(dd.glob("*.md")):
-        if candidate_disposition(repo_root(), f.relative_to(repo_root()).as_posix(), promotions=promotions, rejections=rejections):
+        relative = f.relative_to(repo_root()).as_posix()
+        try:
+            raw = f.read_bytes()
+        except OSError:
+            continue
+        if (candidate_disposition(repo_root(), relative, raw=raw, promotions=promotions, rejections=rejections)
+                or draft_review.disposition(repo_root(), relative, hashlib.sha256(raw).hexdigest())):
             continue
         meta = parse_wiki_file(f)
         if not meta:
@@ -943,23 +950,20 @@ def promote_draft(
     *,
     expected_sha256: str | None = None,
 ) -> str:
-    from knowledge_studio.feedback import export_guard
-    if expected_sha256 is not None:
-        if not isinstance(expected_sha256, str) or not re.fullmatch(r'[0-9a-f]{64}', expected_sha256):
-            raise ValueError('Read the exact Draft revision before promotion')
-        # Serialize web reviews of the same Draft, without changing legacy CLI calls.
-        with _file_lock(repo_root() / '.oks/locks' / ('review-' + hashlib.sha256(slug.encode()).hexdigest() + '.lock')):
-            from .workspace import draft
-            inspected = draft(repo_root(), 'drafts/' + slug + '.md')
-            if inspected['sha256'] != expected_sha256:
-                raise ValueError('Draft changed; read it again before promotion')
-            if inspected.get('review_status') == 'promoted':
-                raise ValueError('Draft already reviewed; open its Wiki instead')
-            original = _draft_path(slug).read_bytes()
-            if hashlib.sha256(original).hexdigest() != expected_sha256:
-                raise ValueError('Draft changed; read it again before promotion')
-            return _reviewed_promotion(slug, title, wiki_type, area, tags, slug_hint, inspected['text'], original)
-    return _reviewed_promotion(slug, title, wiki_type, area, tags, slug_hint)
+    from . import draft_review
+    draft_review._safe_slug(slug)
+    if expected_sha256 is not None and (not isinstance(expected_sha256, str)
+            or not re.fullmatch(r'[0-9a-f]{64}', expected_sha256)):
+        raise ValueError('Read the exact Draft revision before promotion')
+    # CLI and exact-revision reviews share one slug lock and immutable input.
+    with draft_review.review_lock(repo_root(), slug):
+        snapshot = draft_review.capture(repo_root(), slug)
+        if expected_sha256 is not None and snapshot['sha256'] != expected_sha256:
+            raise ValueError('Draft changed; read it again before promotion')
+        if draft_review.disposition(repo_root(), snapshot['relative'], snapshot['sha256']):
+            raise ValueError('Draft revision already reviewed; edit it before another decision')
+        return _reviewed_promotion(slug, title, wiki_type, area, tags, slug_hint,
+                                   snapshot['text'], snapshot['raw'])
 
 
 def _reviewed_promotion(slug, title, wiki_type, area, tags, slug_hint, reviewed_text=None, reviewed_bytes=None):
@@ -1001,6 +1005,11 @@ def _promote_draft(
         )
     if meta.get("status") == "rejected":
         raise ValueError(f"Draft '{slug}' was explicitly rejected and cannot be promoted.")
+    if re.fullmatch(r'daily-learning-[0-9a-f]{28}', slug) and not meta.get('daily_sources'):
+        raise ValueError('Daily learning sources missing; Draft retained')
+    if meta.get('daily_sources'):
+        from .daily_learning import validate_sources
+        validate_sources(repo_root(), meta)
     body = meta.get("body", "")
     if not body.strip():
         raise ValueError(
@@ -1066,6 +1075,20 @@ def _promote_draft(
     if not isinstance(draft_tags, list):
         draft_tags = []
 
+    if not meta.get('workflow_source'):
+        # Preserve exact review evidence before writing Wiki. If the canonical
+        # Draft decision receipt later fails, the reviewed Wiki metadata and
+        # this content-addressed original together recover the decision.
+        from . import draft_review
+        raw_for_review = reviewed_bytes if reviewed_bytes is not None else reviewed_text.encode('utf-8')
+        review_proof = draft_review.preserve_original(
+            repo_root(), draft_path.relative_to(repo_root()).as_posix(), raw_for_review)
+        meta['workflow_reviews'] = [{
+            'workflow_source': None,
+            'reviewed_source': review_proof,
+            'reviewed_at': datetime.now(UTC).isoformat(),
+        }]
+
     path = write_wiki_page(
         title=final_title,
         content=body,
@@ -1103,55 +1126,69 @@ def _promote_draft(
         # Exact reviewed bytes are excluded from pending projections; any new
         # bytes at this path remain a separate, unapproved revision.
         return path.stem
-    unchanged = reviewed_text is None
-    if reviewed_text is not None:
-        try:
-            with draft_path.open('rb') as handle:
-                current = handle.read(len(reviewed_text.encode('utf-8')) + 4)
-            unchanged = current.decode('utf-8-sig') == reviewed_text
-        except (OSError, UnicodeError):
-            unchanged = False
-    if unchanged:
-        draft_path.unlink()
-    # An editor may change the source while the reviewed snapshot is saved.
-    # Keep that edited Draft instead of deleting unreviewed work.
+    from . import draft_review
+    raw = reviewed_bytes if reviewed_bytes is not None else reviewed_text.encode('utf-8')
+    draft_review.record_decision(repo_root(), slug, raw, 'promoted',
+                                 wiki_path=path.relative_to(repo_root()).as_posix())
     return path.stem
 
 
-def reject_draft(slug: str) -> Path:
-    dd = drafts_dir()
-    draft_path = _draft_path(slug)
-    if not draft_path.exists():
-        raise FileNotFoundError(f"Draft not found: {slug}")
-
-    draft_bytes = draft_path.read_bytes()
-    draft_content = draft_bytes.decode('utf-8').replace('\r\n', '\n').replace('\r', '\n')
-    draft_meta = parse_wiki_file(draft_path) or {}
-    from .task_workflow import candidate_disposition
-    disposition = candidate_disposition(repo_root(), draft_path.relative_to(repo_root()).as_posix(), draft_bytes)
-    if disposition == 'not_proposed':
-        raise ValueError('No proposed learning content; original record retained')
-    if disposition:
-        raise ValueError('Draft already reviewed; original evidence retained')
-    decided_at = datetime.now(UTC).isoformat()
-    receipt = {
-        "decision": "rejected",
-        "decided_at": decided_at,
-        "draft_slug": slug,
-        "draft_title": draft_meta.get("title", slug),
-        "draft_path": str(draft_path.relative_to(repo_root())),
-        "draft_sha256": hashlib.sha256(draft_content.encode('utf-8')).hexdigest(),
-        "draft_bytes_sha256": hashlib.sha256(draft_bytes).hexdigest(),
-    }
-    receipt_name = (
-        f"{datetime.now(UTC).strftime('%Y%m%dT%H%M%S%fZ')}-"
-        f"{slug}-{uuid.uuid4().hex[:12]}.json"
-    )
-    receipt_path = dd / "rejected" / receipt_name
-    _atomic_write(receipt_path, json.dumps(receipt, ensure_ascii=False, indent=2) + "\n")
-    if not re.fullmatch(r'task-learning-[0-9a-f]{28}', slug):
-        draft_path.unlink()
-    return receipt_path
+def reject_draft(slug: str, *, expected_sha256: str | None = None) -> Path:
+    from . import draft_review
+    draft_review._safe_slug(slug)
+    if expected_sha256 is not None and (not isinstance(expected_sha256, str)
+            or not re.fullmatch(r'[0-9a-f]{64}', expected_sha256)):
+        raise ValueError('Read the exact Draft revision before rejection')
+    root = repo_root()
+    with draft_review.review_lock(root, slug):
+        snapshot = draft_review.capture(root, slug)
+        if expected_sha256 is not None and snapshot['sha256'] != expected_sha256:
+            raise ValueError('Draft changed; read it again before rejection')
+        is_task_learning = bool(re.fullmatch(r'task-learning-[0-9a-f]{28}', slug))
+        if is_task_learning:
+            from .task_workflow import candidate_disposition
+            disposition = candidate_disposition(root, snapshot['relative'], snapshot['raw'])
+            if disposition == 'not_proposed':
+                raise ValueError('No proposed learning content; original record retained')
+            if disposition:
+                raise ValueError('Draft already reviewed; original evidence retained')
+            draft_meta = _parse_wiki_text(snapshot['text'], snapshot['path']) or {}
+            task_receipt = {
+                "decision": "rejected",
+                "decided_at": datetime.now(UTC).isoformat(),
+                "draft_slug": slug,
+                "draft_title": draft_meta.get("title", slug),
+                "draft_path": snapshot['relative'],
+                "draft_sha256": hashlib.sha256(snapshot['text'].replace('\r\n', '\n').replace('\r', '\n').encode('utf-8')).hexdigest(),
+                "draft_bytes_sha256": snapshot['sha256'],
+            }
+            receipt_name = (f"{datetime.now(UTC).strftime('%Y%m%dT%H%M%S%fZ')}-"
+                            f"{slug}-{uuid.uuid4().hex[:12]}.json")
+            receipt_path = drafts_dir() / "rejected" / receipt_name
+            _atomic_write(receipt_path, json.dumps(task_receipt, ensure_ascii=False, indent=2) + "\n")
+            return receipt_path
+        if draft_review.disposition(root, snapshot['relative'], snapshot['sha256']):
+            raise ValueError('Draft revision already reviewed; edit it before another decision')
+        draft_meta = _parse_wiki_text(snapshot['text'], snapshot['path']) or {}
+        original = draft_review.preserve_original(root, snapshot['relative'], snapshot['raw'])
+        draft_content = snapshot['text'].replace('\r\n', '\n').replace('\r', '\n')
+        receipt = {
+            "decision": "rejected",
+            "decided_at": datetime.now(UTC).isoformat(),
+            "draft_slug": slug,
+            "draft_title": draft_meta.get("title", slug),
+            "draft_path": snapshot['relative'],
+            "draft_sha256": hashlib.sha256(draft_content.encode('utf-8')).hexdigest(),
+            "draft_bytes_sha256": snapshot['sha256'],
+            "original": original,
+        }
+        receipt_name = (f"{datetime.now(UTC).strftime('%Y%m%dT%H%M%S%fZ')}-"
+                        f"{slug}-{uuid.uuid4().hex[:12]}.json")
+        receipt_path = drafts_dir() / "rejected" / receipt_name
+        record = draft_review.record_decision(root, slug, snapshot['raw'], 'rejected')
+        receipt["decided_at"] = record["decided_at"]
+        _atomic_write(receipt_path, json.dumps(receipt, ensure_ascii=False, indent=2) + "\n")
+        return receipt_path
 
 
 def wiki_digest(config: dict | None = None) -> dict:
