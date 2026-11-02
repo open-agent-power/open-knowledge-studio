@@ -1,0 +1,15 @@
+{
+  "kind": "synthetic invalid progress requests; not real user acceptance",
+  "cases": [
+    {"name": "revision-drift", "override": {"expected_revision": 0}},
+    {"name": "bool-revision", "override": {"expected_revision": true}},
+    {"name": "agreement-drift", "override": {"expected_agreement_sha256": "unknown"}},
+    {"name": "blank-progress", "override": {"progress": " "}},
+    {"name": "blank-next", "override": {"next_action": ""}},
+    {"name": "path-traversal", "override": {"artifacts": ["../outside.md"]}},
+    {"name": "absolute-path", "override": {"artifacts": ["C:/outside.md"]}},
+    {"name": "duplicate-path", "override": {"artifacts": ["reports/report.md", "reports/report.md"]}},
+    {"name": "artifact-string", "override": {"artifacts": "reports/report.md"}},
+    {"name": "missing-artifact", "override": {"artifacts": ["reports/missing.md"]}}
+  ]
+}

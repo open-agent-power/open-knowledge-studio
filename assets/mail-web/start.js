@@ -15,21 +15,33 @@ function wikiPath(row) {
 }
 function renderChecks(data) {
   $('knowledgeBase').textContent = data.knowledge_base || '未返回';
-  $('instanceValid').textContent = data.instance_valid === true ? '可用' : data.instance_valid === false ? '需检查' : '未知';
+  $('instanceValid').textContent = data.instance_valid === true ? '已连接' : data.instance_valid === false ? '需要处理' : '状态未知';
   $('python').textContent = valueText(data.python) || '未返回';
   const host = $('checks'); host.replaceChildren();
   for (const check of data.checks || []) {
     const card = el('article', '', 'check-item'), header = el('div', '', 'check-head');
     const state = ({ok:'正常',warning:'需处理',failed:'未通过',missing:'未找到'})[check.status] || check.status || '未知';
-    header.append(el('span', check.name || '检查项', 'check-name'), el('span', state, 'check-state'));
+    const names = {'全文检索':'知识查询','接入方式':'当前连接'};
+    const normal = {'知识库':'资料保存在独立的知识库中。','全文检索':'已找到按关键词查找知识所需的组件。','接入方式':'当前页面已连接到此知识库。'};
+    header.append(el('span', names[check.name] || check.name || '检查项', 'check-name'), el('span', state, 'check-state'));
     card.append(header);
-    if (check.detail) card.append(el('p', valueText(check.detail)));
-    if (check.action) card.append(el('pre', valueText(check.action), 'check-action'));
+    if (check.status === 'ok' && normal[check.name]) {
+      card.append(el('p',normal[check.name]));
+      const details = el('details','','technical-details'); details.append(el('summary','检查详情'));
+      if (check.detail) details.append(el('p',valueText(check.detail)));
+      if (check.action) details.append(el('pre',valueText(check.action),'check-action'));
+      card.append(details);
+    } else if (check.detail) card.append(el('p', valueText(check.detail)));
+    if (check.action && !(check.status === 'ok' && normal[check.name])) {
+      const details = el('details', '', 'technical-details');
+      details.append(el('summary', '查看处理命令'), el('pre', valueText(check.action), 'check-action'));
+      card.append(details);
+    }
     host.append(card);
   }
   if (!host.children.length) host.append(el('p', '没有返回检查项。', 'empty'));
   const retrieval = data.retrieval || {};
-  $('retrievalStatus').textContent = retrieval.actual_backend === 'not_queried' ? '尚未运行查询。' : '当前检索状态已读取。';
+  $('retrievalStatus').textContent = retrieval.actual_backend === 'not_queried' ? '尚未查询知识。' : '查询状态已读取。';
   const commands = data.commands || {}, commandHost = $('commandList'); commandHost.replaceChildren();
   for (const key of ['init', 'serve', 'recall']) {
     if (!commands[key]) continue;
@@ -44,17 +56,14 @@ function renderChecks(data) {
   }
   if (!commandHost.children.length) commandHost.append(el('p', '没有返回可复制命令。', 'empty'));
   const schema = data.schema || data.schema_version;
-  pageStatus(schema === 'workspace/v1' ? '检查完成' : '已读取，但响应schema与预期不同', schema === 'workspace/v1' ? '' : 'error');
+  pageStatus(schema === 'workspace/v1' ? '检查完成' : '已读取，但检查结果格式需要核对', schema === 'workspace/v1' ? '' : 'error');
 }
 function renderRecall(data) {
   const host = $('retrieval'); host.replaceChildren();
   const diagnostics = data.diagnostics || {};
-  const backend = diagnostics.actual_backends || diagnostics.actual_backend || data.actual_backend || '未返回';
-  const backendNames = {native:'内置检索',fts5:'全文检索',embedding:'向量检索'};
-  const backendText = Array.isArray(backend) ? backend.map(value => backendNames[value] || value).join('、') : backendNames[backend] || backend;
-  $('retrievalStatus').textContent = `查询完成 · 使用${valueText(backendText)}` + (diagnostics.fallback_reason ? ' · 已按当前环境回退' : '');
+  $('retrievalStatus').textContent = diagnostics.fallback_reason ? '查询完成（已使用备用方式）。' : '查询完成。';
   {
-    const section = el('section', '', 'result-block'); section.append(el('h3', '知识命中'));
+    const section = el('section', '', 'result-block'); section.append(el('h3', '相关知识'));
     const rows = Array.isArray(data.knowledge) ? data.knowledge : [];
     for (const row of rows) {
       const card = el('article', '', 'result-card');
@@ -76,9 +85,9 @@ function renderRecall(data) {
     if (!rows.length) section.append(el('p', '没有命中。', 'empty'));
     host.append(section);
   }
-  const details = el('details', '', 'result-block'), summary = el('summary', '检索诊断');
+  const details = el('details', '', 'result-block'), summary = el('summary', '技术详情：查询诊断');
   details.append(summary, el('pre', JSON.stringify(data.diagnostics || {}, null, 2))); host.append(details);
-  const full = el('details', '', 'result-block'); full.append(el('summary', '完整返回'), el('pre', JSON.stringify(data, null, 2))); host.append(full);
+  const full = el('details', '', 'result-block'); full.append(el('summary', '技术详情：完整查询结果'), el('pre', JSON.stringify(data, null, 2))); host.append(full);
 }
 async function load() {
   $('refresh').disabled = true; pageStatus('正在检查…');
@@ -89,7 +98,7 @@ async function load() {
 $('refresh').addEventListener('click', load);
 $('queryForm').addEventListener('submit', async event => {
   event.preventDefault(); const query = $('query').value.trim(); if (!query) return;
-  const button = $('querySubmit'); button.disabled = true; $('retrievalStatus').textContent = '正在运行查询…'; $('retrieval').replaceChildren();
+  const button = $('querySubmit'); button.disabled = true; $('retrievalStatus').textContent = '正在查询知识…'; $('retrieval').replaceChildren();
   try { renderRecall(await request('/api/workspace/query', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query})})); }
   catch (error) { $('retrievalStatus').textContent = error.message; $('retrievalStatus').dataset.state = 'error'; }
   finally { button.disabled = false; }

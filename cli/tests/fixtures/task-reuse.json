@@ -1,0 +1,13 @@
+{
+  "kind": "synthetic correction request validation cases; not real user reports",
+  "cases": [
+    {"name": "stale-revision", "override": {"expected_revision": 0}},
+    {"name": "bool-revision", "override": {"expected_revision": true}},
+    {"name": "agreement-mismatch", "override": {"expected_agreement_sha256": "unknown"}},
+    {"name": "wrong-scope-task", "override": {"scope": {"subject": "synthetic", "project": "trial", "task": "other"}}},
+    {"name": "unselected-source", "override": {"source": {"path": "wiki/b.md", "sha256": "0000000000000000000000000000000000000000000000000000000000000000"}}},
+    {"name": "blank-reason", "override": {"reason": " "}},
+    {"name": "blank-summary", "override": {"summary": " "}},
+    {"name": "invalid-id", "override": {"request_id": "../bad"}}
+  ]
+}

@@ -27,6 +27,8 @@ def asset_context(root: Path, page: dict) -> dict:
 def agreement_context(root: Path, agreement: dict | None, scope: str | None) -> dict | None:
     if agreement is None:
         return None
+    from .tasks import require_active_scope
+    require_active_scope(root, scope)
     from .handoff import check
     result = check(root, agreement, scope or "")
     if result["status"] != "current":

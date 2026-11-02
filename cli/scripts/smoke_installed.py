@@ -88,6 +88,14 @@ def feedback_probe(cli: Path, work: Path, env: dict, root: Path, agreement: Path
                                   "--feedback-project", scope["project"], "--debug-record", "--format", "json"],
                                  work, env, work / f"feedback-query-{label}.log"))
     queried = manual_query("approved")
+    expired = request('propose', {'candidate_id':'expired', 'event_ids':['e1'], 'title':'Synthetic expired control',
+        'summary':'PRIVATE_EXPIRED_CONTROL', 'applicability':{'valid_until':'2000-01-01T00:00:00Z'}})
+    request('review', {'candidate_id':'expired','expected_revision':expired['revision'],'decision':'approve','comment':'Synthetic expired control'})
+    temporal = manual_query('temporal')
+    if temporal['task_context']['excluded_counts'].get('expired') != 1 or 'PRIVATE_EXPIRED_CONTROL' in json.dumps(temporal['task_context']['candidates']):
+        raise RuntimeError('Expired task feedback was not excluded')
+    if not isinstance(temporal['diagnostics'].get('measurements', {}).get('total_ms'), (float, int)):
+        raise RuntimeError('Installed recall did not measure its own runtime')
     if queried["task_context"]["candidates"][0]["summary"] != "PRIVATE_INSTALLED_FEEDBACK":
         raise RuntimeError("Installed manual query lost explicit task requirements")
     hit = next(h for h in queried["knowledge"] if h.get("artifact_kind") == "skill")
@@ -137,6 +145,13 @@ def task_probe(cli: Path, work: Path, env: dict, root: Path) -> dict:
     run('select', 'task', 'select', 'report')
     run('checkpoint', 'task', 'checkpoint', 'report', '--revision', '1', '--progress', 'Outline ready', '--next', 'Write evidence')
     queried = run('recall', 'recall', 'continue report', '--format', 'json')
+    added = run('reminder-add','task','remind','add','report','review','--text','Synthetic review reminder',
+        '--at','2000-01-01T00:00:00Z','--agreement-sha256',queried['continuation']['agreement_sha256'])
+    if added['status'] != 'due':
+        raise RuntimeError('Installed Goal reminder did not become due')
+    completed = run('reminder-complete','task','remind','update','report','review','complete','--revision','1')
+    if completed['status'] != 'completed' or run('reminder-list','task','remind','list','report')['items'][0]['status'] != 'completed':
+        raise RuntimeError('Installed Goal reminder completion was not durable')
     if queried['continuation']['next_action'] != 'Write evidence':
         raise RuntimeError('Installed task selection did not continue across CLI processes')
     compact = run('compact', 'recall', 'continue report', '--format', 'json', '--compact')
@@ -151,6 +166,59 @@ def task_probe(cli: Path, work: Path, env: dict, root: Path) -> dict:
     if 'managers' not in run('refreshed', 'recall', 'continue report', '--format', 'json')['continuation']['goal_text']:
         raise RuntimeError('Explicit task refresh failed')
     execute([str(cli), 'task', 'handoff', 'report'], work, env, work / 'task-handoff.md')
+    closed = run('complete','task','complete','report','--revision','3','--reason','Synthetic installed declaration')
+    if closed['lifecycle'] != 'completed' or run('overview','task','overview')['counts']['closed'] != 1:
+        raise RuntimeError('Installed task closure was not durable')
+    blocked = subprocess.run([str(cli),'recall','continue report','--format','json'],cwd=work,env=env,capture_output=True,text=True,encoding='utf-8',timeout=60)
+    (work/'task-closed.log').write_text(blocked.stdout+blocked.stderr,encoding='utf-8')
+    if blocked.returncode != 2:
+        raise RuntimeError('Closed task still provided continuation')
+    reopened = run('reopen','task','reopen','report','--revision','4','--reason','Synthetic new work')
+    if reopened['activation'] != 2 or run('reopened','recall','continue report','--format','json')['continuation']['task_id'] != 'report':
+        raise RuntimeError('Explicit installed task reopen failed')
+    from knowledge_studio import workspace
+    def inspected_request(view):
+        return {'task_id':'report','expected_revision':view['revision'],'accept_changes':True,
+                'expected_goal_sha256':view['goal']['current']['sha256'],'wiki':[]}
+    preview = workspace.task_review(root,'report')
+    goal.write_text(goal.read_text(encoding='utf-8')+'Updated after page inspection.\n',encoding='utf-8')
+    try:
+        workspace.accept_task_sources(root,inspected_request(preview))
+    except ValueError:
+        pass
+    else:
+        raise RuntimeError('Installed page adapter accepted an unseen Goal version')
+    accepted = workspace.accept_task_sources(root,inspected_request(workspace.task_review(root,'report')))
+    saved = workspace.save_task_progress(root,{'task_id':'report','expected_revision':accepted['revision'],
+        'expected_agreement_sha256':accepted['agreement']['sha256'],'progress':'Page adapter saved progress',
+        'next_action':'Check handoff','artifacts':[]})
+    copied = workspace.task_handoff(root,'report',saved['revision'])
+    if 'Check handoff' not in copied['text'] or saved.get('uses'):
+        raise RuntimeError('Installed page adapter lost progress or invented use reports')
+    save_json(work/'task-page-flow.json',{'status':'passed','revision':saved['revision'],'unseen_change_rejected':True})
+    # Synthetic pending-only correction, using the installed adapters and private store.
+    from knowledge_studio import feedback, tasks
+    source = root/'wiki/computing/strategies/task-correction.md'
+    source.parent.mkdir(parents=True,exist_ok=True)
+    source.write_text('---\ntitle: Synthetic correction source\ntype: strategy\narea: computing\nstatus: active\nhuman_reviewed_at: synthetic\n---\nPreserve citations.\n',encoding='utf-8')
+    corrected = tasks.start(root,'correction-smoke','profiles/goals/task-smoke.md',[source.relative_to(root).as_posix()])
+    references = workspace.task_sources(root,'correction-smoke',1)
+    selection = {'subject':'synthetic-installed','project':'correction-probe','task':'correction-smoke'}
+    request = {'task_id':'correction-smoke','expected_revision':1,'expected_agreement_sha256':corrected['agreement']['sha256'],
+        'request_id':'correction-probe','scope':selection,'source':{k:references['sources'][0][k] for k in ('path','sha256')},
+        'reason':'Synthetic retry test.','summary':'Keep evidence attached to conclusions.'}
+    previous_home = os.environ.get('OKS_FEEDBACK_HOME')
+    os.environ['OKS_FEEDBACK_HOME'] = str(work/'correction-private')
+    try:
+        first = workspace.propose_task_correction(root,request)
+        second = workspace.propose_task_correction(root,request)
+        inspected = feedback.inspect(root,selection)
+        if first != second or first['candidate_status'] != 'pending' or len(inspected['events']) != 1 or len(inspected['candidates']) != 1 or feedback.select_context(root,selection,corrected['agreement'])['candidates']:
+            raise RuntimeError('Installed correction lost idempotency or applied unreviewed learning')
+        save_json(work/'task-correction.json',{'status':'passed','kind':'synthetic pending-only installed adapter','result':first})
+    finally:
+        if previous_home is None: os.environ.pop('OKS_FEEDBACK_HOME',None)
+        else: os.environ['OKS_FEEDBACK_HOME'] = previous_home
     run('clear', 'task', 'clear')
     if 'continuation' in run('cleared', 'recall', 'continue report', '--format', 'json'):
         raise RuntimeError('Cleared selection still affects recall')

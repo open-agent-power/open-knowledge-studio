@@ -6,6 +6,8 @@ import typer
 from . import tasks, store
 
 app = typer.Typer(help='Select a task once, save progress, and resume with checked sources.')
+from .reminders_cli import app as reminders_app
+app.add_typer(reminders_app, name='remind')
 
 
 def _run(call):
@@ -47,6 +49,29 @@ def show(task_id: Optional[str] = None):
 @app.command('list')
 def list_cmd():
     _run(lambda: {'tasks': tasks.list_tasks(store.repo_root())})
+
+
+@app.command('overview')
+def overview():
+    """Read the bounded task work list, including due reminders and source changes."""
+    _run(lambda: tasks.overview(store.repo_root()))
+
+
+@app.command('complete')
+def complete(task_id: str, revision: int = typer.Option(..., '--revision'), reason: str = typer.Option(..., '--reason')):
+    """Declare a task completed; does not approve its outputs or Wiki."""
+    _run(lambda: tasks.transition(store.repo_root(), task_id, revision, 'complete', reason))
+
+
+@app.command('cancel')
+def cancel(task_id: str, revision: int = typer.Option(..., '--revision'), reason: str = typer.Option(..., '--reason')):
+    _run(lambda: tasks.transition(store.repo_root(), task_id, revision, 'cancel', reason))
+
+
+@app.command('reopen')
+def reopen(task_id: str, revision: int = typer.Option(..., '--revision'), reason: str = typer.Option(..., '--reason')):
+    """Reopen explicitly, retaining source-review gates and reminder confirmation."""
+    _run(lambda: tasks.transition(store.repo_root(), task_id, revision, 'reopen', reason))
 
 
 @app.command('checkpoint')

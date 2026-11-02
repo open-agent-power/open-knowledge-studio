@@ -6,12 +6,12 @@ async function get(url) { return OksWorkspace.request(url); }
 let versions = [];
 const labels = {
   pending_review: '待审核', reviewed: '已审核', superseded: '已被新版本替代', archived: '已归档', unreviewed: '未审核', inactive: '不可用',
-  ok: '校验通过', failed: '校验失败', added: '新增', modified: '修改', deleted: '删除',
-  current: '当前有效', needs_review: '需要复核', unknown: '状态未知',
-  bound_to_old_version: '仍引用旧版本', not_loaded: '未加载', unchanged_managed: '由 OKS 管理且未修改',
-  modified_managed: '由 OKS 管理但已修改', modified_or_unreadable: '已修改或无法读取',
-  unmanaged_existing: '已有非托管副本', unavailable: '状态不可读取',
-  caller_reported: '调用方报告',
+  ok: '文件检查通过', failed: '文件检查未通过', added: '新增', modified: '修改', deleted: '删除',
+  current: '当前版本可用', needs_review: '建议复核', unknown: '状态未知',
+  bound_to_old_version: '仍在使用版本一', not_loaded: '未加载', unchanged_managed: '本地副本与记录一致',
+  modified_managed: '本地副本已修改', modified_or_unreadable: '本地副本已修改或无法读取',
+  unmanaged_existing: '本地副本不是由 OKS 管理', unavailable: '状态不可读取',
+  caller_reported: '由记录方填写',
 };
 const label = value => labels[value] || value || '未知';
 function omittedReason(value) {
@@ -48,15 +48,16 @@ function renderVersions(data) {
   for (const version of versions) {
     const optionLabel = `${version.version.slice(0, 12)}… · ${label(version.review_state)} · ${label(version.integrity)}`;
     const card = el('article', '', 'version-card');
-    card.append(el('h2', `${version.version.slice(0, 12)}…`), el('p', `审核：${label(version.review_state)} · 完整性：${label(version.integrity)}`));
+    card.append(el('h2', `版本 ${version.version.slice(0, 12)}…`), el('p', `审核：${label(version.review_state)} · 文件检查：${label(version.integrity)}`));
     const fullVersion = el('details', '', 'full-version');
-    fullVersion.append(el('summary', '查看完整版本号'), el('code', version.version));
+    fullVersion.append(el('summary', '查看完整版本标识'), el('code', version.version));
     card.append(fullVersion);
     for (const item of version.cards || []) {
       const cardInfo = el('p', `${item.slug} · ${label(item.review_state)} · ${label(item.integrity)}${item.integrity_issue ? ' · ' + integrityIssue(item.integrity_issue) : ''}`, item.integrity === 'failed' ? 'warning' : '');
-      card.append(cardInfo);
+      if (item.integrity === 'failed') card.append(cardInfo);
+      else fullVersion.append(cardInfo);
       if (item.review_state === 'pending_review' && item.file_path) {
-        const link = el('a', '打开待审核草稿');
+        const link = el('a', '查看待审核建议');
         link.href = '/review?draft=' + encodeURIComponent(item.file_path);
         link.className = 'review-link';
         card.append(link);
@@ -69,15 +70,15 @@ function renderVersions(data) {
     $('compareControls').hidden = false;
     $('toVersion').selectedIndex = 0;
     $('fromVersion').selectedIndex = Math.min(1, versions.length - 1);
-    status(`${versions.length} 个版本已读取。`);
-  } else { $('compareControls').hidden = true; status('没有找到该 Skill 的版本。', 'warning'); }
+    status(`找到 ${versions.length} 个版本。`);
+  } else { $('compareControls').hidden = true; status('没有找到这个技能的版本。', 'warning'); }
 }
 function renderDiff(data) {
   $('results').hidden = false;
   for (const [target, item] of [['fromSummary', data.from], ['toSummary', data.to]]) {
     $(target).replaceChildren(el('span', `${item.version.slice(0, 12)}… · ${label(item.review_state)}`));
     const details = el('details', '', 'full-version');
-    details.append(el('summary', '查看完整版本号'), el('code', item.version));
+    details.append(el('summary', '查看完整版本标识'), el('code', item.version));
     $(target).append(details);
   }
   $('changeCount').textContent = `${data.change_count} 项` + (data.files_truncated ? ` · 另有 ${data.files_truncated} 个路径未列出` : '');
@@ -98,13 +99,15 @@ function renderDiff(data) {
   if (!(data.affected_tasks || []).length) $('tasks').append(el('p', '没有发现直接引用旧版卡片的当前任务。', 'empty'));
   for (const task of data.affected_tasks || []) {
     const article = el('article', '', 'task-card');
-    const taskLink = el('a', `${task.task_id} · 修订 ${task.revision} · ${label(task.comparison_status)}`);
+    const taskLink = el('a', `${task.task_id} · ${label(task.comparison_status)}`);
     taskLink.href = '/tasks?id=' + encodeURIComponent(task.task_id);
     taskLink.className = 'task-link';
     article.append(taskLink);
-    article.append(el('p', `任务状态：${label(task.task_status)} · ${label(task.binding)}`));
-    for (const path of task.source_paths || []) article.append(el('code', path));
-    for (const use of task.uses || []) article.append(el('p', `使用记录：${use.source_path} · ${use.skill_version ? use.skill_version.slice(0, 12) + '…' : '版本未记录'} · ${label(use.verification)} · 执行未验证`));
+    article.append(el('p', `任务：${label(task.task_status)} · ${label(task.binding)}`));
+    const refs = el('details', '', 'full-version'); refs.append(el('summary', '查看来源与修订详情'));
+    for (const path of task.source_paths || []) refs.append(el('code', path));
+    for (const use of task.uses || []) refs.append(el('p', `使用情况记录：${use.source_path} · 版本 ${use.skill_version ? use.skill_version.slice(0, 12) + '…' : '未记录'}。由记录方填写，未验证是否执行。`));
+    if ((task.source_paths || []).length || (task.uses || []).length) article.append(refs);
     $('tasks').append(article);
   }
   $('loadCommand').replaceChildren();
@@ -132,15 +135,15 @@ function renderDiff(data) {
 }
 async function loadVersions() {
   const id = $('skillId').value.trim();
-  if (!id) return status('请输入 Skill ID。', 'warning');
+  if (!id) return status('请输入技能名称。', 'warning');
   $('results').hidden = true;
-  try { status('正在读取版本…'); renderVersions(await get('/api/skills/versions?id=' + encodeURIComponent(id))); }
+  try { status('正在查找版本…'); renderVersions(await get('/api/skills/versions?id=' + encodeURIComponent(id))); }
   catch (error) { status(error.message, 'error'); }
 }
 async function compare() {
   const id = $('skillId').value.trim(), from = $('fromVersion').value, to = $('toVersion').value;
-  if (!id || !from || !to) return status('先读取版本并选择两个快照。', 'warning');
-  try { status('正在比较…'); renderDiff(await get('/api/skills/diff?' + new URLSearchParams({id, from, to}))); status('对照已完成。'); }
+  if (!id || !from || !to) return status('先查找技能，再选择两个版本。', 'warning');
+  try { status('正在比较版本…'); renderDiff(await get('/api/skills/diff?' + new URLSearchParams({id, from, to}))); status('版本变化已列出。'); }
   catch (error) { status(error.message, 'error'); }
 }
 $('loadVersions').addEventListener('click', loadVersions);
@@ -151,18 +154,20 @@ let bundled = null, bundleSequence = 0, preparing = false;
 async function compareBundled() {
   const id = $('skillId').value.trim(), version = $('fromVersion').value, ticket = ++bundleSequence;
   bundled = null; $('prepareBundled').disabled = true; $('bundledNext').replaceChildren();
-  if (!id || !version) { $('bundledStatus').textContent = '请先读取 Skill 版本。'; return; }
-  $('bundledStatus').textContent = '正在对照内置说明…';
+  if (!id || !version) { $('bundledStatus').textContent = '请先查找技能版本。'; return; }
+  $('bundledStatus').textContent = '正在比较技能说明…';
   try {
     const data = await get('/api/skills/bundled-diff?' + new URLSearchParams({id,version}));
     if (ticket !== bundleSequence || id !== $('skillId').value.trim() || version !== $('fromVersion').value) return;
     bundled = data; $('bundledResult').hidden = false;
-    $('bundledStatus').textContent = data.instructions_differ ? '说明存在差异；实际检索后端以本次查询诊断为准。' : '说明内容一致；其他内置文件仍需按草稿审核。';
+    $('bundledStatus').textContent = data.instructions_differ ? '说明内容有变化；本次查询使用的检索方式以查询诊断为准。' : '说明内容一致；其他文件仍需单独审核。';
     $('bundledDiff').textContent = data.unified_diff || '说明没有文本差异。';
     $('bundledFiles').replaceChildren(...data.bundled_files.map(path => el('code', path)));
     await OksWorkspace.ready; const context = OksWorkspace.context();
     $('prepareBundled').disabled = context?.local_edit !== true;
-    $('bundledGate').textContent = context?.local_edit ? '草稿准备后，仍需单独审核。' : '准备草稿需启用本地编辑：' + (context?.commands.edit || 'oks mail serve --path <知识库> --local-edit');
+    $('bundledGate').textContent = context?.local_edit ? '准备后仍需审核，现有内容不会被替换。' : '需要启用本地编辑后才能准备审核建议。';
+    $('bundledEditDetails').hidden = context?.local_edit === true;
+    $('bundledEditCommand').textContent = context?.commands.edit || 'oks mail serve --path <知识库> --local-edit';
   } catch (error) { if (ticket === bundleSequence) $('bundledStatus').textContent = error.message; }
 }
 $('compareBundled').addEventListener('click', compareBundled);
@@ -174,9 +179,9 @@ $('prepareBundled').addEventListener('click', async () => {
   try {
     const result = await OksWorkspace.request('/api/skills/import-bundled', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({expected_knowledge_base:OksWorkspace.context()?.knowledge_base,id:inspected.skill_id,version:inspected.version,expected_bundled_version:inspected.bundled_version})});
     if (bundled !== inspected) return;
-    const link = el('a', result.path.startsWith('drafts/') ? '打开待审核草稿' : '查看已有 Wiki 版本');
+    const link = el('a', result.path.startsWith('drafts/') ? '查看待审核建议' : '查看已有知识');
     link.href = result.path.startsWith('drafts/') ? '/review?draft=' + encodeURIComponent(result.path) : '/#wiki-reader&path=' + encodeURIComponent(result.path);
-    $('bundledNext').replaceChildren(el('p', result.duplicate ? '此版本已存在，保留原状态。' : '草稿已准备。旧 Wiki 与任务绑定保留原状。'), link);
+    $('bundledNext').replaceChildren(el('p', result.duplicate ? '这份版本记录已存在，原状态保留。' : '审核建议已准备。现有知识与任务来源保持不变。'), link);
   } catch (error) { $('bundledStatus').textContent = error.message; }
   finally { preparing = false; $('prepareBundled').disabled = !bundled || OksWorkspace.context()?.local_edit !== true; }
 });

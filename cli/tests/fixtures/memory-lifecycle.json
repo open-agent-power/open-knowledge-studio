@@ -1,0 +1,18 @@
+{
+  "description": "Synthetic fixed-clock lifecycle cases. No entry is a real user approval.",
+  "now": "2026-10-28T12:00:00Z",
+  "cases": [
+    {"id":"legacy-unknown","policy":null,"status":"unknown","eligible":true},
+    {"id":"empty-unknown","policy":{},"status":"unknown","eligible":true},
+    {"id":"active-until","policy":{"valid_until":"2026-10-29T12:00:00Z"},"status":"active","eligible":true},
+    {"id":"expired","policy":{"valid_until":"2026-10-27T12:00:00Z"},"status":"expired","eligible":false},
+    {"id":"until-exclusive","policy":{"valid_until":"2026-10-28T12:00:00Z"},"status":"expired","eligible":false},
+    {"id":"future","policy":{"valid_from":"2026-10-29T12:00:00Z"},"status":"not_yet_valid","eligible":false},
+    {"id":"from-inclusive","policy":{"valid_from":"2026-10-28T12:00:00Z"},"status":"active","eligible":true},
+    {"id":"timezone-equivalence","policy":{"valid_from":"2026-10-28T20:00:00+08:00"},"status":"active","eligible":true},
+    {"id":"window","policy":{"valid_from":"2026-10-27T12:00:00Z","valid_until":"2026-10-29T12:00:00Z"},"status":"active","eligible":true},
+    {"id":"naive-rejected","policy":{"valid_until":"2026-10-29T12:00:00"},"status":"invalid_time","eligible":false},
+    {"id":"reversed-window","policy":{"valid_from":"2026-10-29T12:00:00Z","valid_until":"2026-10-27T12:00:00Z"},"status":"invalid_time","eligible":false},
+    {"id":"unknown-field","policy":{"automatic_approve":true},"status":"invalid_time","eligible":false}
+  ]
+}

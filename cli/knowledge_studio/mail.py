@@ -460,6 +460,8 @@ def write_message(
         if kind != "handoff":
             raise ValueError("An agreement can only be attached to a handoff")
         encoded_agreement = handoff.encode(agreement)
+        from knowledge_studio.tasks import require_active_scope
+        require_active_scope(root, agreement['scope'])
         if handoff.check(root, agreement, agreement["scope"])["status"] != "current":
             raise ValueError("Agreement sources changed; prepare a new reviewed snapshot before delegating")
     sender = str(sender or "human").strip() or "human"

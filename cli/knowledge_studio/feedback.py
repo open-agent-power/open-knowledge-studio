@@ -115,6 +115,8 @@ def record(root: Path, request: dict) -> dict:
     if source not in {"user_reported", "agent_proposed"}:
         raise ValueError("Source must be user_reported or agent_proposed")
     agreement = handoff.validate(request.get("agreement"))
+    from .tasks import require_active_scope
+    require_active_scope(root, selection['task'])
     if handoff.check(root, agreement, selection["task"])["status"] != "current":
         raise ValueError("Agreement needs review")
     asset = _asset(root, request.get("asset_path"))
@@ -163,6 +165,11 @@ def record(root: Path, request: dict) -> dict:
 
 def _issues(root, state, candidate):
     issues = []
+    from .tasks import require_active_scope
+    try:
+        require_active_scope(root, state['scope']['task'])
+    except ValueError:
+        issues.append({'code': 'task_closed'})
     for identifier in candidate["event_ids"]:
         event = state["events"].get(identifier)
         if not event or event["status"] != "active":
@@ -181,7 +188,12 @@ def _issues(root, state, candidate):
 
 def _view(root, state, candidate):
     issues = _issues(root, state, candidate)
-    return {**candidate, "effective_status": "invalidated" if issues else candidate["status"],
+    from .memory_policy import evaluate
+    validity = evaluate(candidate.get('applicability'))
+    status = 'invalidated' if issues else candidate['status']
+    if status == 'approved' and not validity['eligible']:
+        status = validity['status']
+    return {**candidate, 'validity': validity, "effective_status": status,
             "issues": issues, "revision": digest(candidate), "executed": False}
 
 
@@ -202,6 +214,9 @@ def propose(root, request):
                      "title": _text(request.get("title"), "title", 200),
                      "summary": _text(request.get("summary"), "summary"), "status": "pending",
                      "at": datetime.now(UTC).isoformat()}
+        if 'applicability' in request:
+            from .memory_policy import validate
+            candidate['applicability'] = validate(request['applicability'])
         if identifier in state["candidates"]:
             raise ValueError("Candidate ID already exists")
         if _issues(root, state, candidate):
@@ -221,6 +236,24 @@ def review(root, request):
             raise ValueError("Candidate changed or already reviewed; inspect it again")
         if _issues(root, state, candidate):
             raise ValueError("Source inactive or stale; cannot review this candidate")
+        if decision == 'approve':
+            if 'applicability' in request:
+                from .memory_policy import validate
+                candidate['applicability'] = validate(request['applicability'])
+            replaced = request.get('replaces_candidates', [])
+            if not isinstance(replaced, list) or len(replaced) > 8 or len(set(replaced)) != len(replaced):
+                raise ValueError('Choose at most 8 distinct approved candidates to replace')
+            from .memory_policy import evaluate
+            if replaced and not evaluate(candidate.get('applicability'))['eligible']:
+                raise ValueError('A replacement must already be applicable; existing approval was preserved')
+            for key in replaced:
+                _id(key)
+                if key == candidate['candidate_id'] or key not in state['candidates'] or state['candidates'][key]['status'] != 'approved':
+                    raise ValueError('Replacement must name another approved candidate in this exact scope')
+            if replaced:
+                candidate['replaces_candidates'] = replaced
+                for key in replaced:
+                    state['candidates'][key].update(status='superseded', superseded_by=candidate['candidate_id'])
         candidate.update(status="approved" if decision == "approve" else "rejected",
                          review_comment=_text(request.get("comment"), "comment"), reviewed_at=datetime.now(UTC).isoformat())
         _save(path, state)
@@ -270,6 +303,8 @@ def select_context(root, selection, agreement):
     if selection is None or agreement is None:
         return {"status": "not_requested", "candidates": [], "excluded_counts": {}}
     selection = scope(selection)
+    from .tasks import require_active_scope
+    require_active_scope(root, selection['task'])
     if handoff.check(root, agreement, selection["task"])["status"] != "current":
         raise ValueError("Current task agreement needs review")
     view = inspect(root, selection)
@@ -286,7 +321,10 @@ def select_context(root, selection, agreement):
         if reason:
             excluded[reason] = excluded.get(reason, 0) + 1
         else:
-            selected.append({key: candidate[key] for key in ("candidate_id", "title", "summary", "revision")})
+            item = {key: candidate[key] for key in ("candidate_id", "title", "summary", "revision")}
+            if 'applicability' in candidate:
+                item.update(applicability=candidate['applicability'], validity=candidate['validity'])
+            selected.append(item)
     return {"status": "selected" if selected else "empty", "candidates": selected, "excluded_counts": excluded}
 
 
@@ -310,6 +348,10 @@ def export(root, request, *, confirm_share=False):
             raise ValueError("Draft destination escapes knowledge root")
         metadata = {"title": candidate["title"], "draft_type": "strategy", "draft_area": "computing",
                     "status": "draft", "feedback_origin": reference, "human_approved": False}
+        if candidate.get('applicability'):
+            # Ordinary promotion currently has no applicability contract. Do not
+            # strip conditions and accidentally turn a temporary rule permanent.
+            raise ValueError('Time-bounded candidates stay private; sharing requires a separately reviewed timeless Draft')
         text = "---\n" + yaml.safe_dump(metadata, allow_unicode=True) + "---\n\n" + candidate["summary"] + "\n"
         if target.exists() and target.read_text(encoding="utf-8") != text:
             raise ValueError("Exported Draft was edited; preserve it")

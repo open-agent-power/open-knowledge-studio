@@ -28,6 +28,7 @@ from __future__ import annotations
 import json
 import logging
 import math
+from time import perf_counter
 from datetime import UTC, datetime
 from pathlib import Path, PurePath
 from typing import Any
@@ -279,7 +280,7 @@ def load_recall_params(root=None):
         "posttool_mode": "signal", "posttool_signal_rel_floor": 2.5,
         "conflict_window": 300, "search_backend": "fts5", "mail_topn": 3,
         # v0.6.3: embedding fallback — fts5 召回空/明显不足时切 embedding 补充
-        "embedding_fallback": False, "debug_record": False,
+        "embedding_fallback": False, "debug_record": False, "memory_validity": "shadow",
         # v0.6.0: inject token budget (CV from karpathy-wiki L0-L3)
         "inject_budget_chars": 4000, "inject_per_page_chars": 200,
         "inject_title_only_floor": 0.5,
@@ -305,6 +306,7 @@ def load_recall_params(root=None):
             params["conflict_window"] = int(cc.get("window", params["conflict_window"]))
             params["search_backend"] = str(data.get("search_backend", params["search_backend"]))
             params["debug_record"] = bool(data.get("debug_record", False))
+            params['memory_validity'] = str(data.get('memory_validity', 'shadow'))
             params["mail_topn"] = int(data.get("mail_topn", params["mail_topn"]))
             params["embedding_fallback"] = bool(data.get("embedding_fallback", params["embedding_fallback"]))
             # v0.6.0: inject budget
@@ -454,6 +456,7 @@ def recall(
     """
     from .retrieval_debug import agreement_context, record
     from .store import repo_root
+    started = perf_counter()
     saved_task = None
     if agreement is None and use_task:
         from . import tasks
@@ -481,6 +484,14 @@ def recall(
     # v0.6.0: CLI 未显式传 search_backend 时读 settings/recall.yaml
     if not search_backend:
         search_backend = load_recall_params().get("search_backend", "fts5")
+    checked = perf_counter()
+    episodic = [] if knowledge_only else recall_episodic(query=query, topic_id=topic_id, limit=limit,
+        user_id=user_id, project_slug=project_slug)
+    episodic_done = perf_counter()
+    knowledge = _recall_knowledge_via_backend(query=query, topic_id=topic_id, limit=limit, scope=scope,
+        goal_context=goal_context, explain=explain, type_filter=type_filter,
+        search_backend=search_backend, diagnostics=diagnostics)
+    knowledge_done = perf_counter()
     result = {
         "schema_version": RECALL_RESPONSE_SCHEMA,
         "query": query,
@@ -494,21 +505,8 @@ def recall(
             "domains": sorted(goal_context["domains"]),
             "keywords": sorted(goal_context["keywords"]),
         },
-        "episodic": [] if knowledge_only else recall_episodic(
-            query=query, topic_id=topic_id, limit=limit,
-            user_id=user_id, project_slug=project_slug,
-        ),
-        "knowledge": _recall_knowledge_via_backend(
-            query=query,
-            topic_id=topic_id,
-            limit=limit,
-            scope=scope,
-            goal_context=goal_context,
-            explain=explain,
-            type_filter=type_filter,
-            search_backend=search_backend,
-            diagnostics=diagnostics,
-        ),
+        "episodic": episodic,
+        "knowledge": knowledge,
         "diagnostics": diagnostics,
     }
     # Explicit opt-in: profile identity never implicitly enables private feedback.
@@ -532,6 +530,17 @@ def recall(
         diagnostics['continuation'] = {'task_id': saved_task['task_id'], 'revision': saved_task['revision'], 'status': saved_task['status']}
     diagnostics["task_context"] = {"status": task_context["status"],
         "selected_count": len(task_context["candidates"]), "excluded_counts": task_context["excluded_counts"]}
+    finished = perf_counter()
+    diagnostics['measurements'] = {
+        'scope': 'OKS recall only; excludes debug persistence, model and host execution',
+        'phase_ms': {key: round((end - begin) * 1000, 3) for key, begin, end in (
+            ('task_check', started, checked), ('episodic', checked, episodic_done),
+            ('knowledge', episodic_done, knowledge_done), ('requirements', knowledge_done, finished))},
+        'total_ms': round((finished - started) * 1000, 3),
+        'query_utf8_bytes': len(query.encode('utf-8')),
+        'context_utf8_bytes': len(json.dumps({key: result[key] for key in ('knowledge', 'episodic', 'task_context', 'continuation') if key in result}, ensure_ascii=False, default=str).encode('utf-8')),
+        'model_tokens': None, 'host_execution_ms': None,
+    }
     if debug_record:
         result["debug_record_id"] = record(repo_root(), query, diagnostics, result["knowledge"])
         for hit in result['knowledge']:
@@ -792,6 +801,7 @@ def _recall_knowledge_via_backend(
             goal_context=goal_context,
             explain=explain,
             type_filter=type_filter,
+            diagnostics=diagnostics,
         )
 
     from .search import get_backend
@@ -808,6 +818,9 @@ def _recall_knowledge_via_backend(
     if type_filter:
         backend_kwargs["type_filter"] = type_filter
     pages = {p.get("slug"): p for p in list_wiki_pages()}
+    from .memory_policy import admission
+    validity_mode = load_recall_params().get('memory_validity', 'shadow')
+    validity, diagnostics['memory_validity'] = admission(list(pages.values()), validity_mode)
     warned_missing: set[str] = set()
     scope_areas = {s.strip().lower() for s in (scope or "").split(",") if s.strip()}
     type_lower = type_filter.strip().lower() if type_filter else ""
@@ -830,6 +843,8 @@ def _recall_knowledge_via_backend(
             return False
         if not is_recallable_wiki_page(page):
             return _reject("inactive_or_source", hit.slug)
+        if validity_mode == 'enforce' and not validity[hit.slug]['eligible']:
+            return _reject(validity[hit.slug]['status'], hit.slug)
         if strategy.startswith("capability"):
             if not Path(page.get("file_path", "")).resolve().is_relative_to((repo_root() / "wiki/skills").resolve()):
                 return _reject("not_skill_path", hit.slug)
@@ -987,8 +1002,16 @@ def _recall_knowledge_with_context(
     explain: bool,
     type_filter: str | None = None,
     candidate_pages: list[dict] | None = None,
+    diagnostics: dict | None = None,
 ) -> list[dict[str, Any]]:
     all_pages = list_wiki_pages() if candidate_pages is None else candidate_pages
+    from .memory_policy import admission
+    validity_mode = load_recall_params().get('memory_validity', 'shadow')
+    validity, report = admission(all_pages, validity_mode)
+    if diagnostics is not None:
+        diagnostics['memory_validity'] = report
+    if validity_mode == 'enforce':
+        all_pages = [p for p in all_pages if validity[p['slug']]['eligible']]
     if not all_pages:
         return []
 
