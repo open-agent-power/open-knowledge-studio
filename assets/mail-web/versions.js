@@ -3,7 +3,7 @@ const $ = id => document.getElementById(id);
 const el = (tag, value, cls) => { const n = document.createElement(tag); n.textContent = value == null ? '' : String(value); if (cls) n.className = cls; return n; };
 function status(text, state = '') { $('status').textContent = text; $('status').dataset.state = state; }
 async function get(url) { return OksWorkspace.request(url); }
-let versions = [];
+let versions = [], versionSequence=0;
 const labels = {
   pending_review: '待审核', reviewed: '已审核', superseded: '已被新版本替代', archived: '已归档', unreviewed: '未审核', inactive: '不可用',
   ok: '文件检查通过', failed: '文件检查未通过', added: '新增', modified: '修改', deleted: '删除',
@@ -38,6 +38,7 @@ function integrityIssue(value) {
     'Skill snapshot exceeds size limits': '快照超过大小限制',
     FileNotFoundError: '快照文件缺失', OSError: '快照文件无法读取',
     'Skill snapshot failed validation': '快照校验失败',
+    'Skill instructions differ from immutable package; re-import source as a new package': '知识卡指令与文件包不一致，请从源文件生成新版本并审核。',
   })[value] || value;
 }
 function renderVersions(data) {
@@ -69,7 +70,9 @@ function renderVersions(data) {
   if (versions.length) {
     $('compareControls').hidden = false;
     $('toVersion').selectedIndex = 0;
-    $('fromVersion').selectedIndex = Math.min(1, versions.length - 1);
+    const requested=new URLSearchParams(location.search).get('version');
+    const approved=versions.findIndex(item=>item.review_state==='reviewed'&&item.integrity==='ok');
+    $('fromVersion').selectedIndex = requested&&versions.some(item=>item.version===requested)?versions.findIndex(item=>item.version===requested):Math.max(0,approved);
     status(`找到 ${versions.length} 个版本。`);
   } else { $('compareControls').hidden = true; status('没有找到这个技能的版本。', 'warning'); }
 }
@@ -136,8 +139,9 @@ function renderDiff(data) {
 async function loadVersions() {
   const id = $('skillId').value.trim();
   if (!id) return status('请输入技能名称。', 'warning');
+  const ticket=++versionSequence;resetPersonal();
   $('results').hidden = true;
-  try { status('正在查找版本…'); renderVersions(await get('/api/skills/versions?id=' + encodeURIComponent(id))); }
+  try { status('正在查找版本…');const data=await get('/api/skills/versions?id=' + encodeURIComponent(id));if(ticket!==versionSequence||$('skillId').value!==id)return;renderVersions(data);await loadPersonalSource(); }
   catch (error) { status(error.message, 'error'); }
 }
 async function compare() {
@@ -186,11 +190,81 @@ $('prepareBundled').addEventListener('click', async () => {
   finally { preparing = false; $('prepareBundled').disabled = !bundled || OksWorkspace.context()?.local_edit !== true; }
 });
 document.addEventListener('oks:reconnected', () => { ++bundleSequence; bundled = null; $('bundledResult').hidden = true; loadVersions(); });
-const initial = new URLSearchParams(location.search);
-if (initial.get('id')) {
-  $('skillId').value = initial.get('id');
-  loadVersions().then(() => {
-    if (versions.some(item => item.version === initial.get('version'))) $('fromVersion').value = initial.get('version');
-    if (initial.get('bundled') === '1') compareBundled();
-  });
+let personalSource=null,personalSequence=0,personalSaving=false,mergePlan=null,mergeSaving=false;
+const mergeChoices=new Map();
+function personalError(error){const text=String(error.message||error);if(/not reviewed|not approved|reviewed version|human.reviewed/i.test(text))return '请选择已审核且文件完整的版本。';if(/digest|stale|plan changed|changed since/i.test(text))return '版本或预览已变化，请重新查看上游变化。';if(/conflict|resolution/i.test(text))return '请逐项明确解决冲突，再准备更新。';if(/lineage|not derived/i.test(text))return '这份技能没有可核对的上游记录。';if(/no.change|unchanged result/i.test(text))return '结果与当前版本相同，已保留当前版本。';return text;}
+function resetPersonal(){++personalSequence;personalSource=null;mergePlan=null;mergeChoices.clear();$('personalPanel').hidden=true;$('mergePanel').hidden=true;$('preparePersonal').disabled=true;$('personalNext').replaceChildren();$('mergeNext').replaceChildren();$('mergeFiles').replaceChildren();$('prepareMerge').hidden=true;}
+async function postSkill(route,payload,expectedRoot){
+  const context=OksWorkspace.context();if(context?.local_edit!==true)throw Error('当前只读，请启用此知识库的本地编辑。');
+  if(expectedRoot&&expectedRoot!==context.knowledge_base)throw Error('知识库已变化，请重新查看后再准备。');
+  const text=JSON.stringify({...payload,expected_knowledge_base:context.knowledge_base});
+  if(new TextEncoder().encode(text).length>60000)throw Error('调整内容过长，请缩短后再准备。');
+  return OksWorkspace.request(route,{method:'POST',headers:{'Content-Type':'application/json'},body:text});
 }
+function showPrepared(host,result){host.replaceChildren(el('p','已准备待审版本，审核后才可查询和加载。'));if(result.draft_path){const link=el('a','阅读并审核这个版本');link.href=OksNavigation.fromTask('/review?draft='+encodeURIComponent(result.draft_path));host.append(link);}}
+async function loadPersonalSource(){
+  const id=$('skillId').value,version=$('fromVersion').value,ticket=++personalSequence;
+  personalSource=null;mergePlan=null;$('personalPanel').hidden=!version;$('mergePanel').hidden=true;$('preparePersonal').disabled=true;$('personalStatus').textContent='读取基础说明…';
+  if(!id||!version)return;
+  const inspected=versions.find(item=>item.version===version);
+  if(inspected?.integrity==='failed'){$('personalStatus').textContent='所选版本完整性检查未通过，请查看版本记录中的原因。';return;}
+  try{
+    const source=await get('/api/skills/source?'+new URLSearchParams({id,version}));
+    if(ticket!==personalSequence||id!==$('skillId').value||version!==$('fromVersion').value)return;
+    personalSource=source;$('personalBase').textContent=source.instructions;$('personalStatus').textContent=OksWorkspace.context()?.local_edit?'基于所选已审核版本':'当前只读';$('preparePersonal').disabled=OksWorkspace.context()?.local_edit!==true;
+    const url=new URL(location.href);url.searchParams.set('id',id);url.searchParams.set('version',version);history.replaceState(null,'',url);
+    if(source.lineage?.upstream_base){
+      const upstream=source.lineage.upstream_base,data=await get('/api/skills/versions?id='+encodeURIComponent(upstream.id));
+      if(ticket!==personalSequence)return;
+      $('upstreamVersion').replaceChildren();
+      for(const item of data.versions||[])if(item.review_state==='reviewed'&&item.integrity==='ok'){const option=el('option','已审核 · '+item.version.slice(0,12));option.value=item.version;$('upstreamVersion').append(option);}
+      $('mergePanel').hidden=false;$('previewMerge').disabled=!$('upstreamVersion').options.length;$('mergeStatus').textContent=$('upstreamVersion').options.length?'':'尚未找到可用的已审核上游版本。';
+    }
+  }catch(error){if(ticket===personalSequence){$('personalStatus').textContent=personalError(error);$('personalBase').textContent='';}}
+}
+$('fromVersion').addEventListener('change',()=>{resetPersonal();loadPersonalSource();});
+$('skillId').addEventListener('change',()=>{resetPersonal();loadVersions();});
+$('personalForm').addEventListener('submit',async event=>{
+  event.preventDefault();const source=personalSource,notes=$('personalNotes').value.trim();if(!source||!notes||personalSaving)return;
+  personalSaving=true;$('preparePersonal').disabled=true;$('personalStatus').textContent='准备个人版本…';
+  try{const result=await postSkill('/api/skills/derive',{base:{id:source.ref.id,version:source.ref.version},changes:{'SKILL.md':source.instructions+'\n\n## 我的补充要求\n\n'+notes+'\n'}},source.knowledge_base);if(source!==personalSource)return;showPrepared($('personalNext'),result);$('personalStatus').textContent='待人工审核';}
+  catch(error){if(source===personalSource)$('personalStatus').textContent=personalError(error);}
+  finally{personalSaving=false;$('preparePersonal').disabled=!personalSource||OksWorkspace.context()?.local_edit!==true;}
+});
+function updateMergeAction(){const ready=!!mergePlan&&(mergePlan.conflicts||[]).every(path=>{const entry=mergeChoices.get(path);return !!entry&&entry.select.value&&(entry.select.value!=='text'||entry.text.value.trim());});$('prepareMerge').disabled=!ready||mergeSaving||OksWorkspace.context()?.local_edit!==true;}
+function renderMerge(plan){
+  mergeChoices.clear();$('mergeFiles').replaceChildren();const conflicts=new Set(plan.conflicts||[]);
+  const names={unchanged:'未变',ours:'保留我的修改',theirs:'采用上游',merged:'已合并',conflict:'需要选择',added:'新增',deleted:'删除'};
+  for(const item of plan.files||[]){
+    const row=el('details','','merge-file');row.open=conflicts.has(item.path);const summary=el('summary',item.path+' · '+(conflicts.has(item.path)?'需要选择':names[item.status]||'变化已整理'));if(conflicts.has(item.path))summary.className='merge-conflict';row.append(summary);
+    const columns=el('div','','merge-comparison');for(const [label,key] of [['共同基础','base'],['我的版本','ours'],['上游版本','theirs']]){const cell=el('div');cell.append(el('strong',label),el('pre',item[key]?.text??(item[key]?.binary?'二进制文件':'文件不存在')));columns.append(cell);}row.append(columns);
+    if(conflicts.has(item.path)){
+      const select=el('select'),text=el('textarea','','merge-edit');select.setAttribute('aria-label',item.path+'的处理方式');text.setAttribute('aria-label',item.path+'的合并内容');text.rows=8;text.hidden=true;text.value=item.ours?.text||'';
+      for(const [value,label] of [['','选择如何处理'],['ours','保留我的修改'],['theirs','采用上游版本'],['text','手动编辑合并结果'],['delete','删除这个文件']]){const option=el('option',label);option.value=value;if(value==='text'&&(item.ours?.binary||item.theirs?.binary)||value==='delete'&&item.path==='SKILL.md')option.disabled=true;select.append(option);}
+      select.addEventListener('change',()=>{text.hidden=select.value!=='text';updateMergeAction();});text.addEventListener('input',updateMergeAction);mergeChoices.set(item.path,{select,text});row.append(select,text);
+    }else if(item.merged?.text)row.append(el('pre',item.merged.text,'merge-preview'));
+    $('mergeFiles').append(row);
+  }
+  $('mergeStatus').textContent=conflicts.size?`${conflicts.size} 个文件需要你选择。`:'变化可合并，个人修改会保留。';$('prepareMerge').hidden=false;updateMergeAction();
+}
+$('upstreamVersion').addEventListener('change',()=>{mergePlan=null;$('mergeFiles').replaceChildren();$('prepareMerge').hidden=true;$('mergeNext').replaceChildren();$('mergeStatus').textContent='请重新查看上游变化。';});
+$('previewMerge').addEventListener('click',async()=>{
+  const source=personalSource,version=$('upstreamVersion').value;if(!source?.lineage||!version)return;
+  mergePlan=null;$('prepareMerge').hidden=true;$('previewMerge').disabled=true;$('mergeStatus').textContent='比较共同基础、个人修改和上游变化…';
+  try{const plan=await get('/api/skills/merge-preview?'+new URLSearchParams({id:source.ref.id,version:source.ref.version,upstream_id:source.lineage.upstream_base.id,upstream_version:version}));if(source!==personalSource||version!==$('upstreamVersion').value)return;mergePlan=plan;renderMerge(plan);}
+  catch(error){if(source===personalSource)$('mergeStatus').textContent=personalError(error);}
+  finally{$('previewMerge').disabled=false;}
+});
+$('prepareMerge').addEventListener('click',async()=>{
+  const plan=mergePlan;if(!plan||mergeSaving)return;const resolutions={};for(const [path,entry] of mergeChoices){resolutions[path]={choice:entry.select.value};if(entry.select.value==='text')resolutions[path].text=entry.text.value;}
+  mergeSaving=true;updateMergeAction();$('mergeStatus').textContent='准备待审更新…';
+  try{const result=await postSkill('/api/skills/merge-prepare',{ours:{id:plan.ours.id,version:plan.ours.version},theirs:{id:plan.theirs.id,version:plan.theirs.version},expected_plan_digest:plan.plan_digest,resolutions},plan.knowledge_base);if(plan!==mergePlan)return;showPrepared($('mergeNext'),result);$('mergeStatus').textContent='更新已准备，待人工审核。';}
+  catch(error){if(plan===mergePlan)$('mergeStatus').textContent=personalError(error);}
+  finally{mergeSaving=false;updateMergeAction();}
+});
+async function loadCatalog(){
+  const initial=new URLSearchParams(location.search),requested=initial.get('id');
+  try{const data=await get('/api/skills/catalog');$('skillId').replaceChildren();for(const item of data.items||[]){const option=el('option',item.title||item.id);option.value=item.id;$('skillId').append(option);}if(requested&&!Array.from($('skillId').options).some(option=>option.value===requested)){const option=el('option',requested);option.value=requested;$('skillId').append(option);}if(requested)$('skillId').value=requested;if($('skillId').value){await loadVersions();if(initial.get('bundled')==='1')compareBundled();}else status('当前知识库尚无技能。先导入并审核一份方法。');}
+  catch(error){status('技能列表暂时无法读取，请刷新重试。','error');}
+}
+OksWorkspace.ready.then(loadCatalog);

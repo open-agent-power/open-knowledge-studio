@@ -26,7 +26,7 @@ HOSTS = {"agents": ".agents", "claude": ".claude", "qoder": ".qoder", "codebuddy
 SKILL_FIELDS = (
     "artifact_kind", "skill_id", "skill_version", "skill_category", "skill_description",
     "skill_package", "skill_package_sha256", "skill_manifest", "skill_manifest_sha256",
-    "skill_dependencies", "raw_bundle",
+    "skill_dependencies", "raw_bundle", "skill_lineage", "skill_instruction_format",
 )
 MAX_FILES = 1024
 MAX_BYTES = 64 * 1024 * 1024
@@ -50,6 +50,37 @@ def _identifier(value: str) -> str:
     if not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,63}", value) or value in _DEVICES:
         raise ValueError(f"Invalid Skill identifier: {value!r}")
     return value
+
+
+def validate_skill_lineage(lineage: object, *, skill_id: str | None = None,
+                           skill_version: str | None = None) -> dict:
+    if not isinstance(lineage, dict) or set(lineage) != {
+            "schema_version", "derived_from", "upstream_base", "parents"}:
+        raise ValueError("Invalid Skill lineage shape")
+    if lineage.get("schema_version") != "skill-lineage/v1":
+        raise ValueError("Unsupported Skill lineage schema")
+
+    def validate_ref(ref):
+        if not isinstance(ref, dict) or set(ref) != {
+                "id", "version", "package_sha256", "manifest_sha256"}:
+            raise ValueError("Invalid Skill lineage reference")
+        identity = _identifier(ref.get("id") if isinstance(ref.get("id"), str) else "")
+        for field in ("version", "package_sha256", "manifest_sha256"):
+            if not isinstance(ref.get(field), str) or not re.fullmatch(r"[0-9a-f]{64}", ref[field]):
+                raise ValueError("Invalid Skill lineage reference digest")
+        if skill_id == identity and skill_version == ref["version"]:
+            raise ValueError("Skill lineage cannot refer to itself")
+        return (identity, ref["version"], ref["package_sha256"], ref["manifest_sha256"])
+
+    validate_ref(lineage["derived_from"])
+    validate_ref(lineage["upstream_base"])
+    parents = lineage["parents"]
+    if not isinstance(parents, list) or not 1 <= len(parents) <= 2:
+        raise ValueError("Skill lineage requires one or two parent references")
+    normalized = [validate_ref(parent) for parent in parents]
+    if len(set(normalized)) != len(normalized):
+        raise ValueError("Skill lineage contains duplicate parents")
+    return lineage
 
 
 def _relative(value: str) -> str:
@@ -152,8 +183,19 @@ def _unpack(meta: dict, root: Path | str | None = None) -> dict[str, bytes]:
     if _digest(payload) != meta.get("skill_package_sha256") or _digest(manifest_bytes) != meta.get("skill_manifest_sha256"):
         raise ValueError("Skill snapshot was modified after import")
     manifest = json.loads(manifest_bytes)
+    if not isinstance(manifest, dict):
+        raise ValueError("Invalid Skill package manifest")
     if manifest.get("skill_id") != meta.get("skill_id") or manifest.get("version") != meta.get("skill_version"):
         raise ValueError("Skill manifest does not match the reviewed identity/version")
+    if manifest.get('instruction_card_format') != meta.get('skill_instruction_format'):
+        raise ValueError('Skill instruction format does not match its immutable manifest')
+    if ("lineage" in manifest) != ("skill_lineage" in meta):
+        raise ValueError("Skill lineage does not match its immutable package manifest")
+    if "lineage" in manifest:
+        if manifest["lineage"] != meta["skill_lineage"]:
+            raise ValueError("Skill lineage does not match its immutable package manifest")
+        validate_skill_lineage(manifest["lineage"], skill_id=meta.get("skill_id"),
+                               skill_version=meta.get("skill_version"))
     files = {}
     try:
         with zipfile.ZipFile(io.BytesIO(payload)) as archive:
@@ -174,11 +216,88 @@ def _unpack(meta: dict, root: Path | str | None = None) -> dict[str, bytes]:
     return files
 
 
+def _instruction_text(raw: bytes) -> str:
+    try:
+        text = raw.decode('utf-8-sig').replace('\r\n', '\n').replace('\r', '\n')
+    except UnicodeError as exc:
+        raise ValueError('Skill instruction body is not valid UTF-8') from exc
+    if text.startswith('---\n'):
+        parts = text.split('---', 2)
+        if len(parts) < 3:
+            raise ValueError('Skill instruction frontmatter is invalid')
+        frontmatter = yaml.safe_load(parts[1]) or {}
+        if not isinstance(frontmatter, dict):
+            raise ValueError('Skill instruction frontmatter is invalid')
+        text = parts[2]
+    return text.strip()
+
+
+def _legacy_instruction_body_matches(meta: dict, actual: str, raw: bytes, root: Path) -> bool:
+    """Accept exact historical Windows bytes, never a normalized blank-line edit."""
+    path = meta.get('file_path')
+    if not isinstance(path, str):
+        return False
+    try:
+        card = _inside(root, Path(path).resolve().relative_to(root).as_posix()).read_bytes()
+        text = card.decode('utf-8-sig')
+        starts = list(re.finditer(r'(?m)^## Skill instructions[ \t]*\r*\n', text))
+        ends = list(re.finditer(r'(?m)^## Asset provenance[ \t]*\r*$', text))
+        if not starts or not ends or ends[-1].start() <= starts[0].end():
+            return False
+        captured = text[starts[0].end():ends[-1].start()].strip()
+        source = raw.decode('utf-8-sig')
+        if source.startswith(('---\n', '---\r\n')):
+            source = source.split('---', 2)[2]
+        old_draft = source.strip().replace('\n', '\r\n')
+        old_wiki = old_draft.replace('\n', '\r\n')
+        candidates = {old_draft, old_wiki} if '\r\r\n' in captured else set()
+        # Old reviewed cards could also be read with universal newlines and
+        # rewritten while superseding or updating metadata. They have no format
+        # marker. Do not extend this lossy compatibility to new review candidates.
+        if meta.get('human_reviewed_at') and not meta.get('skill_instruction_format'):
+            for old in (old_draft, old_wiki):
+                normalized_old = old.replace('\r\n', '\n').replace('\r', '\n')
+                candidates.update((normalized_old, normalized_old.replace('\n', '\r\n')))
+        normalized = captured.replace('\r\n', '\n').replace('\r', '\n')
+        return captured in candidates and normalized == actual
+    except (OSError, ValueError, UnicodeError, IndexError):
+        return False
+
+
+def validate_skill_instruction_body(meta: dict, body: str, *, root: Path | str | None = None,
+                                    files: dict[str, bytes] | None = None) -> None:
+    """Check the captured Skill wrapper, allowing only line-ending/edge whitespace changes."""
+    root = _root(root)
+    files = files if files is not None else _unpack(meta, root)
+    if 'skill_instruction_format' in meta and meta['skill_instruction_format'] != 'exact/v1':
+        raise ValueError('Unsupported Skill instruction card format')
+    if not isinstance(body, str) or 'SKILL.md' not in files:
+        raise ValueError('Skill instructions are unavailable for comparison')
+    expected = _instruction_text(files['SKILL.md'])
+    lines = body.replace('\r\n', '\n').replace('\r', '\n').split('\n')
+    starts = [i for i, line in enumerate(lines) if re.fullmatch(r'## Skill instructions[ \t]*', line)]
+    if not starts:
+        raise ValueError('Skill instructions differ from immutable package; re-import source as a new package')
+    start = starts[0]
+    ends = [i for i, line in enumerate(lines) if i > start and re.fullmatch(r'## Asset provenance[ \t]*', line)]
+    if not ends:
+        raise ValueError('Skill instructions differ from immutable package; re-import source as a new package')
+    actual = '\n'.join(lines[start + 1:ends[-1]]).strip()
+    if actual != expected:
+        if meta.get('skill_instruction_format') or not _legacy_instruction_body_matches(meta, actual, files['SKILL.md'], root):
+            raise ValueError('Skill instructions differ from immutable package; re-import source as a new package')
+
+
 def validate_skill_metadata(meta: dict) -> None:
     _identifier(str(meta.get("skill_id", "")))
+    if 'skill_instruction_format' in meta and meta['skill_instruction_format'] != 'exact/v1':
+        raise ValueError('Unsupported Skill instruction card format')
     validate_category(str(meta.get("skill_category", "")))
     if not re.fullmatch(r"[0-9a-f]{64}", str(meta.get("skill_version", ""))):
         raise ValueError("Skill version must be a SHA256 digest")
+    if "skill_lineage" in meta:
+        validate_skill_lineage(meta["skill_lineage"], skill_id=meta.get("skill_id"),
+                               skill_version=meta.get("skill_version"))
     _unpack(meta)
 
 
@@ -208,6 +327,28 @@ def entries(*, include_drafts: bool = True, root: Path | str | None = None) -> l
     return result
 
 
+def validate_skill_merge_parents(root: Path | str, lineage: dict) -> None:
+    """Require both reviewed merge parents to remain the current active package refs."""
+    root = _root(root)
+    validate_skill_lineage(lineage)
+    parents = lineage['parents']
+    if len(parents) != 2:
+        return
+    reviewed = [meta for meta in entries(include_drafts=False, root=root)
+                if meta.get('status') == 'active' and meta.get('human_reviewed_at')]
+    for ref in parents:
+        matches = [meta for meta in reviewed if
+                   (meta.get('skill_id'), meta.get('skill_version'), meta.get('skill_package_sha256'),
+                    meta.get('skill_manifest_sha256')) ==
+                   (ref['id'], ref['version'], ref['package_sha256'], ref['manifest_sha256'])]
+        if not matches:
+            raise ValueError('Skill merge parent is no longer an active reviewed version')
+        try:
+            _unpack(matches[0], root)
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            raise ValueError('Skill merge parent package is unavailable or changed') from exc
+
+
 def _review_state(meta: dict) -> str:
     if meta.get("status") == "draft":
         return "pending_review"
@@ -234,6 +375,7 @@ def _safe_issue(exc: Exception) -> str:
             ("archive exceeds", "Skill archive exceeds size limits"),
             ("Invalid Skill archive", "Invalid Skill archive"),
             ("assets do not match", "Skill assets do not match their manifest"),
+            ("Skill instructions differ from immutable package", "Skill instructions differ; re-import the source as a new package"),
             ("version does not identify", "Skill version does not identify captured files"),
             ("Unsafe relative path", "Unsafe path in Skill package metadata"),
             ("Symlink or junction", "Symlink or junction is not allowed in Skill assets"),
@@ -278,6 +420,8 @@ def list_versions(root: Path | str, identity: str) -> dict:
             count = None
             try:
                 files = _unpack(meta, root)
+                if 'body' in meta:
+                    validate_skill_instruction_body(meta, meta['body'], root=root, files=files)
                 count = len(files)
             except (ValueError, OSError, KeyError, json.JSONDecodeError) as exc:
                 issue = _safe_issue(exc)
@@ -425,7 +569,7 @@ def compare_versions(root: Path | str, identity: str, from_version: str, to_vers
 def summary(meta: dict) -> dict:
     result = {key: meta.get(key, "") for key in (
         "skill_id", "skill_version", "title", "type", "skill_category", "status",
-        "human_reviewed_at", "slug", "file_path", "skill_description", "skill_dependencies",
+        "human_reviewed_at", "slug", "file_path", "skill_description", "skill_dependencies", "skill_lineage",
     )}
     result["type"] = meta.get("type", meta.get("draft_type", ""))
     return result
@@ -476,7 +620,7 @@ def prepare_bundled_update(root: Path, request: dict) -> dict:
             'review_required': not bool(entry.get('human_reviewed_at')), 'old_wiki_changed': False}
 
 
-def import_skill(source: Path, *, kind: str = "strategy", category: str = "general", skill_id: str | None = None, expected_version: str | None = None) -> dict:
+def import_skill(source: Path, *, kind: str = "strategy", category: str = "general", skill_id: str | None = None, expected_version: str | None = None, lineage: dict | None = None, require_new_id: bool = False) -> dict:
     root = _root()
     if kind not in TYPE_DIRS:
         raise ValueError("Skill type must be strategy, anti-pattern or concept")
@@ -507,17 +651,31 @@ def import_skill(source: Path, *, kind: str = "strategy", category: str = "gener
         raise ValueError("SKILL.md has no instructions")
     hashes = _hashes(files)
     version = _digest(_json(hashes).encode())
+    if lineage is not None:
+        validate_skill_lineage(lineage, skill_id=identity, skill_version=version)
     if expected_version is not None and version != expected_version:
         raise ValueError('Bundled Skill changed; compare it again before preparing a Draft')
     with store._file_lock(_inside(root, ".oks/locks/skills.lock")):
         known = entries()
+        if require_new_id and any(entry.get("skill_id") == identity for entry in known):
+            raise ValueError("Skill ID already exists; choose a new personal variant ID")
+        if lineage is not None and len(lineage['parents']) == 2:
+            validate_skill_merge_parents(root, lineage)
+        duplicates = []
         for entry in known:
             if (entry.get("skill_id"), entry.get("skill_version"), entry.get("type"), entry.get("skill_category")) == (identity, version, kind, category):
                 validate_skill_metadata(entry)
-                return {"duplicate": True, "entry": summary(entry), "skipped": skipped}
+                if entry.get("skill_lineage") != lineage:
+                    raise ValueError("An identical Skill identity/version has different lineage")
+                duplicates.append(entry)
+        if duplicates:
+            return {"duplicate": True, "entry": summary(duplicates[0]), "skipped": skipped}
         location = f"raw/{datetime.now(UTC):%Y/%m/%d}/skills/{identity}-{version[:16]}"
         capture = _inside(root, location)
-        manifest = {"schema_version": "oks-skill-package/v1", "skill_id": identity, "version": version, "files": hashes}
+        manifest = {"schema_version": "oks-skill-package/v1", "skill_id": identity, "version": version,
+                    "files": hashes, "instruction_card_format": "exact/v1"}
+        if lineage is not None:
+            manifest["lineage"] = lineage
         manifest_data = _json(manifest).encode()
         buffer = io.BytesIO()
         with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
@@ -525,6 +683,14 @@ def import_skill(source: Path, *, kind: str = "strategy", category: str = "gener
                 archive.writestr(zipfile.ZipInfo(name), data, compress_type=zipfile.ZIP_DEFLATED)
         package_data = buffer.getvalue()
         package_path, manifest_path = capture / "package.zip", capture / "package-manifest.json"
+        if manifest_path.exists():
+            existing_bytes = manifest_path.read_bytes()
+            existing_manifest = json.loads(existing_bytes)
+            legacy_manifest = {key: value for key, value in manifest.items() if key != 'instruction_card_format'}
+            if existing_manifest == legacy_manifest:
+                # Another classification of the same legacy package must not
+                # rewrite that package's immutable manifest during an upgrade.
+                manifest, manifest_data = existing_manifest, existing_bytes
         for path, data in ((package_path, package_data), (manifest_path, manifest_data)):
             if path.exists() and path.read_bytes() != data:
                 raise ValueError("An existing immutable Skill snapshot differs from this source")
@@ -550,6 +716,10 @@ def import_skill(source: Path, *, kind: str = "strategy", category: str = "gener
             "source_note": f"Original Skill package {identity} at SHA256 {version}; review its instructions and assets before promotion.",
             "drafted_at": datetime.now(UTC).isoformat(), "tags": ["skill", identity, category],
         }
+        if 'instruction_card_format' in manifest:
+            meta['skill_instruction_format'] = manifest['instruction_card_format']
+        if lineage is not None:
+            meta["skill_lineage"] = lineage
         previous = [e for e in known if e.get("skill_id") == identity and e.get("type") == kind
                     and e.get("skill_category") == category and e.get("status") == "active" and e.get("human_reviewed_at")]
         if previous:
@@ -634,6 +804,7 @@ def load(identity: str, *, version: str | None = None, host: str | None = None) 
     root = _root()
     selected = _selected(identity, version)
     files = _unpack(selected)
+    validate_skill_instruction_body(selected, selected.get('body'), root=root, files=files)
     payload = {"entry": summary(selected), "instructions": files["SKILL.md"].decode("utf-8-sig"), "files": sorted(files), "executed": False}
     if host is None:
         cache = _inside(root, f".oks/skill-cache/{identity}/{selected['skill_version']}")

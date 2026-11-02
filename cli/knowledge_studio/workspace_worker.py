@@ -8,6 +8,30 @@ from . import store, workspace
 
 def dispatch(operation, request):
     root = store.repo_root()
+    if operation == 'skill-catalog':
+        from . import skills
+        grouped = {}
+        for card in skills.entries(root=root):
+            identity = card.get('skill_id')
+            if not identity:
+                continue
+            lineage = card.get('skill_lineage')
+            original = lineage.get('derived_from') if isinstance(lineage, dict) else None
+            title = original['id'] + ' · 我的版本' if isinstance(original, dict) and isinstance(original.get('id'), str) else card.get('title') or identity
+            item = grouped.setdefault(identity, {'id': identity, 'title': title, 'reviewed': False})
+            if card.get('status') == 'active' and card.get('human_reviewed_at'):
+                item['version'] = card.get('skill_version')
+                item['reviewed'] = True
+        return {'knowledge_base': str(root), 'items': sorted(grouped.values(), key=lambda item:item['id'])}
+    if operation in ('skill-detail', 'skill-derive', 'skill-merge-preview', 'skill-merge-prepare'):
+        from . import skill_derivation
+        if operation == 'skill-detail':
+            return skill_derivation.detail(root, request.get('ref'))
+        if operation == 'skill-derive':
+            return skill_derivation.derive(root, request)
+        if operation == 'skill-merge-preview':
+            return skill_derivation.preview_merge(root, request)
+        return skill_derivation.prepare_merge(root, request)
     if operation == 'query':
         from .recall import recall
         query = request.get('query')

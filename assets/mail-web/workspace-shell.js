@@ -5,7 +5,7 @@ window.OksNavigation = (() => {
     if (typeof value !== 'string' || !value.startsWith('/') || value.startsWith('//') || value.length > 4096) return null;
     try {
       const url = new URL(value, location.origin);
-      if (url.origin !== location.origin || !['/', '/tasks', '/review', '/debug', '/start'].includes(url.pathname)) return null;
+      if (url.origin !== location.origin || !['/', '/tasks', '/review', '/debug', '/start', '/versions'].includes(url.pathname)) return null;
       url.searchParams.delete('return_to');
       return url.pathname + url.search + url.hash;
     } catch { return null; }
@@ -13,7 +13,7 @@ window.OksNavigation = (() => {
   function here() { return localPath(location.pathname + location.search + location.hash); }
   function fromTask(href) {
     const url = new URL(href, location.origin);
-    if (url.origin === location.origin && ['/', '/review', '/tasks', '/debug', '/start'].includes(url.pathname)) url.searchParams.set('return_to', here());
+    if (url.origin === location.origin && ['/', '/review', '/tasks', '/debug', '/start', '/versions'].includes(url.pathname)) url.searchParams.set('return_to', here());
     return url.pathname + url.search + url.hash;
   }
   const origin = localPath(new URLSearchParams(location.search).get('return_to'));
@@ -24,7 +24,7 @@ window.OksNavigation = (() => {
       header.classList.add('workspace-topbar');
       const refresh = header.querySelector('#refresh') || header.querySelector('a.quiet');
       const label = document.createElement('span'); label.className = 'workspace-title';
-      label.textContent = ({'/tasks':'目标','/review':'学习 / 审核','/debug':'知识使用','/start':'开始使用'})[location.pathname] || '工作区';
+      label.textContent = ({'/tasks':'目标','/review':'学习 / 审核','/debug':'知识使用','/start':'开始使用','/versions':'学习 / 技能'})[location.pathname] || '工作区';
       const tools = document.createElement('div'); tools.className = 'workspace-tools';
       for (const [text, href] of [['接入检查','/start'],['学习审核','/review'],['技能版本','/versions'],['知识热力图','/debug#heatmap']]) {
         const link = document.createElement('a'); link.textContent = text; link.href = href;
@@ -47,7 +47,7 @@ window.OksNavigation = (() => {
       };
       const nav = document.createElement('nav'); nav.setAttribute('aria-label','工作区');
       const secondary = document.createElement('nav'); secondary.className='workspace-secondary'; secondary.setAttribute('aria-label','讨论辅助');
-      for (const [text, href, icon, active] of [['讨论','/#collaboration','discussion',false],['目标','/tasks','goals',location.pathname==='/tasks'],['学习','/#wiki','learning',['/review','/debug'].includes(location.pathname)],['通信','/#messages','messages',false],['成员','/#agents','members',false]]) {
+      for (const [text, href, icon, active] of [['讨论','/#collaboration','discussion',false],['目标','/tasks','goals',location.pathname==='/tasks'],['学习','/#wiki','learning',['/review','/debug','/versions'].includes(location.pathname)],['通信','/#messages','messages',false],['成员','/#agents','members',false]]) {
         const link = document.createElement('a'); link.href = href==='/tasks'&&origin?.startsWith('/tasks')?origin:href; link.setAttribute('aria-label',text==='通信'?'通信记录':text);
         // Only fixed, repository-owned icon markup is inserted here.
         link.innerHTML = '<svg aria-hidden="true" viewBox="0 0 24 24">'+paths[icon]+'</svg><span>'+text+'</span>';

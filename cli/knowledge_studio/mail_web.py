@@ -894,13 +894,19 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(403, {"error": "loopback Host required"})
             return
         route = self.path.split("?", 1)[0]
-        if route in {'/api/workspace', '/api/tasks/work-review', '/api/tasks/workflow', '/api/tasks/source', '/api/tasks/artifact', '/api/tasks/options', '/api/tasks/goal', '/api/tasks/reminders', '/api/tasks/overview', '/api/tasks/review', '/api/tasks/handoff', '/api/tasks/sources', '/api/learning/draft', '/api/skills/versions', '/api/skills/diff', '/api/skills/bundled-diff'}:
+        if route in {'/api/workspace', '/api/tasks/work-review', '/api/tasks/workflow', '/api/tasks/source', '/api/tasks/artifact', '/api/tasks/options', '/api/tasks/goal', '/api/tasks/reminders', '/api/tasks/overview', '/api/tasks/review', '/api/tasks/handoff', '/api/tasks/sources', '/api/learning/draft', '/api/skills/versions', '/api/skills/diff', '/api/skills/bundled-diff', '/api/skills/catalog', '/api/skills/source', '/api/skills/merge-preview'}:
             from . import workspace
             query = parse_qs(urlsplit(self.path).query)
             try:
                 if route == '/api/workspace':
                     result = workspace.diagnostics(self.server.kb_root, port=self.server.server_port,
                         local_review=self.server.local_review, local_edit=self.server.local_edit)
+                elif route.startswith('/api/skills/') and route.rsplit('/', 1)[-1] in ('catalog', 'source', 'merge-preview'):
+                    action = route.rsplit('/', 1)[-1]
+                    payload = {} if action == 'catalog' else {'ref': {'id': query.get('id', [''])[0], 'version': query.get('version', [''])[0]}} if action == 'source' else {
+                        'ours': {'id': query.get('id', [''])[0], 'version': query.get('version', [''])[0]},
+                        'theirs': {'id': query.get('upstream_id', [''])[0], 'version': query.get('upstream_version', [''])[0]}}
+                    result = workspace.invoke(self.server.kb_root, {'catalog':'skill-catalog', 'source':'skill-detail', 'merge-preview':'skill-merge-preview'}[action], payload)
                 elif route == '/api/tasks/work-review':
                     from .work_review import build
                     result = build(self.server.kb_root, period=query.get('period', ['week'])[0], date=query.get('date', [None])[0])
@@ -1170,7 +1176,7 @@ class Handler(BaseHTTPRequestHandler):
             self._reject_post(403, 'same-origin JSON requests required')
             return
         route = self.path.split("?", 1)[0]
-        if route in {'/api/tasks/create', '/api/skills/import-bundled', '/api/tasks/reminders', '/api/tasks/lifecycle', '/api/tasks/accept-sources', '/api/tasks/progress', '/api/tasks/correction'}:
+        if route in {'/api/tasks/create', '/api/skills/import-bundled', '/api/skills/derive', '/api/skills/merge-prepare', '/api/tasks/reminders', '/api/tasks/lifecycle', '/api/tasks/accept-sources', '/api/tasks/progress', '/api/tasks/correction'}:
             if not getattr(self.server, 'local_edit', False):
                 self._reject_post(403, 'Local editing is disabled; use oks mail serve --local-edit')
                 return
@@ -1183,7 +1189,9 @@ class Handler(BaseHTTPRequestHandler):
                 if request.get('expected_knowledge_base') != str(self.server.kb_root):
                     self.send_json(409, {'error': '知识库已切换，请重试连接后重新查看。', 'code': 'instance_changed'})
                     return
-                if route == '/api/tasks/correction':
+                if route in ('/api/skills/derive', '/api/skills/merge-prepare'):
+                    result = workspace.invoke(self.server.kb_root, 'skill-derive' if route.endswith('/derive') else 'skill-merge-prepare', request)
+                elif route == '/api/tasks/correction':
                     result = workspace.propose_task_correction(self.server.kb_root, request)
                 elif route == '/api/tasks/accept-sources':
                     result = workspace.accept_task_sources(self.server.kb_root, request)
