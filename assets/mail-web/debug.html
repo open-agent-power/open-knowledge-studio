@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>检索与上下文 · OKS Debug</title><link rel="icon" href="/favicon.svg"><link rel="stylesheet" href="/debug.css"><script src="/debug.js" defer></script></head>
+<body>
+<header><a class="brand" href="/">oks<span>.</span></a><a href="/">返回工作区</a><a href="#feedback">反馈与学习</a><span class="edition">STUDIO / DEBUG</span><button id="refresh" type="button">刷新记录</button></header>
+<main>
+<div class="intro"><div><p class="eyebrow">CONTEXT OBSERVATORY</p><h1>检索与上下文</h1><p>沿着一次召回，查看它找到什么、输出什么，以及来源是否可追溯。</p></div><span class="badge">本地 · 只读</span></div>
+<div class="boundary">搜索命中 → 按需加载 → Hook 输出。部署回执单独列出；宿主是否消费上下文、是否执行，仍需宿主证据。</div>
+<section class="summary" aria-label="记录概览"><article><span>已保存查询</span><strong id="total">—</strong></article><article><span>Hook 输出记录</span><strong id="emitted">—</strong></article><article><span>降级 / 实验记录</span><strong id="degraded">—</strong></article><article><span>部署回执</span><strong id="deploymentsCount">—</strong></article></section>
+<section aria-labelledby="recordsTitle"><div class="section-head"><h2 id="recordsTitle">最近记录</h2><span>最多保留 200 条 · 不记录提示词正文</span></div>
+<div class="filters"><label>筛选记录<input id="filter" type="search" placeholder="标题、Skill ID 或来源路径"></label><label>阶段<select id="stage"><option value="">全部阶段</option><option value="retrieved">检索命中</option><option value="hook_emitted">Hook 已输出</option><option value="hook_skipped">Hook 未输出</option></select></label><label>后端<select id="backend"><option value="">全部后端</option><option value="fts5">FTS5 / BM25</option><option value="like">LIKE 降级</option><option value="native">Native 对照</option><option value="fusion">Fusion 实验</option></select></label></div>
+<p id="status" role="status" aria-live="polite">正在读取本地记录…</p><div id="records"></div></section>
+<section class="deployment-section" aria-labelledby="deployTitle"><h2 id="deployTitle">部署回执</h2><p>记录安装过的受管 Skill 版本，不代表宿主已加载或执行，也不保证部署文件当前未变。</p><div id="deployments"></div></section>
+<details class="help"><summary>如何留下真实诊断记录</summary><p>单次查询：<code>oks recall "查询内容" --debug-record --format json</code>；Skill 查询：<code>oks skills search "任务" --debug-record</code>。</p><p>Hook：在知识库 <code>settings/recall.yaml</code> 顶层设置 <code>debug_record: true</code>，然后在已安装 Hook 的宿主发起任务。诊断保存在本地 <code>.oks/retrieval-debug.json</code>。记录包含命中标题、来源版本与历史判断，请按本地知识库的隐私要求保管。</p></details>
+<section id="feedback" class="deployment-section" aria-labelledby="feedbackTitle">
+<h2 id="feedbackTitle">反馈与学习候选</h2>
+<p>仅查看明确指定的主体、项目和任务。范围标签用于过滤，不代表登录认证；私人原文不会加入上方诊断记录。</p>
+<form id="feedbackForm" class="filters">
+<label>主体<input id="feedbackSubject" required maxlength="120" autocomplete="off" placeholder="例如：demo-user"></label>
+<label>项目<input id="feedbackProject" required maxlength="120" autocomplete="off" placeholder="例如：team-report"></label>
+<label>任务范围<input id="feedbackTask" required maxlength="120" autocomplete="off" placeholder="与任务约定 scope 一致"></label>
+<button type="submit" id="feedbackRead">读取此范围</button><button type="button" id="feedbackClear">清空显示</button>
+</form>
+<p id="feedbackStatus" role="status" aria-live="polite">尚未读取私人反馈。</p><div id="feedbackResults"></div>
+<details class="help"><summary>反馈如何进入学习</summary><p>采用、修改、拒绝和观察分开记录。候选需按准确修订审核；存在冲突、来源过期、反馈已修正或撤回时，不注入后续任务。明确导出后才会进入普通 Draft 审核。</p><p>使用 <code>oks feedback --help</code> 查看显式记录、提议、审核、撤回、导出和删除命令。该面板只读，不执行审核或删除。</p></details>
+</section>
+</main><footer>OKS · 知识支持判断，记录提供证据。</footer>
+</body></html>

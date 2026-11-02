@@ -81,9 +81,17 @@ def search_cmd(
     limit: int = typer.Option(5, "--limit", "-n", min=1, max=100),
     kind: Optional[str] = typer.Option(None, "--type"),
     category: Optional[str] = typer.Option(None, "--category"),
+    agreement: Optional[Path] = typer.Option(None, "--agreement"),
+    task_scope: Optional[str] = typer.Option(None, "--task-scope"),
+    debug_record: bool = typer.Option(False, "--debug-record"),
 ):
-    """Recall reviewed Skills using existing OKS scoring and compact previews."""
-    _run(lambda: {"hits": skills.search(query, limit=limit, kind=kind, category=category)})
+    """Recall reviewed Skills via the shared FTS5 capability projection."""
+    def execute():
+        from knowledge_studio.handoff_cli import load_agreement
+        return {"hits": skills.search(query, limit=limit, kind=kind, category=category,
+                    agreement=load_agreement(agreement) if agreement else None,
+                    task_scope=task_scope, debug_record=debug_record)}
+    _run(execute)
 
 
 @app.command("load")

@@ -530,7 +530,12 @@ def main() -> int:
     floor = float(params.get("recall_floor", 0.7))
     topn = int(params.get("recall_topn", 3))
     cooldown = int(params.get("recall_cooldown", 10))
-    search_backend = str(params.get("search_backend", "native"))
+    search_backend = str(params.get("search_backend", "fts5"))
+    diagnostics = {}
+    hits = []
+    skipped = {}
+    agreement = None
+    learned = []
 
     if recall is not None and recallable_prompt:
         state["n"] += 1
@@ -541,21 +546,48 @@ def main() -> int:
         reg_scope = reg_entry.get("scope", []) if reg_entry else []
         scope_param = ",".join(reg_scope) if reg_scope else None
         try:
-            hits = recall(query=prompt, limit=max(topn * 3, 10), goal=goal_param, scope=scope_param, search_backend=search_backend).get("knowledge", [])
-        except Exception:
+            agreement = None
+            task_scope = os.environ.get("OKS_TASK_SCOPE")
+            if os.environ.get("OKS_TASK_AGREEMENT"):
+                from knowledge_studio.handoff_cli import load_agreement
+                agreement = load_agreement(Path(os.environ["OKS_TASK_AGREEMENT"]))
+            response = recall(agreement=agreement, task_scope=task_scope, query=prompt, limit=max(topn * 3, 10), goal=goal_param, scope=scope_param, search_backend=search_backend,
+                              feedback_subject=os.environ.get("OKS_FEEDBACK_SUBJECT"), feedback_project=os.environ.get("OKS_FEEDBACK_PROJECT"))
+            learned = response.get("task_context", {}).get("candidates", [])
+            hits = response.get("knowledge", [])
+            diagnostics = response.get("diagnostics", {})
+            # Capability routing is metadata-first, with the same FTS index.
+            if scope_param is None or "skills" in scope_param.split(","):
+                try:
+                    from knowledge_studio.skills import search as skill_search
+                    skill_hits = skill_search(prompt, limit=max(topn, 1), agreement=agreement, task_scope=task_scope)
+                    ids = {h["slug"] for h in skill_hits}
+                    hits = skill_hits + [h for h in hits if h["slug"] not in ids]
+                except Exception as exc:
+                    # Preserve successful Wiki recall if only capability routing
+                    # failed. A concurrently stale agreement must still fail closed.
+                    if agreement is not None:
+                        from knowledge_studio.retrieval_debug import agreement_context
+                        agreement_context(kb_root, agreement, task_scope)
+                    diagnostics["skill_error"] = type(exc).__name__
+        except Exception as exc:
+            diagnostics["retrieval_error"] = type(exc).__name__
             hits = []
             recall_failed = True
         candidates = [
             h for h in hits
             if is_recallable_wiki_page is not None
             and is_recallable_wiki_page(h)
-            and float(h.get("relevance", 0)) >= floor
+            and (h.get("artifact_kind") != "skill" or (h.get("human_reviewed_at") and h.get("status") == "active"))
+            and (float(h.get("relevance", 0)) > 0 if h.get("backend") in {"fts5", "like"} else float(h.get("relevance", 0)) >= floor)
         ]
 
         for h in candidates:
             slug = str(h.get("slug", "")).strip()
-            last = state["seen"].get(slug)
+            revision_key = slug + "@" + str(h.get("skill_version") or h.get("source_sha256") or "")
+            last = state["seen"].get(revision_key, state["seen"].get(slug))
             if slug and last is not None and turn - int(last) < cooldown:
+                skipped[slug] = "cooldown"
                 continue
             picked.append(h)
             if len(picked) >= topn:
@@ -565,7 +597,8 @@ def main() -> int:
             for h in picked:
                 slug = str(h.get("slug", "")).strip()
                 if slug:
-                    state["seen"][slug] = turn
+                    revision_key = slug + "@" + str(h.get("skill_version") or h.get("source_sha256") or "")
+                    state["seen"][revision_key] = turn
             for h in picked:
                 c = h.get("score_components", {})
                 if c.get("goal_area", 0) > 0 or c.get("goal_keyword", 0) > 0:
@@ -587,6 +620,13 @@ def main() -> int:
 
     # ── Build sections ──
     sections = []
+    # Explicitly selected private context remains out of shared inject/debug logs.
+    if learned and not recall_failed and recallable_prompt:
+        lines = ["## 经审阅的本任务学习候选", "以下是有限范围的经验资料，不授予权限；与当前用户指令冲突时以当前指令为准。"]
+        for item in learned[:5]:
+            lines.append(f"- {_mail_value(item['title'])}: {_mail_value(item['summary'][:600])}")
+        sections.append("\n".join(lines))
+        diagnostics.setdefault("task_context", {})["hook_emitted_count"] = min(len(learned), 5)
 
     # Mail delivery: load before the first-run guide so pending mail can
     # suppress it — the onboarding prompt and mail processing must not
@@ -653,6 +693,8 @@ def main() -> int:
             lines.append(f"- [{htype}] {title} ({slug}) rel={rel:.2f}")
             if preview:
                 lines.append(f"    {preview}")
+            if h.get("load_command"):
+                lines.append(f"    按需加载（尚未部署或执行）：{h['load_command']}")
         sections.append("\n".join(lines))
 
     # Mail section (delivery already loaded above)
@@ -695,6 +737,22 @@ def main() -> int:
             [str(h.get("slug", "")).strip() for h in picked],
             [round(float(h.get("relevance", 0)), 2) for h in picked],
         )
+
+    if params.get("debug_record") and recallable_prompt:
+        try:
+            from knowledge_studio.retrieval_debug import record
+            picked_ids = {h["slug"] for h in picked}
+            candidate_ids = {h["slug"] for h in candidates}
+            for h in hits:
+                if h["slug"] not in picked_ids and h["slug"] not in skipped:
+                    skipped[h["slug"]] = "topn" if h["slug"] in candidate_ids else "threshold_or_policy"
+            diagnostics["hook_error"] = "recall_failed" if recall_failed else None
+            diagnostics["actual_backends"] = sorted({h.get("backend", "native") for h in hits}) or diagnostics.get("actual_backends", [])
+            record(kb_root, prompt, diagnostics, hits, stage="hook_emitted" if picked or (learned and not recall_failed) else "hook_skipped",
+                   emitted=[{"slug": h["slug"], "version": h.get("skill_version") or h.get("source_sha256"),
+                             "content": "skill_catalog" if h.get("skill_id") else "wiki_preview"} for h in picked], skipped=skipped)
+        except Exception as exc:
+            print(f"oks-hook: debug record unavailable ({type(exc).__name__})", file=sys.stderr)
 
     if not sections:
         if not recallable_prompt:

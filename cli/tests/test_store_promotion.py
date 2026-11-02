@@ -380,3 +380,65 @@ def test_dedup_hit_still_applies_the_declared_relationship(monkeypatch, tmp_path
     superseded = store.get_wiki_page(other.stem)
     assert superseded["status"] == "superseded", "A4 relationship was dropped"
     assert superseded["superseded_by"]
+
+
+@pytest.mark.parametrize("existing", [False, True])
+def test_promotion_preserves_decision_options(monkeypatch, tmp_path, existing):
+    monkeypatch.setenv("OKS_ROOT", str(tmp_path))
+    body = "Keep the scoped judgment and the unresolved alternative."
+    if existing:
+        store.write_wiki_page("Existing", body, wiki_type="concepts")
+    options = [
+        {"id": "local", "chosen": True, "rationale": "small report", "conditions": ["offline"]},
+        {"id": "cloud", "chosen": False, "rejected_because": "private input"},
+        {"id": "review", "status": "unresolved", "extension": {"owner": "team"}},
+    ]
+    _write_draft(tmp_path, "decisions", body, options=options)
+    page = store.get_wiki_page(store.promote_draft("decisions"))
+    assert page["options"] == options
+    assert page["human_reviewed_at"]
+
+
+def test_conflicting_dedup_decisions_keep_candidate_and_wiki(monkeypatch, tmp_path):
+    monkeypatch.setenv("OKS_ROOT", str(tmp_path))
+    body = "Same wording, different decisions."
+    path = store.write_wiki_page("Original", body, wiki_type="concepts",
+                                 options=[{"id": "A", "chosen": True}])
+    before = path.read_bytes()
+    _write_draft(tmp_path, "conflict", body, options=[{"id": "A", "chosen": False}])
+    with pytest.raises(ValueError, match="options"):
+        store.promote_draft("conflict")
+    assert path.read_bytes() == before
+    assert (tmp_path / "drafts/conflict.md").exists()
+
+
+@pytest.mark.parametrize("options", ["text", {}, [1], [{"id": "x", "chosen": "false"}],
+    [{"id": "x", "rationale": 7}], [{"id": "x", "extra": float("nan")}],
+    [{"id": "x", "chosen": True}, {"id": "x", "chosen": False}]])
+def test_invalid_options_keep_candidate_without_wiki_writes(monkeypatch, tmp_path, options):
+    monkeypatch.setenv("OKS_ROOT", str(tmp_path))
+    _write_draft(tmp_path, "invalid-options", "Invalid decision.", options=options)
+    with pytest.raises(ValueError, match="options"):
+        store.promote_draft("invalid-options")
+    assert (tmp_path / "drafts/invalid-options.md").exists()
+    assert not list((tmp_path / "wiki").rglob("*.md"))
+
+
+def test_dedup_io_failure_keeps_candidate_and_can_retry_decisions(monkeypatch, tmp_path):
+    monkeypatch.setenv("OKS_ROOT", str(tmp_path))
+    body = "Review retry with the same decision."
+    page = store.write_wiki_page("Original", body, wiki_type="concepts")
+    options = [{"id": "offline", "chosen": True}]
+    _write_draft(tmp_path, "retry", body, options=options)
+    original = store._apply_relationship
+    def fail(*args, **kwargs):
+        raise OSError("simulated relationship write failure")
+    monkeypatch.setattr(store, "_apply_relationship", fail)
+    with pytest.raises(OSError, match="simulated"):
+        store.promote_draft("retry")
+    assert (tmp_path / "drafts/retry.md").exists()
+    assert store.parse_wiki_file(page)["options"] == options
+    monkeypatch.setattr(store, "_apply_relationship", original)
+    assert store.promote_draft("retry") == page.stem
+    assert store.parse_wiki_file(page)["options"] == options
+    assert not (tmp_path / "drafts/retry.md").exists()

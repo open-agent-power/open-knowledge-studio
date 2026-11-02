@@ -38,6 +38,8 @@ from knowledge_studio.recall import (
 from knowledge_studio.vfs import FS_RESPONSE_SCHEMA, VfsError, VfsService
 from knowledge_studio.workbuddy import inspect_workbuddy_adapter
 from knowledge_studio.skills_cli import app as skills_app
+from knowledge_studio.handoff_cli import app as handoff_app
+from knowledge_studio.feedback_cli import app as feedback_app
 
 # ── ingest: connector is a regular PyPI dependency (oks-connector>=0.2.0) ──
 from oks_connector.raw_bundle_adapter import (
@@ -230,6 +232,8 @@ app.add_typer(drafts_app, name="drafts")
 app.add_typer(config_app, name="config")
 app.add_typer(hook_app, name="hook")
 app.add_typer(mail_app, name="mail")
+app.add_typer(handoff_app, name="handoff")
+app.add_typer(feedback_app, name="feedback")
 app.add_typer(registry_app, name="registry")
 app.add_typer(eval_app, name="eval")
 app.add_typer(trace_app, name="trace")
@@ -797,6 +801,11 @@ def recall_cmd(
     type_filter: Optional[str] = typer.Option(None, "--type", "-t", help="Restrict the knowledge path to one wiki type"),
     knowledge_only: bool = typer.Option(False, "--knowledge-only", help="Skip the episodic path — only wiki/ results, no raw/ source material"),
     search_backend: str = typer.Option(None, "--search-backend", help="Search backend: native | fts5 | fusion | <connector-name> (默认读 settings/recall.yaml，显式传值优先)"),
+    agreement: Optional[Path] = typer.Option(None, "--agreement", envvar="OKS_TASK_AGREEMENT", help="Reviewed task agreement JSON"),
+    task_scope: Optional[str] = typer.Option(None, "--task-scope", envvar="OKS_TASK_SCOPE", help="Exact agreement scope label"),
+    feedback_subject: Optional[str] = typer.Option(None, "--feedback-subject", envvar="OKS_FEEDBACK_SUBJECT", help="Explicit private feedback subject (routing label, not authentication)"),
+    feedback_project: Optional[str] = typer.Option(None, "--feedback-project", envvar="OKS_FEEDBACK_PROJECT", help="Explicit private feedback project; requires current agreement and scope"),
+    debug_record: bool = typer.Option(False, "--debug-record", help="Store local bounded retrieval evidence"),
     floor_override: Optional[float] = typer.Option(None, "--floor", help="临时调 floor（不改 settings/recall.yaml，一次性）"),
 ):
     """Two-path recall: episodic (raw/) + knowledge (wiki/).
@@ -808,7 +817,11 @@ def recall_cmd(
     load_recall_params()  # 触发 env 迁移警告（env 已废弃）
     output_format = _validate_output_format(output_format)
     try:
+        from knowledge_studio.handoff_cli import load_agreement
+        task = load_agreement(agreement) if agreement else None
         result = recall(
+            agreement=task, task_scope=task_scope, debug_record=debug_record,
+            feedback_subject=feedback_subject, feedback_project=feedback_project,
             query=query,
             topic_id=topic_id,
             limit=limit,
@@ -855,6 +868,8 @@ def recall_cmd(
             preview = item.get("body_preview", "")[:200]
             if explain and item.get("reasons"):
                 preview += "\n\nwhy: " + ", ".join(item["reasons"])
+            if item.get("load_command"):
+                preview += "\n\n按需加载（尚未执行）：" + item["load_command"]
             console.print(Panel(
                 preview,
                 title=f"[{item.get('type', '')}] {item.get('title', '')} ({item.get('slug', '')})",
@@ -863,6 +878,11 @@ def recall_cmd(
                 expand=False,
             ))
 
+    task_context = result.get("task_context", {})
+    if task_context.get("status") != "not_requested":
+        console.print("\n本任务要求：" + str(task_context.get("status")), markup=False)
+        for candidate in task_context.get("candidates", []):
+            console.print(candidate["title"] + ": " + candidate["summary"], markup=False)
     if not result["episodic"] and not result["knowledge"]:
         console.print("[dim]No results from either path.[/dim]")
 
@@ -2847,6 +2867,7 @@ def mail_delegate(
     title: str = typer.Option("", "--title", "-t", help="Handoff title"),
     context: str = typer.Option("", "--context", help="Relevant context, files, or prior decisions"),
     acceptance: str = typer.Option("", "--acceptance", help="Observable acceptance criteria"),
+    agreement: Optional[Path] = typer.Option(None, "--agreement", help="JSON snapshot from oks handoff prepare"),
     session_id: str = typer.Option("", "--session-id", help="Originating Agent session ID"),
     notify: bool = typer.Option(False, "--notify/--no-notify", help="Request host notification; safe queued fallback when unsupported"),
     sender_kind: str = typer.Option("agent", "--sender-kind", help="Message provenance: human | agent | unknown"),
@@ -2872,6 +2893,8 @@ def mail_delegate(
     if sid:
         mail_domain.register_session(root, sid, sender, os.getcwd(), machine_id=mid)
     try:
+        from knowledge_studio.handoff_cli import load_agreement
+        snapshot = load_agreement(agreement) if agreement is not None else None
         result = mail_domain.delegate_message(
             root,
             task=task,
@@ -2885,8 +2908,9 @@ def mail_delegate(
             origin_machine_id=mid,
             evidence_refs=refs,
             notify=notify,
+            agreement=snapshot,
         )
-    except ValueError as exc:
+    except (OSError, ValueError, UnicodeError) as exc:
         console.print(f"[red]{exc}[/red]")
         raise typer.Exit(2)
     _emit_mail_action(

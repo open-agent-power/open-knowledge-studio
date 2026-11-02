@@ -57,13 +57,13 @@ class SearchBackend(Protocol):
         ...
 
 
-def get_backend(name: str = "native", root: str | None = None, **kwargs: Any) -> SearchBackend:
+def get_backend(name: str = "fts5", root: str | None = None, **kwargs: Any) -> SearchBackend:
     """按名字取 backend。
 
     native / fts5 / fusion 内置；其他名字查 connector entry_points
     (group="oks_search_backend")，找不到则 ValueError。
     """
-    n = (name or "native").lower()
+    n = (name or "fts5").lower()
     if n == "native":
         from .native import NativeBackend
 

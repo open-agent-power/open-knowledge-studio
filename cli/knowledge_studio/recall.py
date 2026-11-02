@@ -277,9 +277,9 @@ def load_recall_params(root=None):
         "recall_floor": 0.7, "recall_topn": 3, "recall_minlen": 6,
         "recall_cooldown": 10,
         "posttool_mode": "signal", "posttool_signal_rel_floor": 2.5,
-        "conflict_window": 300, "search_backend": "native", "mail_topn": 3,
+        "conflict_window": 300, "search_backend": "fts5", "mail_topn": 3,
         # v0.6.3: embedding fallback — fts5 召回空/明显不足时切 embedding 补充
-        "embedding_fallback": False,
+        "embedding_fallback": False, "debug_record": False,
         # v0.6.0: inject token budget (CV from karpathy-wiki L0-L3)
         "inject_budget_chars": 4000, "inject_per_page_chars": 200,
         "inject_title_only_floor": 0.5,
@@ -304,6 +304,7 @@ def load_recall_params(root=None):
             params["posttool_signal_rel_floor"] = float(pc.get("signal_rel_floor", params["posttool_signal_rel_floor"]))
             params["conflict_window"] = int(cc.get("window", params["conflict_window"]))
             params["search_backend"] = str(data.get("search_backend", params["search_backend"]))
+            params["debug_record"] = bool(data.get("debug_record", False))
             params["mail_topn"] = int(data.get("mail_topn", params["mail_topn"]))
             params["embedding_fallback"] = bool(data.get("embedding_fallback", params["embedding_fallback"]))
             # v0.6.0: inject budget
@@ -431,6 +432,11 @@ def recall(
     type_filter: str | None = None,
     knowledge_only: bool = False,
     search_backend: str | None = None,
+    agreement: dict | None = None,
+    task_scope: str | None = None,
+    debug_record: bool = False,
+    feedback_subject: str | None = None,
+    feedback_project: str | None = None,
 ) -> dict[str, Any]:
     """Two-path recall: episodic (raw/ + profiles/) + knowledge (wiki/).
 
@@ -444,11 +450,20 @@ def recall(
     raw source material mixed in. Both default to the previous behaviour, so
     existing callers including the auto-recall hook are unaffected.
     """
+    from .retrieval_debug import agreement_context, record
+    from .store import repo_root
+    task = agreement_context(repo_root(), agreement, task_scope)
+    if task:
+        bound_goal = Path(task["goal_path"]).stem
+        if goal not in (None, "active", bound_goal):
+            raise ValueError("Goal differs from task agreement")
+        goal = bound_goal
+    diagnostics = {"task": task}
     goal_context = _resolve_goal_context(goal, goal_boost=goal_boost)
     # v0.6.0: CLI 未显式传 search_backend 时读 settings/recall.yaml
     if not search_backend:
-        search_backend = load_recall_params().get("search_backend", "native")
-    return {
+        search_backend = load_recall_params().get("search_backend", "fts5")
+    result = {
         "schema_version": RECALL_RESPONSE_SCHEMA,
         "query": query,
         "topic_id": topic_id,
@@ -474,8 +489,31 @@ def recall(
             explain=explain,
             type_filter=type_filter,
             search_backend=search_backend,
+            diagnostics=diagnostics,
         ),
+        "diagnostics": diagnostics,
     }
+    # Explicit opt-in: profile identity never implicitly enables private feedback.
+    task_context = {"status": "not_requested", "candidates": [], "excluded_counts": {}}
+    if feedback_subject or feedback_project:
+        if not (feedback_subject and feedback_project):
+            task_context["status"] = "scope_incomplete"
+        elif not task:
+            task_context["status"] = "agreement_required"
+        else:
+            from .feedback import select_context
+            try:
+                task_context = select_context(repo_root(), {"subject": feedback_subject,
+                    "project": feedback_project, "task": task_scope}, agreement)
+            except (OSError, ValueError, KeyError, TypeError):
+                # Preserve ordinary recall, never expose private exception text.
+                task_context["status"] = "unavailable"
+    result["task_context"] = task_context
+    diagnostics["task_context"] = {"status": task_context["status"],
+        "selected_count": len(task_context["candidates"]), "excluded_counts": task_context["excluded_counts"]}
+    if debug_record:
+        result["debug_record_id"] = record(repo_root(), query, diagnostics, result["knowledge"])
+    return result
 
 
 def _profile_in_scope(
@@ -659,6 +697,9 @@ def _recall_knowledge_via_backend(
     explain: bool,
     type_filter: str | None = None,
     search_backend: str | None = None,
+    strategy: str = "knowledge",
+    category: str | None = None,
+    diagnostics: dict | None = None,
 ) -> list[dict[str, Any]]:
     """Dispatch knowledge recall — Triple-Layer Recall 召回层 (CONSTITUTION A8).
 
@@ -676,12 +717,19 @@ def _recall_knowledge_via_backend(
     # fts5 (默认, recall.yaml) → Node-BM25 召回, 灵魂因子在注入层 boost.
     # native (向后兼容) → 6+1 因子召回算分, v0.6.0 前默认, 仍可 --search-backend native.
     # fusion → 实验位, 灵魂 re-rank 在召回层是负优化 (R@1 0.825→0.805).
+    if diagnostics is None:
+        diagnostics = {}
+    diagnostics.update(strategy=strategy, filtered={})
     if not search_backend or search_backend in ("native", "legacy"):
         # v0.6.1: backend None 时读 settings/recall.yaml（CLI recall() 同逻辑）
         # 之前 None 直接走 native，导致 eval 测不到 fts5/fusion
         if not search_backend:
-            search_backend = load_recall_params().get("search_backend", "native")
+            search_backend = load_recall_params().get("search_backend", "fts5")
         if search_backend in ("native", "legacy"):
+            if strategy.startswith("capability"):
+                raise ValueError("Capability routing requires fts5; Native is a Wiki experiment only")
+            _logger.warning("Native recall is an explicit experimental control; use fts5 for production")
+            diagnostics.update(requested_backend=search_backend, actual_backends=["native"], experimental=True)
             return _recall_knowledge_with_context(
             query=query,
             topic_id=topic_id,
@@ -696,7 +744,10 @@ def _recall_knowledge_via_backend(
     from .store import repo_root
 
     backend = get_backend(search_backend, root=repo_root())
+    diagnostics.update(requested_backend=search_backend, experimental=search_backend == "fusion")
     backend_kwargs: dict[str, Any] = {}
+    if strategy != "knowledge":
+        backend_kwargs.update(strategy=strategy, category=category)
     requested = goal_context.get("requested", "none")
     if goal_context.get("mode") != "none" and requested not in ("active", "none"):
         backend_kwargs["goal"] = requested
@@ -706,6 +757,10 @@ def _recall_knowledge_via_backend(
     warned_missing: set[str] = set()
     scope_areas = {s.strip().lower() for s in (scope or "").split(",") if s.strip()}
     type_lower = type_filter.strip().lower() if type_filter else ""
+
+    def _reject(reason, slug):
+        diagnostics["filtered"].setdefault(reason, set()).add(slug)
+        return False
 
     def _eligible_hit(hit: Any) -> bool:
         page = pages.get(hit.slug)
@@ -720,12 +775,19 @@ def _recall_knowledge_via_backend(
                 warned_missing.add(hit.slug)
             return False
         if not is_recallable_wiki_page(page):
-            return False
+            return _reject("inactive_or_source", hit.slug)
+        if strategy.startswith("capability"):
+            if not Path(page.get("file_path", "")).resolve().is_relative_to((repo_root() / "wiki/skills").resolve()):
+                return _reject("not_skill_path", hit.slug)
+            if page.get("artifact_kind") != "skill" or page.get("status") != "active" or not page.get("human_reviewed_at"):
+                return _reject("not_reviewed_skill", hit.slug)
+            if category and page.get("skill_category") != category and not str(page.get("skill_category", "")).startswith(category + "/"):
+                return _reject("category_mismatch", hit.slug)
         if scope_areas and str(page.get("area", "")).strip().lower() not in scope_areas:
-            return False
+            return _reject("scope_mismatch", hit.slug)
         page_type = str(page.get("type", page.get("category", "concept"))).strip().lower()
         if type_lower and page_type != type_lower:
-            return False
+            return _reject("type_mismatch", hit.slug)
         return True
 
     def _search_admitted(selected_backend: Any) -> list[Any]:
@@ -747,6 +809,12 @@ def _recall_knowledge_via_backend(
                 return list(admitted.values())[:limit]
             fetch_limit = min(fetch_limit * 2, maximum)
 
+    # Corpus policy counts are distinct from query matches returned by the index.
+    from types import SimpleNamespace
+    for slug in pages:
+        _eligible_hit(SimpleNamespace(slug=slug, backend=search_backend))
+    diagnostics["corpus_excluded"] = {reason: len(slugs) for reason, slugs in diagnostics["filtered"].items()}
+    diagnostics["filtered"] = {}
     hits = _search_admitted(backend)
 
     # v0.6.3: embedding fallback — fts5/native 召回空或明显不足时，
@@ -755,6 +823,7 @@ def _recall_knowledge_via_backend(
     # 触发条件：hits 空 或 召回数 < limit/2（明显召回不足）。
     if (
         len(hits) < max(1, (limit + 1) // 2)
+        and strategy == "knowledge"
         and search_backend != "embedding"
         and load_recall_params().get("embedding_fallback", False)
     ):
@@ -762,10 +831,16 @@ def _recall_knowledge_via_backend(
             emb_backend = get_backend("embedding", root=repo_root())
             emb_hits = _search_admitted(emb_backend)
             hits = emb_hits or hits  # embedding 补充；空则保留原 fts5 结果
-        except Exception:
-            # embedding connector 未装或失败 → 静默回退原 fts5 结果（不阻断召回）
-            pass
+        except Exception as exc:
+            diagnostics["fallback_error"] = type(exc).__name__
 
+
+    diagnostics["actual_backends"] = sorted({h.backend for h in hits}) or [getattr(backend, "actual_backend", search_backend)]
+    diagnostics["filtered"] = {reason: len(slugs) for reason, slugs in diagnostics["filtered"].items()}
+    if "like" in diagnostics["actual_backends"]:
+        diagnostics["fallback_reason"] = "sqlite_fts5_unavailable"
+    if hasattr(backend, "close"):
+        backend.close()
 
     # v0.6.0: goal boost 在注入层——fts5 召回 top-N 后，goal 命中的 slug
     # 往前排（不改召回分数，只改注入顺序）。这是 oks 灵魂与召回精度分层
@@ -806,13 +881,13 @@ def _recall_knowledge_via_backend(
             "rank": len(results) + 1,
             "uri": uri,
             "slug": h.slug,
-            "title": h.title or p.get("title", h.slug),
+            "title": p.get("title") or h.title or h.slug,
             "type": p.get("type", p.get("category", "concept")),
             "area": p.get("area", ""),
             "status": p.get("status", "active"),
             "archived": is_wiki_page_archived(p),
             "score": round(float(p.get("score", 0) or 0), 3),
-            "relevance": round(h.score, 3),
+            "relevance": float(h.score),
             "confidence": p.get("confidence", 0.8),
             "body_preview": _make_preview(
                 p.get("body", ""),
@@ -827,7 +902,8 @@ def _recall_knowledge_via_backend(
             "relationship": p.get("relationship", ""),
             "backend": h.backend,
             "score_components": {
-                "fts5_score": round(h.score, 3),
+                "retrieval_score": float(h.score),
+                "fts5_score": float(h.score),
                 "backend": h.backend,
                 # v0.6.0: oks 灵魂在注入层——type_boost + review_bonus +
                 # generic_demotion（CV from native 6+1 的灵魂因子）。
@@ -838,6 +914,11 @@ def _recall_knowledge_via_backend(
         }
         if review.get("lesson"):
             entry["review_lesson"] = review["lesson"]
+        from .retrieval_debug import asset_context
+        entry.update(asset_context(repo_root(), p))
+        if p.get("artifact_kind") == "skill":
+            entry["body_preview"] = str(p.get("skill_description") or "")
+            entry["load_command"] = f"oks skills load {p['skill_id']} --version {p['skill_version']}"
         results.append(entry)
     return _apply_budget(results)
 
@@ -928,6 +1009,12 @@ def _recall_knowledge_with_context(
         }
         if review.get("lesson"):
             entry["review_lesson"] = review["lesson"][:200]
+        from .retrieval_debug import asset_context
+        entry.update(asset_context(repo_root(), item))
+        entry["backend"] = "native"
+        if item.get("artifact_kind") == "skill":
+            entry["body_preview"] = str(item.get("skill_description") or "")
+            entry["load_command"] = f"oks skills load {item.get('skill_id')} --version {item.get('skill_version')}"
         if explain:
             entry["score_components"] = {
                 key: round(value, 6) if isinstance(value, float) else value

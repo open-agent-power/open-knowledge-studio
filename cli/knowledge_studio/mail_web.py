@@ -22,6 +22,9 @@ for _asset in ("force-layout.js", "tag-graph.js", "mail-view-model.js", "knowled
     FILES["/" + _asset] = (_asset, "text/javascript")
 for _asset in ("tag-graph.css", "knowledge-browser.css", "knowledge-reading.css", "knowledge-workspace.css"):
     FILES["/" + _asset] = (_asset, "text/css")
+FILES["/debug"] = ("debug.html", "text/html")
+FILES["/debug.js"] = ("debug.js", "text/javascript")
+FILES["/debug.css"] = ("debug.css", "text/css")
 UI_AGENT = "human"
 
 #: Self-contained page shown for "在完整 Wiki 中打开" (new tab) and embedded in
@@ -856,6 +859,13 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(403, {"error": "loopback Host required"})
             return
         route = self.path.split("?", 1)[0]
+        if route == "/api/retrieval/debug":
+            from knowledge_studio.retrieval_debug import overview
+            try:
+                self.send_json(200, overview(self.server.kb_root))
+            except (OSError, ValueError):
+                self.send_json(400, {"error": "Cannot read local debug storage"})
+            return
         if route == "/api/mail/capabilities":
             self.send_json(200, {
                 "mode": self.server.mode,
@@ -1051,6 +1061,15 @@ class Handler(BaseHTTPRequestHandler):
             self._reject_post(403, 'same-origin JSON requests required')
             return
         route = self.path.split("?", 1)[0]
+        if route == "/api/feedback/inspect":
+            # Read-only POST avoids placing private scope labels in URL/history.
+            from knowledge_studio.feedback import inspect
+            try:
+                request = self.read_json()
+                self.send_json(200, inspect(self.server.kb_root, request.get("scope")))
+            except (OSError, ValueError, KeyError, TypeError):
+                self.send_json(400, {"error": "Cannot read this exact private scope; data preserved"})
+            return
         # Reader mode rejects all writes. Legacy collaboration mode is an explicit
         # opt-in; its team/sync endpoint can commit/rebase/push KB files and is not
         # a Mail-only write. The removed knowledge toggle remains unsupported.
