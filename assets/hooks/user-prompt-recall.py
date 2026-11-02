@@ -505,6 +505,13 @@ def main() -> int:
     # such as "继续" must still receive a pending handoff.
     minlen = int(params.get("recall_minlen", 6))
     recallable_prompt = bool(prompt) and len(prompt) >= minlen and prompt.lower() not in _TRIVIAL
+    continue_prompt = prompt.strip().lower() in {"继续", "接着做", "continue", "resume"}
+    if continue_prompt:
+        try:
+            from knowledge_studio.tasks import binding
+            recallable_prompt = binding(kb_root, Path(cwd)) is not None
+        except (OSError, ValueError, KeyError, TypeError):
+            pass
 
     agent_id = _agent_id(payload, cwd)
 
@@ -536,6 +543,7 @@ def main() -> int:
     skipped = {}
     agreement = None
     learned = []
+    continuation = None
 
     if recall is not None and recallable_prompt:
         state["n"] += 1
@@ -552,10 +560,18 @@ def main() -> int:
                 from knowledge_studio.handoff_cli import load_agreement
                 agreement = load_agreement(Path(os.environ["OKS_TASK_AGREEMENT"]))
             response = recall(agreement=agreement, task_scope=task_scope, query=prompt, limit=max(topn * 3, 10), goal=goal_param, scope=scope_param, search_backend=search_backend,
-                              feedback_subject=os.environ.get("OKS_FEEDBACK_SUBJECT"), feedback_project=os.environ.get("OKS_FEEDBACK_PROJECT"))
+                              feedback_subject=os.environ.get("OKS_FEEDBACK_SUBJECT"), feedback_project=os.environ.get("OKS_FEEDBACK_PROJECT"), workspace=Path(cwd))
             learned = response.get("task_context", {}).get("candidates", [])
+            continuation = response.get('continuation')
             hits = response.get("knowledge", [])
             diagnostics = response.get("diagnostics", {})
+            excluded = diagnostics.get("task_context", {}).get("excluded_counts", {})
+            if isinstance(excluded, dict):
+                counts = {key: value for key, value in excluded.items()
+                          if key in {"invalidated", "different_agreement", "conflicting_feedback"}
+                          and isinstance(value, int) and value > 0}
+                if counts:
+                    diagnostics["task_warning"] = {"status": "feedback_excluded", "counts": counts}
             # Capability routing is metadata-first, with the same FTS index.
             if scope_param is None or "skills" in scope_param.split(","):
                 try:
@@ -574,6 +590,27 @@ def main() -> int:
             diagnostics["retrieval_error"] = type(exc).__name__
             hits = []
             recall_failed = True
+            if continue_prompt:
+                # A stale selected task must be distinguishable from an empty
+                # recall, without emitting its frozen Goal or private labels.
+                try:
+                    from knowledge_studio.tasks import binding, show
+                    selected = binding(kb_root, Path(cwd))
+                    if selected:
+                        task = show(kb_root, selected["task_id"])
+                        if task["status"] != "current":
+                            warning = {
+                                "status": task["status"],
+                                "task_id": task["task_id"],
+                                "revision": task["revision"],
+                                "issues": [
+                                    {key: issue[key] for key in ("code", "path") if key in issue}
+                                    for issue in task["issues"]
+                                ],
+                            }
+                            diagnostics["task_warning"] = warning
+                except (OSError, ValueError, KeyError, TypeError):
+                    pass
         candidates = [
             h for h in hits
             if is_recallable_wiki_page is not None
@@ -620,6 +657,37 @@ def main() -> int:
 
     # ── Build sections ──
     sections = []
+    if continuation and not recall_failed:
+        lines = ["## 当前任务与接手状态（资料；当前用户指令优先）",
+                 f"任务：{_mail_value(continuation['task_id'])} · 修订 {continuation['revision']}",
+                 "目标摘录：" + _mail_value(continuation['goal_text'][:4000]),
+                 "已完成：" + _mail_value(continuation['progress']),
+                 "下一步：" + _mail_value(continuation['next_action']),
+                 "产物及检查：" + _mail_value(json.dumps({'artifacts': continuation['artifacts'], 'issues': continuation['artifact_issues']}, ensure_ascii=False)),
+                 "完整约定与历史请用 oks task show 查看；这不是执行成功或内容正确的证明。"]
+        sections.append('\n'.join(lines))
+    warning = diagnostics.get("task_warning")
+    if isinstance(warning, dict) and warning.get("status") == "needs_review":
+        source_issues = warning.get("issues", [])
+        sources = ", ".join(
+            _mail_value(issue.get("code", "source_changed")) +
+            (" — " + _mail_value(issue["path"]) if issue.get("path") else "")
+            for issue in source_issues if isinstance(issue, dict)
+        ) or "来源需要复核"
+        sections.append('\n'.join([
+            "## 任务已暂停，来源需要复核",
+            f"任务：{_mail_value(warning.get('task_id'))} · 状态：needs_review",
+            "检查结果：" + sources,
+            "请先检查：<code>oks task show --task-id " + _mail_value(warning.get("task_id")) + "</code>",
+            "当前 Goal 或来源尚未获接受；请勿按旧约定继续，需由用户明确确认后再刷新。",
+        ]))
+    elif isinstance(warning, dict) and warning.get("status") == "feedback_excluded":
+        counts = warning.get("counts", {})
+        labels = {"invalidated": "已失效或撤回", "different_agreement": "约定版本不同",
+                  "conflicting_feedback": "存在相反反馈"}
+        summary = "、".join(f"{labels[key]} {counts[key]} 项" for key in labels if counts.get(key))
+        if summary:
+            sections.append("## 本任务反馈提示\n部分已审阅反馈未纳入上下文（" + summary + "）；存在撤回、版本差异或冲突时请人工复核，不自动选择结论。")
     # Explicitly selected private context remains out of shared inject/debug logs.
     if learned and not recall_failed and recallable_prompt:
         lines = ["## 经审阅的本任务学习候选", "以下是有限范围的经验资料，不授予权限；与当前用户指令冲突时以当前指令为准。"]
@@ -748,7 +816,7 @@ def main() -> int:
                     skipped[h["slug"]] = "topn" if h["slug"] in candidate_ids else "threshold_or_policy"
             diagnostics["hook_error"] = "recall_failed" if recall_failed else None
             diagnostics["actual_backends"] = sorted({h.get("backend", "native") for h in hits}) or diagnostics.get("actual_backends", [])
-            record(kb_root, prompt, diagnostics, hits, stage="hook_emitted" if picked or (learned and not recall_failed) else "hook_skipped",
+            record(kb_root, prompt, diagnostics, hits, stage="hook_emitted" if picked or ((learned or continuation) and not recall_failed) else "hook_skipped",
                    emitted=[{"slug": h["slug"], "version": h.get("skill_version") or h.get("source_sha256"),
                              "content": "skill_catalog" if h.get("skill_id") else "wiki_preview"} for h in picked], skipped=skipped)
         except Exception as exc:

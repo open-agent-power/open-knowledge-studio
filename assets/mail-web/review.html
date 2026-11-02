@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>审核与学习 · OKS</title><link rel="icon" href="/favicon.svg"><link rel="stylesheet" href="/tasks.css"><link rel="stylesheet" href="/review.css"><script src="/workspace-ui.js" defer></script><script src="/review.js" defer></script></head>
+<body>
+<header class="topbar"><a class="brand" href="/" aria-label="OKS 工作区">oks<span>.</span></a><nav aria-label="主导航"><a href="/#collaboration">讨论</a><a href="/tasks">目标</a><a href="/#wiki">学习</a></nav><details class="more-nav"><summary>更多</summary><div class="more-nav-menu"><a href="/#messages">通信</a><a href="/#agents">成员</a><a href="/start">接入</a><a href="/review" aria-current="page">学习审核</a><a href="/versions">版本</a><a href="/debug">诊断</a></div></details><a class="quiet" href="/review">刷新</a></header>
+<main>
+  <header class="intro"><p class="eyebrow">指定范围 · 由人决定</p><h1>学习审核</h1><p>只读取你填写的范围。批准、拒绝、撤回、分享和保存到 Wiki 都由你分别决定。</p><span id="capabilityStatus" role="status" aria-live="polite">正在读取本地审核能力…</span></header>
+  <section id="localGate" class="local-gate" hidden><h2>本地审核未启用</h2><p>当前页面为只读。可在前台启动服务后重新打开此页：</p><code id="serveCommand">oks mail serve --path "&lt;知识库路径&gt;" --local-review</code><p>local-review 只用于前台会话；页面不会自行改根目录或启用写操作。</p></section>
+  <section class="scope-section"><h2>指定读取范围</h2><p>核对三个字段后点击读取；不会自动读取私人内容。</p><form id="scopeForm"><label for="subject">使用者<input id="subject" autocomplete="off" required></label><label for="project">项目<input id="project" autocomplete="off" required></label><label for="task">任务<input id="task" autocomplete="off" required></label><button id="inspect" type="submit">读取</button></form><span id="scopeStatus" role="status" aria-live="polite"></span></section>
+  <section class="review-controls"><label for="comment">审核说明（批准或拒绝时必填）</label><textarea id="comment" rows="3" placeholder="说明你的决定理由"></textarea><label class="share-check"><input id="confirmShare" type="checkbox">我确认此内容适合分享为团队草稿。</label></section>
+  <section><div class="section-heading"><div><h2>学习建议</h2></div></div><div id="candidates" class="candidate-list"><p class="empty">先填写范围并读取。</p></div></section>
+  <section class="event-section"><details class="event-fold"><summary>查看相关记录与审核依据</summary><div class="section-heading"><div><h2>相关记录</h2><p>来源、理由和完整约定。</p></div></div><div id="events" class="event-list"><p class="empty">尚未读取记录。</p></div></details></section>
+  <section class="draft-section"><div class="section-heading"><div><h2>保存到 Wiki</h2><p>阅读完整草稿并确认后才可保存。</p></div></div><form id="draftForm"><label for="draftPath">草稿路径<input id="draftPath" autocomplete="off" placeholder="drafts/…"></label><button id="readDraft" type="submit" disabled>查看草稿</button></form><div id="draftStatus" role="status" aria-live="polite"></div><article id="draftPreview" class="draft-preview"></article><label class="review-check"><input id="confirmReview" type="checkbox" disabled>我已阅读草稿全文，确认内容可以保存到 Wiki。</label><button id="promote" type="button" disabled>保存到 Wiki</button><p id="promoteStatus" role="status" aria-live="polite"></p><div id="promoteHandoff" class="promote-handoff" hidden></div></section>
+  <div class="page-footer"><p>拒绝、撤回、导出和晋升都会写入状态或知识库。每一步由你单独触发。</p><a href="/tasks">查看目标与产物 <span aria-hidden="true">↗</span></a></div>
+</main>
+</body></html>

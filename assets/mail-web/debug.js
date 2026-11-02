@@ -1,38 +1,102 @@
 'use strict';
-const $=id=>document.getElementById(id);
-const el=(tag,text,cls)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=String(text);if(cls)n.className=cls;return n;};
-const array=x=>Array.isArray(x)?x:[];
-const stages={retrieved:'检索命中',hook_emitted:'Hook 已输出',hook_skipped:'Hook 未输出'};
-let data={records:[],deployments:[]};
-function facts(values){const dl=el('dl',undefined,'facts');for(const [k,v] of values){dl.append(el('dt',k),el('dd',typeof v==='string'?v:JSON.stringify(v??'未记录')));}return dl;}
-function taskRequirements(context){
- const box=el('div',undefined,'hit');box.append(el('h3','本次任务要求'));
- const statuses={not_requested:'未启用私人任务要求',scope_incomplete:'主体或项目未指定完整，未读取',agreement_required:'缺少当前任务约定，未读取',unavailable:'私人要求暂不可读，本次未带入',empty:'没有符合当前任务的已审核要求',selected:'已选择与当前任务约定匹配的已审核要求'};
- box.append(el('p',statuses[context.status]||'未记录选择状态'));
- box.append(el('p',`召回返回 ${context.selected_count||0} 项；Hook 输出 ${context.hook_emitted_count===undefined?'未记录':context.hook_emitted_count+' 项'}。宿主消费与执行仍未知。`,'meta'));
- const reasons={pending:'尚未审核',rejected:'审核已拒绝',invalidated:'反馈已撤回、修正或来源已失效',different_agreement:'属于其他任务约定版本',conflicting_feedback:'存在相反反馈'};
- for(const [reason,count] of Object.entries(context.excluded_counts||{}))box.append(el('p',`未采用 ${count} 项：${reasons[reason]||reason}`,'meta'));
- box.append(el('p','这里仅保存数量和排除原因；具体要求请在下方填写私人范围后查看。历史记录不证明这些要求现在仍然有效。','meta'));return box;
+const $ = id => document.getElementById(id);
+const el = (tag, text, cls) => { const n=document.createElement(tag); if(text!==undefined)n.textContent=String(text); if(cls)n.className=cls; return n; };
+const array = value => Array.isArray(value) ? value : [];
+const stages = {retrieved:'查询',hook_emitted:'Hook 输出',hook_skipped:'Hook 跳过'};
+let data={records:[],deployments:[]}, stale=false;
+function facts(values) {
+ const list=el('dl',undefined,'facts');
+ for(const [key,value] of values) list.append(el('dt',key),el('dd',typeof value==='string'?value:JSON.stringify(value??'未记录')));
+ return list;
 }
-function render(){
+function taskRequirements(context) {
+ const box=el('div',undefined,'task-context');
+ const labels={not_requested:'未启用',scope_incomplete:'范围不完整',agreement_required:'缺少任务约定',unavailable:'读取失败',empty:'无匹配要求',selected:'已选择'};
+ box.append(el('h3','任务要求'),el('p',`${labels[context.status]||'未记录'} · ${context.selected_count||0} 项`));
+ const reasons={pending:'待审核',rejected:'已拒绝',invalidated:'已失效',different_agreement:'约定版本不同',conflicting_feedback:'反馈冲突'};
+ for(const [reason,count] of Object.entries(context.excluded_counts||{})) box.append(el('p',`${reasons[reason]||reason}：${count}`,'meta'));
+ return box;
+}
+function render() {
  const q=$('filter').value.toLowerCase(),stage=$('stage').value,backend=$('backend').value;
  const records=array(data.records).filter(r=>(!stage||r.stage===stage)&&(!backend||array(r.diagnostics?.actual_backends).includes(backend))&&(!q||JSON.stringify(r.hits||[]).toLowerCase().includes(q)));
- $('records').replaceChildren();$('status').textContent=data.status==='error'?data.error:`显示 ${records.length} / ${array(data.records).length} 条记录。展开查看来源、版本与筛选结果。`;
- if(!records.length)$('records').append(el('div',data.status==='error'?'读取失败。记录已保留，请检查本地诊断文件后刷新。':data.records.length?'没有符合筛选条件的记录。':'还没有诊断记录。执行带 --debug-record 的查询，或启用 Hook 诊断后刷新。','empty'));
- for(const r of records){const d=r.diagnostics||{},card=el('details',undefined,'record'),head=el('summary');head.append(el('span',stages[r.stage]||r.stage,'badge'),el('span',new Date(r.at).toLocaleString('zh-CN'),'time'),el('span',array(d.actual_backends).join(' + ')||'后端未记录'),el('span',`${array(r.hits).length} 命中 · ${array(r.emitted).length} 输出`,'count'));card.append(head);
- const body=el('div',undefined,'record-body');body.append(facts([['检索策略',d.strategy],['请求后端',d.requested_backend],['降级 / 实验',d.fallback_reason||d.capability_fallback|| (d.experimental?'显式实验对照':'无记录')],['库内策略排除（含未匹配页）',d.corpus_excluded],['返回候选过滤',d.filtered],['Hook 跳过原因',r.skipped],['任务约定',d.task?`${d.task.status} · ${d.task.scope} · ${d.task.sha256}`:'未绑定'],['Goal 来源版本',d.task?`${d.task.goal_path} @ ${d.task.goal_sha256}`:'未绑定'],['宿主消费 / 执行','消费未知；未验证执行'],['查询指纹',r.query_sha256]]));
- if(d.task_context)body.append(taskRequirements(d.task_context));
- if(d.fallback_error||d.hook_error||d.retrieval_error||d.skill_error)body.append(el('p',`运行异常：${d.fallback_error||d.hook_error||d.retrieval_error||d.skill_error}`,'warning'));
- for(const h of array(r.hits)){const item=el('article',undefined,'hit');item.append(el('h3',h.title||h.slug),el('p',`${h.artifact_kind==='skill'?'Skill · '+h.skill_id:'Wiki'} · ${h.backend||'未标注后端'} · 相关分 ${h.relevance??'—'}`,'meta'));
- if(h.source_path&&h.source_path.startsWith('wiki/')){const link=el('a',h.source_path,'path');link.href='/api/mail/wiki-page?'+new URLSearchParams({path:h.source_path});link.target='_blank';link.rel='noopener noreferrer';item.append(link,el('p','打开当前文件；它可能已与该历史版本不同。','meta'));}
- if(h.score_components?.node)item.append(el('p','最佳匹配节点：'+JSON.stringify(h.score_components.node),'meta'));
- item.append(el('p','来源 SHA256：'+(h.source_sha256||'未记录'),'meta'));if(h.skill_version)item.append(el('p','Skill 版本：'+h.skill_version,'meta'));
- const emission=array(r.emitted).find(e=>e.slug===h.slug);item.append(el('p',emission?`Hook 输出：${emission.content}；消费未知`:'此记录未证明 Hook 输出','meta'));
- if(h.load_command)item.append(el('code',h.load_command));if(array(h.options).length){const options=el('details');options.append(el('summary','历史判断与候选方案（资料，不授予权限）'),el('pre',JSON.stringify(h.options,null,2)));item.append(options);}body.append(item);}
- card.append(body);$('records').append(card);}
+ $('records').replaceChildren();
+ $('status').textContent=stale?'刷新失败，当前显示上次记录。':data.status==='error'?'记录暂时无法读取，请重试。':`${records.length} 条记录`;
+ if(!records.length) $('records').append(el('div',data.status==='error'?'记录读取失败，原文件已保留。':data.records.length?'没有匹配结果。':'暂无记录。完成一次带诊断的查询后，这里会显示结果。','empty'));
+ records.forEach((record,index)=>{
+  const d=record.diagnostics||{},hits=array(record.hits),emitted=array(record.emitted),card=el('details',undefined,'record'),summary=el('summary');
+  summary.append(el('span',stages[record.stage]||record.stage,'stage-label'),el('span',hits[0]?.title||d.task?.scope||'无知识命中','record-title'),el('span',new Date(record.at).toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}),'time'),el('span',`${hits.length} 项`,'count'));
+  card.append(summary);card.open=index===0;
+  const body=el('div',undefined,'record-body'),flow=el('div',undefined,'flow');
+  const loads=array(record.loads),usage=array(record.usage);
+  for(const [label,value] of [['查到',`${hits.length} 项知识`],['Hook 输出',record.stage==='hook_emitted'?`${emitted.length} 项知识`:record.stage==='hook_skipped'?'未输出':'未记录'],['Skill 读取',loads.length?`${loads.length} 项`:'未记录'],['使用声明',usage.length?`${usage.length} 项`:'未记录']]) {
+   const step=el('div');step.append(el('span',label),el('strong',value));flow.append(step);
+  }
+  body.append(flow);
+  if(d.task_warning) body.append(el('p',d.task_warning.status==='needs_review'?'任务来源有变化，请先核对目标。':'部分任务反馈已失效或冲突，未纳入上下文。','warning'));
+  const grouped=new Map();
+  for(const use of usage) {
+   const key=JSON.stringify([use.task_id,use.revision,use.artifacts]);
+   if(!grouped.has(key)) grouped.set(key,{...use,sources:[]});
+   grouped.get(key).sources.push(use.source_path);
+  }
+  for(const use of grouped.values()) {
+   const item=el('div',undefined,'hit'),link=el('a',`${use.task_id} · 修订 ${use.revision}`);
+   link.href='/tasks?'+new URLSearchParams({id:use.task_id});item.append(link);
+   for(const artifact of array(use.artifacts)) item.append(el('p',artifact.path+' · '+({unchanged:'文件未变',changed:'文件已变，需复核',unavailable:'文件不可用'}[artifact.status]||'未核验'),'meta'));
+   const sources=el('details',undefined,'source-detail');sources.append(el('summary',`${use.sources.length} 条来源 · 调用者声明`));
+   for(const path of use.sources) sources.append(el('p',path,'path'));
+   sources.append(el('p','文件匹配不证明执行或内容正确。','meta'));item.append(sources);body.append(item);
+  }
+  if(record.stage==='hook_emitted'&&!emitted.length) body.append(el('p','本次 Hook 输出可能仅含任务上下文，详见技术详情。','meta'));
+  if(!hits.length) body.append(el('p','本次没有 Wiki 或 Skill 命中。','meta'));
+  if(d.fallback_error||d.hook_error||d.retrieval_error||d.skill_error) body.append(el('p','运行异常：'+(d.fallback_error||d.hook_error||d.retrieval_error||d.skill_error),'warning'));
+  for(const hit of hits) {
+   const item=el('article',undefined,'hit'),heading=el('div',undefined,'hit-heading');
+   const output=emitted.find(value=>value.slug===hit.slug);
+   const loaded=loads.some(value=>value.source_path===hit.source_path&&value.source_sha256===hit.source_sha256);
+   heading.append(el('h3',hit.title||hit.slug),el('span',output?'Hook 已输出':loaded?'已读取':'已命中',output||loaded?'selected':'meta'));item.append(heading);
+   const score=typeof hit.relevance==='number'&&Number.isFinite(hit.relevance)?hit.relevance.toFixed(2):'未记录';
+   item.append(el('p',`${hit.artifact_kind==='skill'?'Skill':'Wiki'} · ${hit.backend||'检索'} · 相关度 ${score}`,'meta'));
+   if(loaded) item.append(el('p','已读取固定版本','meta'));
+   if(hit.source_path?.startsWith('wiki/')) {
+    const link=el('a','打开来源 ↗','path');link.href='/api/mail/wiki-page?'+new URLSearchParams({path:hit.source_path});link.target='_blank';link.rel='noopener noreferrer';link.title='打开当前文件，可能与记录版本不同';item.append(link);
+   }
+   const reason=record.skipped?.[hit.slug];
+   const reasons={topn:'未进入输出名额',threshold_or_policy:'未达到阈值或被策略排除'};
+   if(reason) item.append(el('p','未输出：'+(reasons[reason]||reason),'meta'));
+   const detail=el('details',undefined,'source-detail');detail.append(el('summary','匹配依据与版本'));
+   detail.append(facts([['来源路径',hit.source_path||'未记录'],['相关度依据',hit.score_components||'未记录'],['来源版本',hit.source_sha256||'未记录'],['Skill 版本',hit.skill_version||'不适用']]));
+   if(hit.load_command)detail.append(el('code',hit.load_command));
+   if(array(hit.options).length)detail.append(el('pre',JSON.stringify(hit.options,null,2)));
+   item.append(detail);body.append(item);
+  }
+  const technical=el('details',undefined,'technical');technical.append(el('summary','技术详情'));
+  technical.append(facts([['检索策略',d.strategy],['请求后端',d.requested_backend],['降级 / 实验',d.fallback_reason||d.capability_fallback||(d.experimental?'实验对照':'无')],['库内排除',d.corpus_excluded],['返回过滤',d.filtered],['Hook 跳过',record.skipped],['任务约定',d.task],['当前进度标识',d.continuation],['来源版本',d.task?.goal_sha256],['查询指纹',record.query_sha256],['使用证据','未记录宿主消费或执行；命中、输出和部署不能代替执行证据。']]));
+  if(d.task_context)technical.append(taskRequirements(d.task_context));
+  body.append(technical);card.append(body);$('records').append(card);
+ });
 }
-async function refresh(){$('refresh').disabled=true;$('status').textContent='正在读取本地记录…';try{const response=await fetch('/api/retrieval/debug',{cache:'no-store'});if(!response.ok)throw new Error('HTTP '+response.status);const next=await response.json();if(!Array.isArray(next.records))throw new Error('记录格式不正确');data=next;$('total').textContent=data.records.length;$('emitted').textContent=data.records.filter(r=>r.stage==='hook_emitted').length;$('degraded').textContent=data.records.filter(r=>r.diagnostics?.fallback_reason||r.diagnostics?.experimental).length;$('deploymentsCount').textContent=array(data.deployments).length;$('deployments').replaceChildren();for(const d of array(data.deployments))$('deployments').append(el('div',`${d.host_skill} · ${d.version} · ${d.loaded_at}`,'deployment'));if(!array(data.deployments).length)$('deployments').append(el('p',data.deployment_error||'尚无受管 Skill 部署回执。','meta'));render();}catch(error){$('status').textContent=`读取失败：${error.message}。可点击刷新重试；已显示的记录保留。`;}finally{$('refresh').disabled=false;}}
-$('refresh').addEventListener('click',refresh);for(const id of ['filter','stage','backend'])$(id).addEventListener('input',render);refresh();
+async function refresh() {
+ $('refresh').disabled=true;$('status').textContent='读取中…';
+ try {
+  const response=await fetch('/api/retrieval/debug',{cache:'no-store'});
+  if(!response.ok)throw Error('HTTP '+response.status);
+  const next=await response.json();if(!Array.isArray(next.records))throw Error('记录格式错误');data=next;stale=false;
+  $('total').textContent=data.records.length;$('emitted').textContent=data.records.filter(r=>r.stage==='hook_emitted').length;
+  $('degraded').textContent=data.records.filter(r=>r.diagnostics?.fallback_reason||r.diagnostics?.experimental).length;
+  $('deploymentsCount').textContent=array(data.deployments).length;$('deployments').replaceChildren();
+  for(const receipt of array(data.deployments))$('deployments').append(el('div',`${receipt.host_skill} · ${receipt.version} · ${receipt.loaded_at}`,'deployment'));
+  if(!array(data.deployments).length)$('deployments').append(el('p',data.deployment_error||'暂无部署记录。','meta'));
+  render();
+ } catch(error) {stale=true;$('status').textContent='刷新失败，当前显示上次记录。请重试。';}
+ finally {$('refresh').disabled=false;}
+}
+$('refresh').addEventListener('click',refresh);
+for(const id of ['filter','stage','backend'])$(id).addEventListener('input',render);
+refresh();
+function revealFeedback() { if(location.hash==='#feedback') $('feedback').open=true; }
+window.addEventListener('hashchange',revealFeedback);revealFeedback();
 
 // No scope history or private results are written to localStorage or shared logs.
 let feedbackRevision=0;

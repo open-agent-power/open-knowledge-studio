@@ -4,7 +4,7 @@ const e=(tag,cls,text)=>{const node=document.createElement(tag);if(cls)node.clas
 const append=(parent,...children)=>{parent.append(...children.filter(Boolean));return parent;};
 const button=(text,cls,action)=>{const b=e('button',cls,text);b.type='button';b.addEventListener('click',action);return b;};
 const searchIcon='<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="10" r="6.5"/><path d="m15 15 6 6"/></svg>';
-const titles={collaboration:'协作主线',messages:'通信记录',wiki:'知识工作区',agents:'Agent 与接入'};
+const titles={collaboration:'讨论',messages:'通信记录',wiki:'学习',agents:'成员与接入'};
 const VM=MailViewModel;
 const state={knowledgeMode:'domains',fieldFilters:{},page:'collaboration',selected:'',selectedListKey:null,threadPinned:false,detail:false,query:'',messageScope:'all',wiki:'',global:true,graphTag:null,wikiOrigin:null,graphContext:false,agent:'',message:''};
 const store={capabilities:null,profiles:null,status:null,knowledge:null,snapshot:null,threads:new Map(),threadErrors:new Map(),threadPending:new Set(),lists:new Map(),listErrors:new Map(),listPending:new Set(),errors:{},guide:null};
@@ -181,6 +181,7 @@ function restoreRoute(){
  state.threadPinned=!!parts.get('thread');state.selectedListKey=null;if(state.page==='messages')state.messageScope=parts.get('scope')==='collaboration'?'current':'all';if(parts.get('thread')){state.selected=parts.get('thread');state.detail=true;}if(parts.get('message'))state.message=parts.get('message');if(state.page==='wiki')restoreKnowledgeNavigation(parts);
 }
 document.querySelectorAll('[data-page]').forEach(b=>b.addEventListener('click',()=>{if(b.dataset.page==='wiki'){state.knowledgeMode='domains';state.global=true;state.graphTag=null;state.wikiOrigin=null;state.fieldFilters={};state.graphContext=false;}navigate(b.dataset.page);}));
+document.querySelectorAll('[data-route]').forEach(link=>link.addEventListener('click',()=>{window.location.assign(link.dataset.route);}));
 $('refresh').onclick=()=>refresh();$('about').onclick=showAbout;$('closeInspector').onclick=()=>$('inspector').close();$('inspector').addEventListener('close',()=>{drawerRevision++;});$('inspector').addEventListener('click',ev=>{if(ev.target===$('inspector')&&ev.clientX<$('inspector').getBoundingClientRect().left)$('inspector').close();});
 window.addEventListener('hashchange',()=>{restoreRoute();render();});window.addEventListener('popstate',()=>{restoreRoute();render();});
 restoreRoute();render();void refresh();

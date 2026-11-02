@@ -237,6 +237,18 @@ def withdraw(root, request):
                 "exports_require_review": state["exports"]}
 
 
+def withdraw_candidate(root, request):
+    """Withdraw exactly the inspected candidate, retaining its evidence and shared copies."""
+    with _locked(root, request.get('scope')) as (path, state):
+        candidate = state['candidates'][_id(request.get('candidate_id'))]
+        if request.get('expected_revision') != digest(candidate) or candidate['status'] == 'withdrawn':
+            raise ValueError('Candidate changed; inspect it again')
+        candidate.update(status='withdrawn', withdrawn_at=datetime.now(UTC).isoformat())
+        _save(path, state)
+        return {**_view(root, state, candidate), 'formal_wiki_changed': False,
+                'exports_require_review': state['exports']}
+
+
 def inspect(root, selection=None):
     if selection is None:
         return {"status": "scope_required", "events": [], "candidates": []}
@@ -312,9 +324,9 @@ def export(root, request, *, confirm_share=False):
 
 
 @contextmanager
-def export_guard(root, draft_path):
+def export_guard(root, draft_path, *, reviewed_meta=None):
     """Hold the feedback lock through promotion, serializing withdrawal/export."""
-    meta = store.parse_wiki_file(draft_path) or {}
+    meta = reviewed_meta if reviewed_meta is not None else store.parse_wiki_file(draft_path) or {}
     reference = meta.get("feedback_origin")
     if reference is None:
         if re.fullmatch(r"feedback-[0-9a-f]{24}", draft_path.stem):

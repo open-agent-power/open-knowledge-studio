@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>目标 · OKS</title><link rel="icon" href="/favicon.svg"><link rel="stylesheet" href="/tasks.css"><link rel="stylesheet" href="/knowledge-reading.css"><script src="/workspace-ui.js" defer></script><script src="/tasks.js" defer></script></head>
+<body>
+<header class="topbar"><a class="brand" href="/" aria-label="OKS 工作区">oks<span>.</span></a><nav aria-label="主导航"><a href="/#collaboration">讨论</a><span aria-current="page">目标</span><a href="/#wiki">学习</a></nav><details class="more-nav"><summary>更多</summary><div class="more-nav-menu"><a href="/#messages">通信</a><a href="/#agents">成员</a><a href="/start">接入</a><a href="/review">审核</a><a href="/versions">版本</a><a href="/debug">诊断</a></div></details><button id="refresh" class="quiet" type="button">刷新</button></header>
+<main>
+<div class="toolbar"><label for="taskSelect">查看任务</label><select id="taskSelect"><option value="">请选择</option></select><button id="newTask" type="button">创建任务</button><span id="status" role="status" aria-live="polite">读取中…</span></div>
+<section id="createPanel" class="task-create" hidden aria-labelledby="createTitle">
+<div class="create-heading"><h2 id="createTitle">创建任务</h2><button id="closeCreate" class="quiet" type="button">收起</button></div>
+<p id="editGate" class="file-warning" hidden></p><code id="editCommand" hidden></code>
+<form id="createForm"><label for="goalChoice">目标来源</label><select id="goalChoice"><option value="">写一个新目标</option></select>
+<div id="newGoalFields"><label for="newTitle">任务名称</label><input id="newTitle" maxlength="200" placeholder="例如：项目技术报告"><label for="newGoal">这次要完成什么</label><textarea id="newGoal" rows="4" maxlength="8000" placeholder="写清目标、必要要求和怎样算完成。"></textarea></div>
+<pre id="existingGoalPreview" hidden></pre>
+<details><summary>关联已审核知识（可选）</summary><div id="wikiChoices" class="wiki-choices"></div></details>
+<details><summary>任务标识</summary><label for="newTaskId">用于接手和区分任务</label><input id="newTaskId" maxlength="80" autocomplete="off"></details>
+<div class="create-actions"><button id="createTask" type="submit" disabled>创建并查看</button><span id="createStatus" role="status" aria-live="polite"></span></div></form>
+</section>
+<div id="content" hidden>
+<div class="page-heading"><h1 id="title">任务</h1><button id="copy" type="button">复制接手指令</button></div><p id="copyStatus" class="copy-status" role="status" aria-live="polite"></p>
+<section class="goal-section"><h2 id="goalState">目标</h2><p id="goal" class="goal-text"></p><div id="changes" class="changes" hidden></div></section>
+<div class="work-grid"><div class="work-main"><section class="next-section"><h2>下一步</h2><p id="next"></p></section><section class="progress-section"><h2>当前进度</h2><p id="progress"></p></section></div><aside class="files-section"><h2>产物 <span id="fileCount"></span></h2><div id="artifacts"></div></aside></div>
+<section class="artifact-reader"><div class="artifact-heading"><div><h2>任务产物</h2><p>可查看当前及历史修订的文件内容。</p></div><span id="artifactStatus" role="status" aria-live="polite"></span></div><div class="artifact-layout"><nav id="artifactList" class="artifact-list" aria-label="任务历史产物"></nav><div id="artifactView" class="artifact-view"><p class="empty">选择一份产物查看。</p></div></div></section>
+<section class="source-section"><h2>关联 Wiki 来源</h2><div id="sources" class="source-list"></div></section>
+<details class="record-section"><summary>历史与依据 <span id="historyCount"></span></summary><div id="decisions"></div><div id="history"></div><details class="technical"><summary>技术详情</summary><p>接手指令</p><code id="resume"></code><p>已确认的目标原文</p><pre id="rawGoal"></pre><p>产物校验</p><div id="checks"></div></details></details>
+<div class="page-footer"><p>切换列表不改变 Agent 的选择；文件与记录不一致时请先核对。</p><a id="reviewLink" href="/review">反馈与学习 <span aria-hidden="true">↗</span></a></div>
+</div>
+</main>
+</body></html>

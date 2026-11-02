@@ -67,6 +67,49 @@ def read_records(root: Path) -> dict:
                 "error": "Cannot read debug records; existing data was preserved"}
 
 
+def query_record(root: Path, identifier: str) -> dict:
+    """Resolve an explicit retained query, never infer the latest query."""
+    if not isinstance(identifier, str) or not identifier or len(identifier) > 64:
+        raise ValueError("Invalid retrieval record ID")
+    data = read_records(root)
+    if data['status'] == 'error':
+        raise ValueError(data['error'])
+    found = next((r for r in data['records'] if r.get('id') == identifier), None)
+    if found is None:
+        raise ValueError("Retrieval record is missing or expired; query again")
+    return found
+
+
+def source_hit(root: Path, identifier: str, source: str) -> dict:
+    from .handoff import _read
+    item = query_record(root, identifier)
+    hit = next((h for h in item['hits'] if h.get('source_path') == source), None)
+    if hit is None:
+        raise ValueError("Source was not returned by this query")
+    if hashlib.sha256(_read(root, source, 'wiki')).hexdigest() != hit.get('source_sha256'):
+        raise ValueError("Retrieved source changed; query its current version again")
+    return hit
+
+
+def record_load(root: Path, identifier: str, source: str, version: str, mode: str) -> dict:
+    """Record that this CLI returned a pinned Skill; not host consumption."""
+    with store._file_lock(root / '.oks/locks/retrieval-debug.lock'):
+        hit = source_hit(root, identifier, source)
+        if hit.get('artifact_kind') != 'skill' or hit.get('skill_version') != version:
+            raise ValueError('Loaded Skill differs from the retrieved version')
+        data = read_records(root)
+        item = next(r for r in data['records'] if r['id'] == identifier)
+        receipt = {'source_path': source, 'source_sha256': hit['source_sha256'],
+                   'skill_version': version, 'at': datetime.now(UTC).isoformat(),
+                   'mode': mode, 'host_consumed': 'unknown', 'executed': False}
+        item['loads'] = [receipt, *[v for v in item.get('loads', []) if v.get('source_path') != source]][:100]
+        encoded = json.dumps(data['records'], ensure_ascii=False) + '\n'
+        if len(encoded.encode()) > MAX_BYTES:
+            raise ValueError('Debug capacity reached; existing records preserved')
+        store._atomic_write(_path(root), encoded)
+    return receipt
+
+
 def record(root: Path, query: str, diagnostics: dict, hits: list[dict], *, stage="retrieved", emitted=(), skipped=None) -> str:
     """Keep bounded metadata; never persist prompts, bodies or Goal snapshot text."""
     identifier = uuid.uuid4().hex
@@ -92,6 +135,30 @@ def record(root: Path, query: str, diagnostics: dict, hits: list[dict], *, stage
 
 def overview(root: Path) -> dict:
     result = read_records(root)
+    # Task checkpoints are caller-reported associations, not execution receipts.
+    from . import tasks
+    by_id = {r.get('id'): r for r in result['records']}
+    for record in by_id.values():
+        record['usage'] = []
+    for path in sorted((root / '.oks/tasks').glob('*.json'))[:100]:
+        try:
+            task = tasks._load(root, path.stem)
+            for revision in [task, *reversed(task['history'])]:
+                for use in revision.get('uses', []):
+                    record = by_id.get(use['retrieval_id'])
+                    if record is None or len(record['usage']) >= 20:
+                        continue
+                    assets = []
+                    for asset in use['artifacts']:
+                        try:
+                            status = 'unchanged' if tasks._artifact(root, asset['path']) == asset else 'changed'
+                        except (OSError, ValueError):
+                            status = 'unavailable'
+                        assets.append({**asset, 'status': status})
+                    record['usage'].append({**use, 'task_id': task['task_id'],
+                                            'revision': revision['revision'], 'artifacts': assets})
+        except (OSError, ValueError, KeyError, TypeError):
+            result['usage_error'] = 'Some task usage records could not be read'
     # Deployment is its own observed fact, never inferred from a search hit.
     receipts = root / ".oks/skill-loads.json"
     result["deployments"] = []
