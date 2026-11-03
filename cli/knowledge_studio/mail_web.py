@@ -25,6 +25,14 @@ for _asset in ("tag-graph.css", "knowledge-browser.css", "knowledge-reading.css"
 FILES["/debug"] = ("debug.html", "text/html")
 FILES["/debug.js"] = ("debug.js", "text/javascript")
 FILES["/debug.css"] = ("debug.css", "text/css")
+FILES["/tasks"] = ("tasks.html", "text/html")
+FILES["/tasks.js"] = ("tasks.js", "text/javascript")
+FILES["/tasks.css"] = ("tasks.css", "text/css")
+for _page in ('start', 'review', 'versions'):
+    FILES['/' + _page] = (_page + '.html', 'text/html')
+    FILES['/' + _page + '.js'] = (_page + '.js', 'text/javascript')
+    FILES['/' + _page + '.css'] = (_page + '.css', 'text/css')
+FILES['/workspace-ui.js'] = ('workspace-ui.js', 'text/javascript')
 UI_AGENT = "human"
 
 #: Self-contained page shown for "在完整 Wiki 中打开" (new tab) and embedded in
@@ -859,6 +867,39 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(403, {"error": "loopback Host required"})
             return
         route = self.path.split("?", 1)[0]
+        if route in {'/api/workspace', '/api/tasks/artifact', '/api/tasks/options', '/api/tasks/goal', '/api/learning/draft', '/api/skills/versions', '/api/skills/diff', '/api/skills/bundled-diff'}:
+            from . import workspace
+            query = parse_qs(urlsplit(self.path).query)
+            try:
+                if route == '/api/workspace':
+                    result = workspace.diagnostics(self.server.kb_root, port=self.server.server_port,
+                        local_review=self.server.local_review, local_edit=self.server.local_edit)
+                elif route == '/api/tasks/options':
+                    result = workspace.task_options(self.server.kb_root)
+                elif route == '/api/tasks/goal':
+                    result = workspace.goal(self.server.kb_root, query.get('path', [''])[0])
+                elif route == '/api/tasks/artifact':
+                    result = workspace.artifact(self.server.kb_root, query.get('id', [''])[0],
+                                                query.get('path', [''])[0], int(query.get('revision', ['0'])[0]))
+                    result['body_html'] = md_to_html(result['text']) if result['format'] == 'markdown' else '<pre>' + html.escape(result['text']) + '</pre>'
+                elif route == '/api/learning/draft':
+                    result = workspace.draft(self.server.kb_root, query.get('path', [''])[0])
+                else:
+                    operation = 'bundled-diff' if route.endswith('/bundled-diff') else 'diff' if route.endswith('/diff') else 'versions'
+                    result = workspace.invoke(self.server.kb_root, operation,
+                                              {key: query.get(key, [''])[0] for key in ('id', 'from', 'to', 'version')})
+                self.send_json(200, result)
+            except (OSError, ValueError, KeyError, TypeError, UnicodeError):
+                self.send_json(400, {'error': '无法读取。请核对实例、文件或修订；原记录保留。'})
+            return
+        if route in {"/api/tasks", "/api/tasks/show"}:
+            from knowledge_studio import tasks
+            try:
+                identifier = parse_qs(urlsplit(self.path).query).get('id', [''])[0]
+                self.send_json(200, {'tasks': tasks.list_tasks(self.server.kb_root)} if route == '/api/tasks' else tasks.show(self.server.kb_root, identifier))
+            except (OSError, ValueError, KeyError, TypeError):
+                self.send_json(400, {'error': 'Cannot read task; existing records preserved'})
+            return
         if route == "/api/retrieval/debug":
             from knowledge_studio.retrieval_debug import overview
             try:
@@ -870,6 +911,8 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(200, {
                 "mode": self.server.mode,
                 "read_only": self.server.mode == "reader",
+                "local_review": bool(getattr(self.server, 'local_review', False)),
+                "local_edit": bool(getattr(self.server, 'local_edit', False)),
                 "viewer": "@human",
                 "knowledge_base": str(self.server.kb_root),
                 "knowledge_base_name": self.server.kb_root.name,
@@ -1033,6 +1076,9 @@ class Handler(BaseHTTPRequestHandler):
     def read_json(self):
         length = int(self.headers.get("Content-Length", "0") or 0)
         if length <= 0 or length > 65536:
+            if length > 0:
+                self.connection.settimeout(1)
+                self.rfile.read(min(length, 131072))
             raise ValueError("request body must be between 1 and 65536 bytes")
         value = json.loads(self.rfile.read(length).decode("utf-8"))
         if not isinstance(value, dict):
@@ -1061,6 +1107,31 @@ class Handler(BaseHTTPRequestHandler):
             self._reject_post(403, 'same-origin JSON requests required')
             return
         route = self.path.split("?", 1)[0]
+        if route in {'/api/tasks/create', '/api/skills/import-bundled'}:
+            if not getattr(self.server, 'local_edit', False):
+                self._reject_post(403, 'Local editing is disabled; use oks mail serve --local-edit')
+                return
+            if self.headers.get('Origin') != allowed_origin:
+                self._reject_post(403, 'An explicit same-origin request is required for local editing')
+                return
+            from . import workspace
+            try:
+                request = self.read_json()
+                if request.get('expected_knowledge_base') != str(self.server.kb_root):
+                    self.send_json(409, {'error': '知识库已切换，请重试连接后重新查看。', 'code': 'instance_changed'})
+                    return
+                result = workspace.create_task(self.server.kb_root, request) if route.endswith('/create') else workspace.invoke(self.server.kb_root, 'import-bundled', request)
+                self.send_json(201, result)
+            except (OSError, ValueError, KeyError, TypeError) as exc:
+                self.send_json(409, {'error': str(exc) if isinstance(exc, ValueError) else 'Cannot save; inspect the current state before retrying'})
+            return
+        if route == '/api/workspace/query':
+            from . import workspace
+            try:
+                self.send_json(200, workspace.invoke(self.server.kb_root, 'query', self.read_json()))
+            except (OSError, ValueError, KeyError, TypeError) as exc:
+                self.send_json(400, {'error': str(exc)})
+            return
         if route == "/api/feedback/inspect":
             # Read-only POST avoids placing private scope labels in URL/history.
             from knowledge_studio.feedback import inspect
@@ -1069,6 +1140,29 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(200, inspect(self.server.kb_root, request.get("scope")))
             except (OSError, ValueError, KeyError, TypeError):
                 self.send_json(400, {"error": "Cannot read this exact private scope; data preserved"})
+            return
+        if route in {'/api/feedback/review', '/api/feedback/withdraw-candidate', '/api/feedback/export', '/api/learning/promote'}:
+            if not getattr(self.server, 'local_review', False):
+                self._reject_post(403, 'Local review is disabled; use oks mail serve --local-review')
+                return
+            # Unlike read-only POST, mutations require an explicit browser origin.
+            if self.headers.get('Origin') != allowed_origin:
+                self._reject_post(403, 'An explicit same-origin request is required for local review')
+                return
+            from . import feedback, workspace
+            try:
+                request = self.read_json()
+                if route == '/api/learning/promote':
+                    result = workspace.invoke(self.server.kb_root, 'promote', request)
+                elif route == '/api/feedback/export':
+                    result = feedback.export(self.server.kb_root, request, confirm_share=request.get('confirm_share') is True)
+                elif route == '/api/feedback/withdraw-candidate':
+                    result = feedback.withdraw_candidate(self.server.kb_root, request)
+                else:
+                    result = feedback.review(self.server.kb_root, request)
+                self.send_json(200, result)
+            except (OSError, ValueError, KeyError, TypeError) as exc:
+                self.send_json(409, {'error': str(exc) if isinstance(exc, ValueError) else 'Operation failed; inspect current state before retrying'})
             return
         # Reader mode rejects all writes. Legacy collaboration mode is an explicit
         # opt-in; its team/sync endpoint can commit/rebase/push KB files and is not
@@ -1258,13 +1352,17 @@ class _LoopbackHTTPServer(ThreadingHTTPServer):
         self.server_name, self.server_port = self.server_address[:2]
 
 
-def create_server(root: Path, port: int = 3182, *, mode: str = "reader", knowledge_source=None) -> ThreadingHTTPServer:
+def create_server(root: Path, port: int = 3182, *, mode: str = "reader", knowledge_source=None, local_review: bool = False, local_edit: bool = False) -> ThreadingHTTPServer:
     if mode not in {"reader", "collaboration"}:
         raise ValueError("Mail mode must be reader or collaboration")
+    if (local_review or local_edit) and mode != 'reader':
+        raise ValueError('Use --local-review with reader mode; collaboration writes are a separate capability')
     root = validate_root(root)
     server = _LoopbackHTTPServer(("127.0.0.1", port), Handler)
     server.kb_root = root
     server.mode = mode
+    server.local_review = bool(local_review or local_edit)
+    server.local_edit = bool(local_edit)
     server.knowledge_source = knowledge_source
     server.session_id = None
     if mode == "reader":

@@ -291,6 +291,11 @@ def parse_wiki_file(path: Path) -> dict | None:
     except OSError:
         return None
 
+    return _parse_wiki_text(text, path)
+
+
+def _parse_wiki_text(text: str, path: Path) -> dict | None:
+
     if not text.startswith("---"):
         return None
 
@@ -920,16 +925,34 @@ def promote_draft(
     area: str | None = None,
     tags: list[str] | None = None,
     slug_hint: str | None = None,
+    *,
+    expected_sha256: str | None = None,
 ) -> str:
     from knowledge_studio.feedback import export_guard
-    with export_guard(repo_root(), _draft_path(slug)):
+    if expected_sha256 is not None:
+        if not isinstance(expected_sha256, str) or not re.fullmatch(r'[0-9a-f]{64}', expected_sha256):
+            raise ValueError('Read the exact Draft revision before promotion')
+        # Serialize web reviews of the same Draft, without changing legacy CLI calls.
+        with _file_lock(repo_root() / '.oks/locks' / ('review-' + hashlib.sha256(slug.encode()).hexdigest() + '.lock')):
+            from .workspace import draft
+            inspected = draft(repo_root(), 'drafts/' + slug + '.md')
+            if inspected['sha256'] != expected_sha256:
+                raise ValueError('Draft changed; read it again before promotion')
+            return _reviewed_promotion(slug, title, wiki_type, area, tags, slug_hint, inspected['text'])
+    return _reviewed_promotion(slug, title, wiki_type, area, tags, slug_hint)
+
+
+def _reviewed_promotion(slug, title, wiki_type, area, tags, slug_hint, reviewed_text=None):
+    from knowledge_studio.feedback import export_guard
+    snapshot_meta = _parse_wiki_text(reviewed_text, _draft_path(slug)) if reviewed_text is not None else None
+    with export_guard(repo_root(), _draft_path(slug), reviewed_meta=snapshot_meta):
         # Re-read under the feedback guard; Skill review keeps its existing lock.
-        meta = parse_wiki_file(_draft_path(slug)) or {}
+        meta = snapshot_meta if snapshot_meta is not None else parse_wiki_file(_draft_path(slug)) or {}
         if meta.get("artifact_kind") == "skill":
             from knowledge_studio.skills import _inside, _root
             with _file_lock(_inside(_root(), ".oks/locks/skills.lock")):
-                return _promote_draft(slug, title, wiki_type, area, tags, slug_hint)
-        return _promote_draft(slug, title, wiki_type, area, tags, slug_hint)
+                return _promote_draft(slug, title, wiki_type, area, tags, slug_hint, reviewed_text=reviewed_text)
+        return _promote_draft(slug, title, wiki_type, area, tags, slug_hint, reviewed_text=reviewed_text)
 
 
 def _promote_draft(
@@ -939,12 +962,14 @@ def _promote_draft(
     area: str | None = None,
     tags: list[str] | None = None,
     slug_hint: str | None = None,
+    *,
+    reviewed_text: str | None = None,
 ) -> str:
     draft_path = _draft_path(slug)
     if not draft_path.exists():
         raise FileNotFoundError(f"Draft not found: {slug}")
 
-    meta = parse_wiki_file(draft_path)
+    meta = _parse_wiki_text(reviewed_text, draft_path) if reviewed_text is not None else parse_wiki_file(draft_path)
     if not meta:
         raise ValueError(
             f"Draft '{slug}' has no valid YAML frontmatter. "
@@ -1031,7 +1056,18 @@ def _promote_draft(
                             "source_candidates": [draft_path.relative_to(repo_root()).as_posix()]},
     )
 
-    draft_path.unlink()
+    unchanged = reviewed_text is None
+    if reviewed_text is not None:
+        try:
+            with draft_path.open('rb') as handle:
+                current = handle.read(len(reviewed_text.encode('utf-8')) + 4)
+            unchanged = current.decode('utf-8-sig') == reviewed_text
+        except (OSError, UnicodeError):
+            unchanged = False
+    if unchanged:
+        draft_path.unlink()
+    # An editor may change the source while the reviewed snapshot is saved.
+    # Keep that edited Draft instead of deleting unreviewed work.
     return path.stem
 
 

@@ -38,8 +38,8 @@ def test_web_reads_real_threads_and_rejects_unsafe_requests(kb):
         with request("/") as response:
             # Phase 1 panel: read-only observation surface (rail nav + timeline + wiki graph).
             body = response.read()
-            assert "协作主线".encode() in body
-            assert "知识工作区".encode() in body
+            for label in ('讨论', '目标', '学习'):
+                assert ('<span>' + label + '</span>').encode() in body
             assert b"<form" not in body
         with request("/api/mail/send", {"to": "custom-agent,reviewer", "title": "Hi", "body": "hello"}) as response:
             result = json.load(response)

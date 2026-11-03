@@ -40,6 +40,7 @@ from knowledge_studio.workbuddy import inspect_workbuddy_adapter
 from knowledge_studio.skills_cli import app as skills_app
 from knowledge_studio.handoff_cli import app as handoff_app
 from knowledge_studio.feedback_cli import app as feedback_app
+from knowledge_studio.tasks_cli import app as tasks_app
 
 # ── ingest: connector is a regular PyPI dependency (oks-connector>=0.2.0) ──
 from oks_connector.raw_bundle_adapter import (
@@ -234,6 +235,7 @@ app.add_typer(hook_app, name="hook")
 app.add_typer(mail_app, name="mail")
 app.add_typer(handoff_app, name="handoff")
 app.add_typer(feedback_app, name="feedback")
+app.add_typer(tasks_app, name="task")
 app.add_typer(registry_app, name="registry")
 app.add_typer(eval_app, name="eval")
 app.add_typer(trace_app, name="trace")
@@ -805,6 +807,8 @@ def recall_cmd(
     task_scope: Optional[str] = typer.Option(None, "--task-scope", envvar="OKS_TASK_SCOPE", help="Exact agreement scope label"),
     feedback_subject: Optional[str] = typer.Option(None, "--feedback-subject", envvar="OKS_FEEDBACK_SUBJECT", help="Explicit private feedback subject (routing label, not authentication)"),
     feedback_project: Optional[str] = typer.Option(None, "--feedback-project", envvar="OKS_FEEDBACK_PROJECT", help="Explicit private feedback project; requires current agreement and scope"),
+    no_task: bool = typer.Option(False, "--no-task", help="Ignore this workspace's selected task for this query"),
+    compact: bool = typer.Option(False, "--compact", help="Compact JSON context; preserve requirements and source references, omit diagnostic detail unless --explain"),
     debug_record: bool = typer.Option(False, "--debug-record", help="Store local bounded retrieval evidence"),
     floor_override: Optional[float] = typer.Option(None, "--floor", help="临时调 floor（不改 settings/recall.yaml，一次性）"),
 ):
@@ -816,12 +820,15 @@ def recall_cmd(
     from knowledge_studio.recall import load_recall_params
     load_recall_params()  # 触发 env 迁移警告（env 已废弃）
     output_format = _validate_output_format(output_format)
+    if compact and output_format != 'json':
+        raise typer.BadParameter('--compact requires --format json')
     try:
         from knowledge_studio.handoff_cli import load_agreement
         task = load_agreement(agreement) if agreement else None
         result = recall(
             agreement=task, task_scope=task_scope, debug_record=debug_record,
             feedback_subject=feedback_subject, feedback_project=feedback_project,
+            use_task=not no_task,
             query=query,
             topic_id=topic_id,
             limit=limit,
@@ -849,7 +856,11 @@ def recall_cmd(
         ]
 
     if output_format == "json":
-        _emit_json(result)
+        if compact:
+            from knowledge_studio.recall import compact_context
+            typer.echo(json.dumps(compact_context(result, explain=explain), ensure_ascii=False, separators=(',', ':')))
+        else:
+            _emit_json(result)
         return
 
     if result["episodic"]:
@@ -878,6 +889,10 @@ def recall_cmd(
                 expand=False,
             ))
 
+    if result.get("continuation"):
+        saved = result["continuation"]
+        console.print(f"\n当前任务：{saved['task_id']}（修订 {saved['revision']}）", markup=False)
+        console.print("已完成：" + saved['progress'] + "\n下一步：" + saved['next_action'], markup=False)
     task_context = result.get("task_context", {})
     if task_context.get("status") != "not_requested":
         console.print("\n本任务要求：" + str(task_context.get("status")), markup=False)
@@ -3210,6 +3225,8 @@ def mail_serve(
     path: Optional[str] = typer.Option(None, "--path", help="Knowledge base root"),
     port: int = typer.Option(3182, "--port", min=1, max=65535),
     mode: str = typer.Option("reader", "--mode", help="reader (read-only) or collaboration (legacy write API)"),
+    local_review: bool = typer.Option(False, '--local-review', help='Allow local candidate review/export and inspected Draft promotion; Mail remains read-only in reader mode'),
+    local_edit: bool = typer.Option(False, '--local-edit', help='Allow local Goal/task creation, bundled Skill draft import and review; Mail remains read-only'),
     background: bool = typer.Option(False, "--background", help="Run independently of this terminal or host session"),
     status: bool = typer.Option(False, "--status", help="Probe the managed server without writing files"),
     stop: bool = typer.Option(False, "--stop", help="Stop only this instance's managed background server"),
@@ -3219,6 +3236,8 @@ def mail_serve(
 
     if sum((background, status, stop)) > 1:
         raise typer.BadParameter("Choose only one of --background, --status or --stop")
+    if (local_review or local_edit) and (background or status or stop):
+        raise typer.BadParameter('--local-review / --local-edit are foreground options; run serve without --background, --status or --stop')
     if background or status or stop:
         from knowledge_studio.mail_server import start_background, server_status, stop_background
 
@@ -3232,7 +3251,7 @@ def mail_serve(
         return
 
     try:
-        server = create_server(_instance_root(path), port, mode=mode)
+        server = create_server(_instance_root(path), port, mode=mode, local_review=local_review, local_edit=local_edit)
     except (ValueError, OSError) as exc:
         console.print(f"[red]{exc}[/red]")
         raise typer.Exit(2)

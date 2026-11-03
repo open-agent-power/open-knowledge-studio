@@ -127,6 +127,36 @@ def feedback_probe(cli: Path, work: Path, env: dict, root: Path, agreement: Path
     return {"status": "passed", "kind": "synthetic CLI and packaged Hook; no host consumption claim"}
 
 
+def task_probe(cli: Path, work: Path, env: dict, root: Path) -> dict:
+    env = {**env, 'OKS_TASK_HOME': str(work / 'task-bindings')}
+    goal = root / 'profiles/goals/task-smoke.md'
+    goal.write_text('---\ntype: goal\ntitle: Task smoke\nstatus: active\n---\nCite sources.\n', encoding='utf-8')
+    def run(label, *args):
+        return json.loads(execute([str(cli), *args], work, env, work / f'task-{label}.log'))
+    run('start', 'task', 'start', 'report', '--goal', 'profiles/goals/task-smoke.md')
+    run('select', 'task', 'select', 'report')
+    run('checkpoint', 'task', 'checkpoint', 'report', '--revision', '1', '--progress', 'Outline ready', '--next', 'Write evidence')
+    queried = run('recall', 'recall', 'continue report', '--format', 'json')
+    if queried['continuation']['next_action'] != 'Write evidence':
+        raise RuntimeError('Installed task selection did not continue across CLI processes')
+    compact = run('compact', 'recall', 'continue report', '--format', 'json', '--compact')
+    if compact['schema_version'] != 'recall-context/v1' or compact['continuation'] != queried['continuation']:
+        raise RuntimeError('Compact context lost the installed task requirements')
+    goal.write_text(goal.read_text(encoding='utf-8') + 'New audience: managers.\n', encoding='utf-8')
+    blocked = subprocess.run([str(cli), 'recall', 'continue report', '--format', 'json'], cwd=work, env=env, capture_output=True, text=True, encoding='utf-8', timeout=60)
+    (work / 'task-stale.log').write_text(blocked.stdout + blocked.stderr, encoding='utf-8')
+    if blocked.returncode != 2:
+        raise RuntimeError('Installed task silently accepted a changed Goal')
+    run('refresh', 'task', 'refresh', 'report', '--revision', '2', '--accept-changes')
+    if 'managers' not in run('refreshed', 'recall', 'continue report', '--format', 'json')['continuation']['goal_text']:
+        raise RuntimeError('Explicit task refresh failed')
+    execute([str(cli), 'task', 'handoff', 'report'], work, env, work / 'task-handoff.md')
+    run('clear', 'task', 'clear')
+    if 'continuation' in run('cleared', 'recall', 'continue report', '--format', 'json'):
+        raise RuntimeError('Cleared selection still affects recall')
+    return {'status': 'passed', 'kind': 'synthetic installed lifecycle; real model trial recorded separately'}
+
+
 def handoff_probe(cli: Path, work: Path, env: dict, root: Path) -> dict:
     """Real installed CLI calls, with explicitly synthetic review material."""
     import yaml
@@ -194,10 +224,11 @@ def handoff_probe(cli: Path, work: Path, env: dict, root: Path) -> dict:
     query_instructions = (_asset_source() / "skills/query/SKILL.md").read_text(encoding="utf-8")
     if "task_context.candidates" not in query_instructions or "6-factor recall engine" in query_instructions:
         raise RuntimeError("Packaged query instructions are stale")
-    for name in ("debug.html", "debug.js", "debug.css"):
+    for name in ("debug.html", "debug.js", "debug.css", "tasks.html", "tasks.js", "tasks.css"):
         if not (_asset_source() / "mail-web" / name).is_file():
             raise RuntimeError("Debug page missing from installed package")
     feedback_result = feedback_probe(cli, work, env, root, agreement, pages[0])
+    task_result = task_probe(cli, work, env, root)
     goal.write_text(goal.read_text(encoding="utf-8") + "Changed human constraint.\n", encoding="utf-8")
     stale = subprocess.run([str(cli), "handoff", "check", sent["message_id"], "--scope", "smoke:report"],
                            cwd=work, env=receiver_env, capture_output=True, text=True, encoding="utf-8", timeout=60)
@@ -207,7 +238,7 @@ def handoff_probe(cli: Path, work: Path, env: dict, root: Path) -> dict:
     return {"status": "passed", "message_id": sent["message_id"], "check": checked,
             "stale_exit_code": stale.returncode, "kind": "synthetic installed CLI trial",
             "retrieval": "FTS5 Wiki + capability, agreement, packaged Hook catalog and debug records passed",
-            "feedback": feedback_result}
+            "feedback": feedback_result, "task": task_result}
 
 
 def probe(work: Path) -> dict:

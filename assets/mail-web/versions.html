@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Skill 版本 · OKS</title><link rel="icon" href="/favicon.svg"><link rel="stylesheet" href="/tasks.css"><link rel="stylesheet" href="/versions.css"><script src="/workspace-ui.js" defer></script><script src="/versions.js" defer></script></head>
+<body>
+<header class="topbar"><a class="brand" href="/" aria-label="OKS 工作区">oks<span>.</span></a><nav aria-label="主导航"><a href="/#collaboration">讨论</a><a href="/tasks">目标</a><a href="/#wiki">学习</a></nav><details class="more-nav"><summary>更多</summary><div class="more-nav-menu"><a href="/#messages">通信</a><a href="/start">接入</a><a href="/review">审核</a><a href="/debug">诊断</a><span aria-current="page">Skill 版本</span></div></details><button id="refresh" class="quiet" type="button">刷新</button></header>
+<main>
+<header class="intro"><p class="eyebrow">版本对照</p><h1>Skill 版本</h1><p>比较不可变快照、审核状态和引用此版本的任务。加载命令不会覆盖本地修改。</p></header>
+<section class="picker"><label for="skillId">Skill ID</label><input id="skillId" maxlength="64" autocomplete="off" placeholder="例如：oks"><button id="loadVersions" type="button">读取版本</button><span id="status" role="status" aria-live="polite">输入 Skill ID 后读取。</span></section>
+<section id="compareControls" class="compare-controls" hidden><label>旧版本<select id="fromVersion"></select></label><label>对照版本<select id="toVersion"></select></label><button id="compare" type="button">比较版本</button><a class="review-link" href="/review">查看审核草稿</a></section>
+<section id="versionList" class="version-list"></section>
+<section class="bundled-section"><div class="create-heading"><h2>当前内置说明</h2><button id="compareBundled" type="button">与所选旧版本对照</button></div><p class="note">只对照说明文件。准备草稿不会替换旧 Wiki，也不会安装或执行 Skill。</p><p id="bundledStatus" role="status" aria-live="polite"></p><div id="bundledResult" hidden><pre id="bundledDiff" class="diff-text"></pre><details><summary>本次内置文件</summary><div id="bundledFiles"></div></details><button id="prepareBundled" type="button" disabled>准备升级草稿</button><p id="bundledGate" class="note"></p><div id="bundledNext"></div></div></section>
+<div id="results" hidden>
+<section class="summary-grid"><article><h2>旧版本</h2><p id="fromSummary"></p></article><article><h2>对照版本</h2><p id="toSummary"></p></article></section>
+<section class="changes-section"><h2>文件差异 <span id="changeCount"></span></h2><div id="changes"></div></section>
+<section class="impact-section"><h2>引用旧版本的当前任务</h2><div id="tasks"></div><p class="note">“需要复核”是版本对照提示，不表示任务正在执行。使用记录由调用方报告，执行情况未验证。</p></section>
+<section class="recovery-section"><h2>恢复命令</h2><p id="loadCommand"></p><div id="hostStates"></div><p class="note">只有已审核版本可以加载。发现本地修改或非托管目录时，不覆盖；请先保留这些内容。</p></section>
+</div>
+</main>
+</body></html>

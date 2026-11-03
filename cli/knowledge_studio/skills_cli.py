@@ -75,6 +75,22 @@ def list_cmd(
     _run(execute)
 
 
+@app.command("versions")
+def versions_cmd(skill_id: str = typer.Argument(help="Skill identifier")):
+    """List immutable versions, review states and package integrity."""
+    _run(lambda: skills.list_versions(skills._root(), skill_id))
+
+
+@app.command("diff")
+def diff_cmd(
+    skill_id: str = typer.Argument(help="Skill identifier"),
+    from_version: str = typer.Option(..., "--from-version", help="Full SHA256 version"),
+    to_version: str = typer.Option(..., "--to-version", help="Full SHA256 version"),
+):
+    """Compare immutable Skill snapshots without executing or installing them."""
+    _run(lambda: skills.compare_versions(skills._root(), skill_id, from_version, to_version))
+
+
 @app.command("search")
 def search_cmd(
     query: str = typer.Argument(),
@@ -99,9 +115,25 @@ def load_cmd(
     skill_id: str = typer.Argument(),
     version: Optional[str] = typer.Option(None, "--version"),
     target: Optional[str] = typer.Option(None, "--target", help="Optional project host: agents | claude | qoder | codebuddy"),
+    retrieval_id: Optional[str] = typer.Option(None, "--retrieval-id", help="Explicit query record to link this pinned read"),
 ):
     """Read one reviewed Skill with its assets; optionally materialize it for a host."""
-    _run(lambda: skills.load(skill_id, version=version, host=target))
+    def execute():
+        if retrieval_id:
+            from knowledge_studio import retrieval_debug, store
+            root = store.repo_root()
+            selected = skills._selected(skill_id, version)
+            source = Path(selected['file_path']).resolve().relative_to(root.resolve()).as_posix()
+            hit = retrieval_debug.source_hit(root, retrieval_id, source)
+            if hit.get('skill_version') != selected['skill_version']:
+                raise ValueError('Selected Skill version differs from query; query again')
+        result = skills.load(skill_id, version=version, host=target)
+        if retrieval_id:
+            result['retrieval_id'] = retrieval_id
+            result['load_receipt'] = retrieval_debug.record_load(root, retrieval_id, source,
+                selected['skill_version'], 'host_copy' if target else 'instructions_returned')
+        return result
+    _run(execute)
 
 
 @app.command("unload")

@@ -437,6 +437,8 @@ def recall(
     debug_record: bool = False,
     feedback_subject: str | None = None,
     feedback_project: str | None = None,
+    workspace: Path | None = None,
+    use_task: bool = True,
 ) -> dict[str, Any]:
     """Two-path recall: episodic (raw/ + profiles/) + knowledge (wiki/).
 
@@ -452,6 +454,22 @@ def recall(
     """
     from .retrieval_debug import agreement_context, record
     from .store import repo_root
+    saved_task = None
+    if agreement is None and use_task:
+        from . import tasks
+        try:
+            selected = tasks.binding(repo_root(), workspace or Path.cwd())
+            if selected:
+                saved_task = tasks.show(repo_root(), selected['task_id'])
+                agreement = saved_task['agreement']
+                if task_scope is not None and task_scope != agreement['scope']:
+                    raise ValueError('Selected task differs from explicit scope; select the intended task or use --no-task')
+                task_scope = agreement['scope']
+                if feedback_subject is None and feedback_project is None:
+                    feedback_subject = selected.get('feedback_subject')
+                    feedback_project = selected.get('feedback_project')
+        except (OSError, KeyError, TypeError) as exc:
+            raise ValueError('Selected task cannot be read; inspect the task or explicitly clear selection') from exc
     task = agreement_context(repo_root(), agreement, task_scope)
     if task:
         bound_goal = Path(task["goal_path"]).stem
@@ -509,11 +527,47 @@ def recall(
                 # Preserve ordinary recall, never expose private exception text.
                 task_context["status"] = "unavailable"
     result["task_context"] = task_context
+    if saved_task is not None:
+        result['continuation'] = tasks.continuation(saved_task)
+        diagnostics['continuation'] = {'task_id': saved_task['task_id'], 'revision': saved_task['revision'], 'status': saved_task['status']}
     diagnostics["task_context"] = {"status": task_context["status"],
         "selected_count": len(task_context["candidates"]), "excluded_counts": task_context["excluded_counts"]}
     if debug_record:
         result["debug_record_id"] = record(repo_root(), query, diagnostics, result["knowledge"])
+        for hit in result['knowledge']:
+            if hit.get('load_command'):
+                hit['load_command'] += ' --retrieval-id ' + result['debug_record_id']
     return result
+
+
+def compact_context(result: dict, *, explain: bool = False) -> dict:
+    """Presentation projection only: retain requirements, provenance and source pointers."""
+    selected = {key: result[key] for key in (
+        'query', 'goal', 'knowledge', 'episodic', 'task_context', 'continuation', 'debug_record_id'
+    ) if key in result}
+    selected['schema_version'] = 'recall-context/v1'
+    redundant = {'schema_version', 'channel', 'rank', 'score', 'backend'}
+    if not explain:
+        redundant.add('score_components')
+    for channel in ('knowledge', 'episodic'):
+        selected[channel] = [{key: value for key, value in hit.items() if key not in redundant}
+                             for hit in result.get(channel, [])]
+    continuation = result.get('continuation')
+    diagnostics = result.get('diagnostics', {})
+    goal_path = (diagnostics.get('task') or {}).get('goal_path')
+    if continuation and goal_path:
+        # The complete checked Goal is already in continuation; do not repeat its snippet.
+        selected['episodic'] = [hit for hit in selected['episodic'] if hit.get('source_path') != goal_path]
+        selected['task_detail_command'] = f"oks task show --task-id {continuation['task_id']}"
+    if explain:
+        selected['diagnostics'] = diagnostics
+    else:
+        warnings = {key: diagnostics[key] for key in (
+            'fallback_reason', 'fallback_error', 'retrieval_error', 'skill_error', 'experimental', 'capability_fallback'
+        ) if diagnostics.get(key)}
+        if warnings:
+            selected['warnings'] = warnings
+    return selected
 
 
 def _profile_in_scope(
