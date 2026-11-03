@@ -33,6 +33,19 @@ function render() {
    const step=el('div');step.append(el('span',label),el('strong',value));flow.append(step);
   }
   body.append(flow);
+  const measure = d.measurements;
+  if (measure && Number.isFinite(measure.total_ms)) {
+   const panel=el('section',undefined,'measurements');
+   panel.append(el('p',`本次 OKS 查询 ${measure.total_ms.toFixed(1)} ms`,'measurement-title'));
+   const names={task_check:'任务检查',episodic:'资料检索',knowledge:'Wiki / Skill 检索',requirements:'要求筛选'};
+   const phases=el('div',undefined,'measured-phases'),maximum=Math.max(1,...Object.values(measure.phase_ms||{}).filter(Number.isFinite));
+   for(const [key,value] of Object.entries(measure.phase_ms||{}))if(Number.isFinite(value)&&value>=0){
+    const row=el('div',undefined,'measured-phase'),bar=el('span',undefined,'measured-bar');bar.style.width=Math.max(1,value/maximum*100)+'%';
+    row.append(el('span',names[key]||key),el('strong',value.toFixed(1)+' ms'),bar);phases.append(row);
+   }
+   panel.append(phases,el('p',`查询 ${measure.query_utf8_bytes} B · 返回上下文 JSON ${measure.context_utf8_bytes} B`,'meta'),el('p','仅测量 OKS 查询；模型 Token 与宿主执行耗时未记录。','meta'));body.append(panel);
+  } else body.append(el('p','该记录未测量耗时。','meta'));
+  if(d.memory_validity?.would_exclude)body.append(el('p',d.memory_validity.mode==='shadow'?`时间条件对照：库内 ${d.memory_validity.would_exclude} 项暂不适用，当前仅评估。`:`时间条件已启用：库内 ${d.memory_validity.would_exclude} 项暂不适用。`,'meta'));
   if(d.task_warning) body.append(el('p',d.task_warning.status==='needs_review'?'任务来源有变化，请先核对目标。':'部分任务反馈已失效或冲突，未纳入上下文。','warning'));
   const grouped=new Map();
   for(const use of usage) {
@@ -74,6 +87,7 @@ function render() {
   const technical=el('details',undefined,'technical');technical.append(el('summary','技术详情'));
   technical.append(facts([['检索策略',d.strategy],['请求后端',d.requested_backend],['降级 / 实验',d.fallback_reason||d.capability_fallback||(d.experimental?'实验对照':'无')],['库内排除',d.corpus_excluded],['返回过滤',d.filtered],['Hook 跳过',record.skipped],['任务约定',d.task],['当前进度标识',d.continuation],['来源版本',d.task?.goal_sha256],['查询指纹',record.query_sha256],['使用证据','未记录宿主消费或执行；命中、输出和部署不能代替执行证据。']]));
   if(d.task_context)technical.append(taskRequirements(d.task_context));
+  if(d.memory_validity)technical.append(facts([['记忆时间条件',d.memory_validity]]));
   body.append(technical);card.append(body);$('records').append(card);
  });
 }

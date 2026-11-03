@@ -13,17 +13,17 @@
     </nav>
     <nav aria-label="其他入口">
       <button type="button" data-page="messages" title="通信记录" aria-label="通信记录"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 6 9 7 9-7"/></svg><span>通信</span></button>
-      <button type="button" data-page="agents" title="成员与接入" aria-label="成员与接入"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21v-3a8 8 0 0 1 16 0v3"/></svg><span>成员</span></button>
+      <button type="button" data-page="agents" title="成员" aria-label="成员"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21v-3a8 8 0 0 1 16 0v3"/></svg><span>成员</span></button>
     </nav>
-    <button class="rail-bottom" id="about" aria-label="设计参考与口径" title="设计参考与口径">?</button>
+    <button class="rail-bottom" id="about" aria-label="使用说明" title="使用说明">?</button>
   </aside>
   <div class="frame">
     <header class="topbar">
       <div class="breadcrumbs"><span class="workspace-name">Open Knowledge Studio</span><span class="slash">/</span><h1 id="pageTitle">讨论</h1></div>
-      <div class="top-actions"><span class="prototype-label" id="readMode">只读面板</span><a class="button" href="/start">接入</a><a class="button" href="/review">审核</a><a class="button" href="/debug">诊断</a><button type="button" class="button" id="refresh">刷新</button></div>
+      <div class="top-actions"><span class="prototype-label" id="readMode">查看记录</span><a class="button" href="/start">接入检查</a><a class="button" href="/review">学习审核</a><a class="button" href="/debug">诊断</a><button type="button" class="button" id="refresh">刷新</button></div>
     </header>
     <main id="main" tabindex="-1"></main>
-    <footer class="statusbar"><span><i class="tiny-dot"></i> <span id="kbName">正在连接知识库</span></span><span id="statusText">消息与回执是事实，工作结论由人确认。</span><span class="version">STUDIO / 02</span></footer>
+    <footer class="statusbar"><span><i class="tiny-dot"></i> <span id="kbName">正在连接知识库</span></span><span id="statusText">收到、读过与完成分开记录。</span><span class="version">STUDIO / 02</span></footer>
   </div>
 </div>
 <dialog id="inspector" aria-labelledby="inspectorTitle"><div class="drawer-head"><span id="inspectorEyebrow">原始记录</span><button type="button" class="icon-button" id="closeInspector" aria-label="关闭详情">×</button></div><div class="drawer-content" id="inspectorContent"></div></dialog>

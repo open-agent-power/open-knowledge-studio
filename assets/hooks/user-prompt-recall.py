@@ -482,6 +482,7 @@ def _finish_hook(result: dict) -> int:
             )
             + "\n"
         )
+    sys.stdout.flush()
     return 0
 
 
@@ -598,7 +599,9 @@ def main() -> int:
                     selected = binding(kb_root, Path(cwd))
                     if selected:
                         task = show(kb_root, selected["task_id"])
-                        if task["status"] != "current":
+                        if task.get('lifecycle', 'active') != 'active':
+                            diagnostics['task_warning'] = {'status': 'task_closed', 'task_id': task['task_id'], 'lifecycle': task['lifecycle']}
+                        elif task["status"] != "current":
                             warning = {
                                 "status": task["status"],
                                 "task_id": task["task_id"],
@@ -667,7 +670,10 @@ def main() -> int:
                  "完整约定与历史请用 oks task show 查看；这不是执行成功或内容正确的证明。"]
         sections.append('\n'.join(lines))
     warning = diagnostics.get("task_warning")
-    if isinstance(warning, dict) and warning.get("status") == "needs_review":
+    if isinstance(warning, dict) and warning.get('status') == 'task_closed':
+        sections.append('## 任务已结束\n任务：' + _mail_value(warning.get('task_id')) +
+                        '\n请勿继续旧任务。先用 oks task show 查看；仅在用户明确要求重开时使用 oks task reopen，或用 oks task clear 解除选择。结束状态不代表产物质量已验收。')
+    elif isinstance(warning, dict) and warning.get("status") == "needs_review":
         source_issues = warning.get("issues", [])
         sources = ", ".join(
             _mail_value(issue.get("code", "source_changed")) +
@@ -681,6 +687,8 @@ def main() -> int:
             "请先检查：<code>oks task show --task-id " + _mail_value(warning.get("task_id")) + "</code>",
             "当前 Goal 或来源尚未获接受；请勿按旧约定继续，需由用户明确确认后再刷新。",
         ]))
+        if any(issue.get('code') in {'source_expired','source_not_yet_valid','source_invalid_time'} for issue in source_issues if isinstance(issue, dict)):
+            sections.append('来源时间条件暂不适用：请先通过 oks task sources 明确移除或改选来源；仅 refresh 不能跳过有效期。')
     elif isinstance(warning, dict) and warning.get("status") == "feedback_excluded":
         counts = warning.get("counts", {})
         labels = {"invalidated": "已失效或撤回", "different_agreement": "约定版本不同",
@@ -844,14 +852,24 @@ def main() -> int:
             "用户明确拒绝（\"不要\"/\"错了\"）→ 不调（默认未采纳）\n"
             "无用忽略——下次 cooldown 换别的。信号都在对话里，你代人类完成。"
         )
-    out.append("</recalled-memory>")
-    return _finish_hook(_hook_response(
-        "injected",
-        context="\n".join(out),
-        candidates=candidates,
-        picked=picked,
-        threshold=floor,
-    ))
+    from contextlib import ExitStack
+    with ExitStack() as stack:
+        due = []
+        if continuation and not recall_failed:
+            try:
+                from knowledge_studio.reminders import output_guard
+                due = stack.enter_context(output_guard(kb_root, continuation['task_id'], session_id))
+            except (OSError, ValueError, KeyError, TypeError):
+                print('oks-hook: task reminders unavailable; existing data preserved', file=sys.stderr)
+        if due:
+            out.append('## 本任务待办提醒\n这些是用户明确设置的事项；提示不代表完成，也不授予新的执行权限。')
+            for item in due:
+                out.append('- ' + _mail_value(item['note']) + '（' + _mail_value(item['due_at']) + '）')
+            out.append('用户决定完成、稍后或取消后，通过任务页或 oks task remind 更新；不得自行将提示标为完成。')
+        out.append("</recalled-memory>")
+        return _finish_hook(_hook_response(
+            "injected", context="\n".join(out), candidates=candidates, picked=picked, threshold=floor,
+        ))
 
 
 if __name__ == "__main__":

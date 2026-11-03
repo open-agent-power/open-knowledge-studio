@@ -84,6 +84,181 @@ def goal(root, relative):
     return _text_file(root, relative, {'.md'})
 
 
+def _current_wiki(root, relative, mode):
+    from .memory_policy import evaluate
+    from .decisions import validate_options
+    handoff._relative(relative, 'wiki')
+    item = _text_file(root, relative, {'.md'})
+    meta = handoff._meta(item['text'].encode('utf-8'))
+    validate_options(meta.get('options'))
+    validity = evaluate(meta.get('applicability'))
+    reason = 'not_reviewed' if not handoff._reviewed(meta) else validity['status'] if mode == 'enforce' and not validity['eligible'] else None
+    return {**item, 'title': str(meta.get('title') or Path(relative).stem), 'options': meta.get('options'),
+            'eligible': reason is None, 'reason': reason, 'time_status': validity['status'], 'time_enforced': mode == 'enforce'}
+
+
+def task_review(root, task_id):
+    """Inspect exact current versions; Wiki history stores metadata, not old bodies."""
+    from .recall import load_recall_params
+    task = tasks.show(root, task_id)
+    old_goal = task['agreement']['goal']
+    try:
+        current_goal = goal(root, old_goal['path'])
+        current_goal['eligible'] = handoff._meta(current_goal['text'].encode('utf-8')).get('type') == 'goal'
+    except (OSError, ValueError, UnicodeError):
+        current_goal = None
+    mode = load_recall_params(root).get('memory_validity', 'shadow')
+    if mode not in {'shadow', 'enforce'}:
+        raise ValueError('memory_validity must be shadow or enforce')
+    old_sources = {v['path']: v for v in task['agreement']['knowledge']}
+    paths = list(islice((root / 'wiki').rglob('*.md'), 101))
+    candidates = list(dict.fromkeys([*old_sources, *(v.relative_to(root).as_posix() for v in paths[:100])]))
+    sources, choices = [], []
+    for relative in candidates:
+        try:
+            current = _current_wiki(root, relative, mode)
+        except (OSError, ValueError, TypeError, UnicodeError):
+            current = None
+        if relative in old_sources:
+            before = old_sources[relative]
+            sources.append({'path': relative, 'before': before, 'current': current,
+                'historical_bytes_available': current is not None and current['sha256'] == before['sha256']})
+        if current is not None:
+            choices.append({key: current[key] for key in ('path', 'title', 'sha256', 'eligible', 'reason', 'time_status', 'time_enforced')})
+    return {'task_id': task_id, 'revision': task['revision'], 'lifecycle': task['lifecycle'],
+            'knowledge_base': str(root), 'goal': {'before': old_goal, 'current': current_goal},
+            'sources': sources, 'choices': choices, 'truncated': len(paths) > 100,
+            'memory_validity_mode': mode, 'state_mutated': False}
+
+
+def accept_task_sources(root, request):
+    from .recall import load_recall_params
+    if load_recall_params(root).get('memory_validity', 'shadow') not in {'shadow', 'enforce'}:
+        raise ValueError('memory_validity must be shadow or enforce')
+    task = tasks.show(root, request.get('task_id'))
+    if request.get('accept_changes') is not True or type(request.get('expected_revision')) is not int:
+        raise ValueError('Inspect the sources and explicitly confirm the exact task revision')
+    chosen = request.get('wiki')
+    if not isinstance(chosen, list) or len(chosen) > handoff.MAX_KNOWLEDGE:
+        raise ValueError('Choose at most 16 reviewed Wiki sources')
+    expected = {task['agreement']['goal']['path']: request.get('expected_goal_sha256')}
+    paths = []
+    for ref in chosen:
+        if not isinstance(ref, dict) or set(ref) != {'path', 'sha256'}:
+            raise ValueError('Inspect each chosen Wiki version first')
+        handoff._relative(ref['path'], 'wiki')
+        paths.append(ref['path']); expected[ref['path']] = ref['sha256']
+    if len(paths) != len(set(paths)):
+        raise ValueError('Choose distinct Wiki sources')
+    return tasks.update_sources(root, task['task_id'], request['expected_revision'], paths, expected_sources=expected)
+
+
+def save_task_progress(root, request):
+    task = tasks.show(root, request.get('task_id'))
+    if (type(request.get('expected_revision')) is not int
+            or request.get('expected_agreement_sha256') != task['agreement']['sha256']):
+        raise ValueError('Task agreement changed; inspect before saving progress')
+    artifacts = request.get('artifacts')
+    if not isinstance(artifacts, list) or len(artifacts) > 16 or any(not isinstance(v, str) for v in artifacts) or len(set(artifacts)) != len(artifacts):
+        raise ValueError('Choose at most 16 distinct artifact paths')
+    return tasks.checkpoint(root, task['task_id'], request['expected_revision'], request.get('progress'), request.get('next_action'), artifacts)
+
+
+def task_handoff(root, task_id, expected_revision):
+    task = tasks.show(root, task_id)
+    if type(expected_revision) is not int or task['revision'] != expected_revision:
+        raise ValueError('Task revision changed; inspect before copying handoff')
+    return {'task_id': task_id, 'revision': task['revision'], 'knowledge_base': str(root),
+            'text': tasks._handoff_text(task), 'state_mutated': False}
+
+
+def task_sources(root, task_id, expected_revision):
+    """Version references, not reconstructed historical bytes or execution evidence."""
+    task = tasks.show(root, task_id)
+    if type(expected_revision) is not int or task['revision'] != expected_revision:
+        raise ValueError('Task revision changed; inspect its sources again')
+    versions = {}
+    current_paths = {v['path'] for v in task['agreement']['knowledge']} | {v['source_path'] for v in task.get('uses', [])}
+    def add(entry, current):
+        revision = entry['revision']
+        for ref, used in [*( (v, False) for v in entry['agreement']['knowledge']), *( (v, True) for v in entry.get('uses', []))]:
+            path = ref.get('source_path') if used else ref.get('path')
+            digest = ref.get('source_sha256') if used else ref.get('sha256')
+            handoff._relative(path, 'wiki')
+            if not isinstance(digest, str) or len(digest) != 64 or any(c not in '0123456789abcdef' for c in digest):
+                raise ValueError('Invalid source version; task record preserved')
+            key = (path, digest)
+            relation = 'use' if current and used else 'agreement' if current else 'replaced' if path in current_paths else 'history'
+            item = versions.setdefault(key, {'path':path, 'sha256':digest, 'title':ref.get('title') or Path(path).stem,
+                                            'relation':relation, 'revisions':[], 'use_revisions':[]})
+            if revision not in item['revisions']: item['revisions'].append(revision)
+            if used and revision not in item['use_revisions']: item['use_revisions'].append(revision)
+    add(task, True)
+    for entry in reversed(task['history']): add(entry, False)
+    return {'task_id':task_id, 'revision':task['revision'], 'knowledge_base':str(root),
+            'sources':list(versions.values()), 'state_mutated':False}
+
+
+def propose_task_correction(root, request):
+    """Bridge explicit task feedback to existing private pending review; never approve."""
+    from . import store
+    path = tasks._path(root, request.get('task_id'))
+    # Same ordering as task writes: task lock first, then private feedback lock.
+    with store._file_lock(path.with_suffix('.lock')):
+        return _propose_task_correction(root, request)
+
+
+def _propose_task_correction(root, request):
+    from . import feedback
+    task = tasks.show(root, request.get('task_id'))
+    if (type(request.get('expected_revision')) is not int or task['revision'] != request['expected_revision']
+            or request.get('expected_agreement_sha256') != task['agreement']['sha256']):
+        raise ValueError('Task revision or agreement changed; inspect before recording correction')
+    tasks.require_active_scope(root, task['task_id'])
+    if task['status'] != 'current': raise ValueError('Task sources need review before recording correction')
+    selection = feedback.scope(request.get('scope'))
+    if selection['task'] != task['task_id']: raise ValueError('Correction scope differs from task')
+    identifier = feedback._id(request.get('request_id'))
+    reason = feedback._text(request.get('reason'), 'reason', 2000)
+    summary = feedback._text(request.get('summary'), 'summary', 2000)
+    source = request.get('source')
+    refs = [{'path':v['path'], 'sha256':v['sha256']} for v in task['agreement']['knowledge']]
+    refs += [{'path':v['source_path'], 'sha256':v['source_sha256']} for v in task.get('uses', [])]
+    if not isinstance(source, dict) or set(source) != {'path','sha256'} or source not in refs:
+        raise ValueError('Choose an inspected current task source')
+    if feedback._asset(root, source['path'])['sha256'] != source['sha256']:
+        raise ValueError('Source changed; inspect before recording correction')
+    artifact = request.get('artifact')
+    if artifact is not None and (artifact not in task['artifacts'] or tasks._artifact(root, artifact.get('path')) != artifact):
+        raise ValueError('Artifact changed; inspect before recording correction')
+    context = {'task_id':task['task_id'], 'revision':task['revision'], 'artifact':artifact,
+               'source':source, 'proposal_sha256':hashlib.sha256(summary.encode('utf-8')).hexdigest()}
+    evidence_reason = reason + '\n\n任务修订与产物引用（仅为记录，不证明执行正确）：\n' + json.dumps(context, ensure_ascii=False)
+    feedback.record(root, {'scope':selection, 'event_id':identifier, 'action':'revised', 'reason':evidence_reason,
+                          'source':'user_reported', 'agreement':task['agreement'], 'asset_path':source['path']})
+    inspected = feedback.inspect(root, selection)
+    event = next(v for v in inspected['events'] if v['payload']['event_id'] == identifier)
+    if {key:event['payload']['asset'][key] for key in ('path','sha256')} != source:
+        return {'status':'partial', 'event_id':identifier, 'candidate_id':None,
+                'message':'记录时来源发生变化，未生成学习建议；请重新核对来源。', 'wiki_promoted':False}
+    existing = next((v for v in inspected['candidates'] if v['candidate_id'] == identifier), None)
+    title = summary.strip().splitlines()[0][:100]
+    if existing:
+        if existing['summary'] != summary or existing['title'] != title or existing['event_ids'] != [identifier]:
+            raise ValueError('Correction ID already has different content; existing record preserved')
+        candidate = existing
+    else:
+        try:
+            candidate = feedback.propose(root, {'scope':selection, 'candidate_id':identifier, 'event_ids':[identifier],
+                                               'title':title, 'summary':summary})
+        except (OSError, ValueError):
+            return {'status':'partial', 'event_id':identifier, 'candidate_id':None,
+                    'message':'修正记录已保存，学习建议尚未生成；可保留当前输入重试。', 'wiki_promoted':False}
+    return {'status':'recorded', 'event_id':identifier, 'candidate_id':candidate['candidate_id'],
+            'candidate_status':candidate['effective_status'], 'review_path':'/review?task=' + task['task_id'],
+            'wiki_promoted':False}
+
+
 def create_task(root, request):
     """Create a task using an inspected existing Goal or a new user-authored Goal."""
     from . import store

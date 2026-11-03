@@ -867,7 +867,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(403, {"error": "loopback Host required"})
             return
         route = self.path.split("?", 1)[0]
-        if route in {'/api/workspace', '/api/tasks/artifact', '/api/tasks/options', '/api/tasks/goal', '/api/learning/draft', '/api/skills/versions', '/api/skills/diff', '/api/skills/bundled-diff'}:
+        if route in {'/api/workspace', '/api/tasks/artifact', '/api/tasks/options', '/api/tasks/goal', '/api/tasks/reminders', '/api/tasks/overview', '/api/tasks/review', '/api/tasks/handoff', '/api/tasks/sources', '/api/learning/draft', '/api/skills/versions', '/api/skills/diff', '/api/skills/bundled-diff'}:
             from . import workspace
             query = parse_qs(urlsplit(self.path).query)
             try:
@@ -878,6 +878,18 @@ class Handler(BaseHTTPRequestHandler):
                     result = workspace.task_options(self.server.kb_root)
                 elif route == '/api/tasks/goal':
                     result = workspace.goal(self.server.kb_root, query.get('path', [''])[0])
+                elif route == '/api/tasks/reminders':
+                    from .reminders import listing
+                    result = listing(self.server.kb_root, query.get('id', [''])[0])
+                elif route == '/api/tasks/overview':
+                    from .tasks import overview
+                    result = overview(self.server.kb_root)
+                elif route == '/api/tasks/review':
+                    result = workspace.task_review(self.server.kb_root, query.get('id', [''])[0])
+                elif route == '/api/tasks/handoff':
+                    result = workspace.task_handoff(self.server.kb_root, query.get('id', [''])[0], int(query.get('revision', ['0'])[0]))
+                elif route == '/api/tasks/sources':
+                    result = workspace.task_sources(self.server.kb_root, query.get('id', [''])[0], int(query.get('revision', ['0'])[0]))
                 elif route == '/api/tasks/artifact':
                     result = workspace.artifact(self.server.kb_root, query.get('id', [''])[0],
                                                 query.get('path', [''])[0], int(query.get('revision', ['0'])[0]))
@@ -896,7 +908,8 @@ class Handler(BaseHTTPRequestHandler):
             from knowledge_studio import tasks
             try:
                 identifier = parse_qs(urlsplit(self.path).query).get('id', [''])[0]
-                self.send_json(200, {'tasks': tasks.list_tasks(self.server.kb_root)} if route == '/api/tasks' else tasks.show(self.server.kb_root, identifier))
+                self.send_json(200, {'tasks': tasks.list_tasks(self.server.kb_root)} if route == '/api/tasks' else {
+                    **tasks.show(self.server.kb_root, identifier), 'knowledge_base': str(self.server.kb_root)})
             except (OSError, ValueError, KeyError, TypeError):
                 self.send_json(400, {'error': 'Cannot read task; existing records preserved'})
             return
@@ -1107,7 +1120,7 @@ class Handler(BaseHTTPRequestHandler):
             self._reject_post(403, 'same-origin JSON requests required')
             return
         route = self.path.split("?", 1)[0]
-        if route in {'/api/tasks/create', '/api/skills/import-bundled'}:
+        if route in {'/api/tasks/create', '/api/skills/import-bundled', '/api/tasks/reminders', '/api/tasks/lifecycle', '/api/tasks/accept-sources', '/api/tasks/progress', '/api/tasks/correction'}:
             if not getattr(self.server, 'local_edit', False):
                 self._reject_post(403, 'Local editing is disabled; use oks mail serve --local-edit')
                 return
@@ -1120,7 +1133,22 @@ class Handler(BaseHTTPRequestHandler):
                 if request.get('expected_knowledge_base') != str(self.server.kb_root):
                     self.send_json(409, {'error': '知识库已切换，请重试连接后重新查看。', 'code': 'instance_changed'})
                     return
-                result = workspace.create_task(self.server.kb_root, request) if route.endswith('/create') else workspace.invoke(self.server.kb_root, 'import-bundled', request)
+                if route == '/api/tasks/correction':
+                    result = workspace.propose_task_correction(self.server.kb_root, request)
+                elif route == '/api/tasks/accept-sources':
+                    result = workspace.accept_task_sources(self.server.kb_root, request)
+                elif route == '/api/tasks/progress':
+                    result = workspace.save_task_progress(self.server.kb_root, request)
+                elif route == '/api/tasks/lifecycle':
+                    from .tasks import transition
+                    result = transition(self.server.kb_root, request.get('task_id'), request.get('expected_revision'), request.get('action'), request.get('reason'))
+                elif route == '/api/tasks/reminders':
+                    from . import reminders
+                    result = reminders.add(self.server.kb_root, request) if request.get('action') == 'add' else reminders.update(self.server.kb_root, request)
+                else:
+                    result = workspace.create_task(self.server.kb_root, request) if route.endswith('/create') else workspace.invoke(self.server.kb_root, 'import-bundled', request)
+                if isinstance(result, dict) and 'agreement' in result:
+                    result = {**result, 'knowledge_base': str(self.server.kb_root)}
                 self.send_json(201, result)
             except (OSError, ValueError, KeyError, TypeError) as exc:
                 self.send_json(409, {'error': str(exc) if isinstance(exc, ValueError) else 'Cannot save; inspect the current state before retrying'})

@@ -1,0 +1,14 @@
+{
+  "kind": "synthetic transition matrix, not human completion",
+  "cases": [
+    {"from": "active", "action": "complete", "to": "completed"},
+    {"from": "active", "action": "cancel", "to": "cancelled"},
+    {"from": "active", "action": "reopen", "to": null},
+    {"from": "completed", "action": "complete", "to": null},
+    {"from": "completed", "action": "cancel", "to": null},
+    {"from": "completed", "action": "reopen", "to": "active"},
+    {"from": "cancelled", "action": "complete", "to": null},
+    {"from": "cancelled", "action": "cancel", "to": null},
+    {"from": "cancelled", "action": "reopen", "to": "active"}
+  ]
+}

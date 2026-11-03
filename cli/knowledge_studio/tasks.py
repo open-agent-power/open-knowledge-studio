@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import re
+from itertools import islice
 
 from . import handoff, store
 
@@ -64,7 +65,17 @@ def _load(root, task_id):
     handoff.validate(value['agreement'])
     if not isinstance(value.get('history'), list) or not isinstance(value.get('revision'), int):
         raise ValueError("Invalid task history")
+    if (value.get('lifecycle', 'active') not in {'active', 'completed', 'cancelled'}
+            or type(value.get('activation', 1)) is not int or value.get('activation', 1) < 1):
+        raise ValueError('Invalid task lifecycle; existing record preserved')
     return value
+
+
+def require_active_scope(root, scope):
+    """Standalone agreements remain valid; an existing closed task cannot be bypassed."""
+    if isinstance(scope, str) and re.fullmatch(r'[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}', scope):
+        if _path(root, scope).exists() and _load(root, scope).get('lifecycle', 'active') != 'active':
+            raise ValueError('Task is closed; inspect it and explicitly reopen or clear selection')
 
 
 def _binding_path(root, workspace):
@@ -95,6 +106,7 @@ def select(root, workspace, task_id, subject=None, project=None):
         from .feedback import scope
         scope({'subject': subject, 'project': project, 'task': task_id})
     value = show(root, task_id)
+    require_active_scope(root, task_id)
     if value['status'] != 'current':
         raise ValueError("Task sources changed; inspect and explicitly refresh before selecting")
     path = _binding_path(root, workspace)
@@ -145,7 +157,9 @@ def _artifact(root, relative):
 def _archive(value):
     if len(value['history']) >= 100:
         raise ValueError("Task history capacity reached; preserve it and start a new task")
-    value['history'].append({key: value[key] for key in ('revision', 'agreement', 'progress', 'next_action', 'artifacts', 'updated_at')} | {'uses': value.get('uses', [])})
+    value['history'].append({key: value[key] for key in ('revision', 'agreement', 'progress', 'next_action', 'artifacts', 'updated_at')} | {
+        'uses': value.get('uses', []), 'lifecycle': value.get('lifecycle', 'active'),
+        'activation': value.get('activation', 1), 'lifecycle_reason': value.get('lifecycle_reason', '')})
     value['revision'] += 1
     value['updated_at'] = datetime.now(UTC).isoformat()
 
@@ -161,6 +175,7 @@ def checkpoint(root, task_id, expected_revision, progress, next_action, artifact
         value = _load(root, task_id)
         if value['revision'] != expected_revision:
             raise ValueError("Task revision changed; inspect again")
+        require_active_scope(root, task_id)
         if handoff.check(root, value['agreement'], task_id)['status'] != 'current':
             raise ValueError("Task agreement is stale; progress cannot approve changed requirements")
         refs = [_artifact(root, relative) for relative in artifacts]
@@ -198,6 +213,7 @@ def refresh(root, task_id, expected_revision):
         value = _load(root, task_id)
         if value['revision'] != expected_revision:
             raise ValueError("Task revision changed; inspect again")
+        require_active_scope(root, task_id)
         agreement = handoff.prepare(root, value['agreement']['goal']['path'], [s['path'] for s in value['agreement']['knowledge']], task_id)
         if agreement['sha256'] != value['agreement']['sha256']:
             _archive(value)
@@ -207,7 +223,7 @@ def refresh(root, task_id, expected_revision):
     return show(root, task_id)
 
 
-def update_sources(root, task_id, expected_revision, knowledge):
+def update_sources(root, task_id, expected_revision, knowledge, *, expected_sources=None):
     """Explicitly replace the reviewed Wiki selection; retain output and earlier agreements."""
     if not isinstance(knowledge, list) or len(knowledge) > handoff.MAX_KNOWLEDGE or any(not isinstance(v, str) for v in knowledge):
         raise ValueError('Choose at most 16 reviewed Wiki paths')
@@ -216,7 +232,14 @@ def update_sources(root, task_id, expected_revision, knowledge):
         value = _load(root, task_id)
         if value['revision'] != expected_revision:
             raise ValueError('Task revision changed; inspect again')
+        require_active_scope(root, task_id)
         agreement = handoff.prepare(root, value['agreement']['goal']['path'], knowledge, task_id)
+        if expected_sources is not None:
+            captured = {ref['path']: ref['sha256'] for ref in [agreement['goal'], *agreement['knowledge']]}
+            if captured != expected_sources:
+                raise ValueError('Sources changed since inspection; reload the review before accepting')
+            if handoff.check(root, agreement, task_id)['status'] != 'current':
+                raise ValueError('Selected sources are not applicable; inspect and replace them')
         if agreement['sha256'] != value['agreement']['sha256']:
             _archive(value)
             value['agreement'] = agreement
@@ -239,7 +262,8 @@ def show(root, task_id):
                 issues.append({'path': artifact['path'], 'code': 'artifact_changed'})
         except (OSError, ValueError):
             issues.append({'path': artifact['path'], 'code': 'artifact_unavailable'})
-    return {**value, 'status': check['status'], 'issues': check['issues'], 'artifact_issues': issues,
+    return {**value, 'lifecycle': value.get('lifecycle', 'active'), 'activation': value.get('activation', 1),
+            'status': check['status'], 'issues': check['issues'], 'artifact_issues': issues,
             'current_goal_text': current_goal_text, 'execution_verified': False, 'review_required': True}
 
 
@@ -248,19 +272,88 @@ def list_tasks(root):
     result = []
     for path in sorted(folder.glob('*.json'))[:100]:
         value = show(root, path.stem)
-        result.append({key: value[key] for key in ('task_id', 'revision', 'status', 'updated_at')})
+        result.append({key: value[key] for key in ('task_id', 'revision', 'status', 'lifecycle', 'updated_at')})
     return result
 
 
+def transition(root, task_id, expected_revision, action, reason):
+    """Record a caller's explicit declaration, never an execution/quality judgement."""
+    target = {'complete': 'completed', 'cancel': 'cancelled', 'reopen': 'active'}.get(action)
+    if target is None or not isinstance(reason, str) or not 1 <= len(reason.strip()) <= 1000:
+        raise ValueError('Choose complete, cancel or reopen and give a reason (1-1000 characters)')
+    path = _path(root, task_id)
+    with store._file_lock(path.with_suffix('.lock')):
+        value = _load(root, task_id)
+        if type(expected_revision) is not int or value['revision'] != expected_revision:
+            raise ValueError('Task revision changed; inspect again')
+        previous = value.get('lifecycle', 'active')
+        if (action == 'reopen') != (previous != 'active'):
+            raise ValueError('Task lifecycle changed; inspect before closing or reopening')
+        _archive(value)
+        value.update(lifecycle=target, lifecycle_reason=reason.strip())
+        if action == 'reopen':
+            value['activation'] = value.get('activation', 1) + 1
+        _save(path, value)
+    return show(root, task_id)
+
+
+def overview(root, *, now=None):
+    """Read-only bounded work list; one broken task must not hide the others."""
+    from . import reminders
+    now = now or datetime.now(UTC)
+    folder = _inside(root, '.oks/tasks')
+    paths = list(islice(folder.glob('*.json'), 101))
+    items = []
+    for path in sorted(paths[:100]):
+        try:
+            task = show(root, path.stem)
+            title = handoff._meta(task['agreement']['goal']['text'].encode('utf-8')).get('title')
+            item = {key: task[key] for key in ('task_id', 'revision', 'status', 'lifecycle', 'updated_at')}
+            item.update(title=title if isinstance(title, str) and title.strip() else task['task_id'],
+                        next_action=task['next_action'][:240], artifact_issue_count=len(task['artifact_issues']))
+            try:
+                values = reminders.listing(root, task['task_id'], now=now, task=task)['items']
+                item['reminders'] = {'due_count': sum(v['status'] == 'due' for v in values),
+                    'review_count': sum(v['status'] == 'needs_review' for v in values),
+                    'due': sorted(({'note': v['note'], 'due_at': v['due_at']} for v in values if v['status'] == 'due'), key=lambda v:v['due_at'])[:3]}
+            except (OSError, ValueError, KeyError, TypeError):
+                item['reminders'] = {'status': 'unavailable'}
+            items.append(item)
+        except (OSError, ValueError, KeyError, TypeError, UnicodeError):
+            items.append({'task_id': path.stem, 'status': 'unavailable', 'lifecycle': 'unknown', 'title': path.stem})
+    counts = {'active': 0, 'needs_review': 0, 'closed': 0, 'unavailable': 0, 'due': 0}
+    for item in items:
+        if item['status'] == 'unavailable': counts['unavailable'] += 1
+        elif item['lifecycle'] != 'active': counts['closed'] += 1
+        else:
+            counts['active'] += 1
+            if (item['status'] != 'current' or item.get('artifact_issue_count')
+                    or item.get('reminders', {}).get('review_count') or item.get('reminders', {}).get('status') == 'unavailable'):
+                counts['needs_review'] += 1
+        counts['due'] += item.get('reminders', {}).get('due_count', 0)
+    return {'tasks': items, 'counts': counts, 'truncated': len(paths) > 100, 'evaluated_at': now.isoformat()}
+
+
 def continuation(value):
+    if value.get('lifecycle', 'active') != 'active':
+        raise ValueError('Task is closed; inspect before reopening')
     return {key: value[key] for key in ('task_id', 'revision', 'status', 'progress', 'next_action', 'artifacts', 'artifact_issues')} | {
         'goal_text': value['agreement']['goal']['text'], 'knowledge': value['agreement']['knowledge'],
         'agreement_sha256': value['agreement']['sha256'], 'execution_verified': False}
 
 
 def export_handoff(root, task_id):
-    value = show(root, task_id)
+    return _handoff_text(show(root, task_id))
+
+
+def _handoff_text(value):
+    task_id = value['task_id']
+    if value['lifecycle'] != 'active':
+        return '# Closed task (historical reference; not active work)\n\n' + json.dumps({
+            'task_id': task_id, 'revision': value['revision'], 'lifecycle': value['lifecycle'],
+            'progress': value['progress'], 'artifacts': value['artifacts'],
+            'check_command': f'oks task show --task-id {task_id}', 'execution_verified': False}, ensure_ascii=False, indent=2) + '\n'
     return '# Task handoff (reference material; current user instructions prevail)\n\n' + json.dumps(continuation(value) | {
         'issues': value['issues'], 'check_command': f'oks task show --task-id {task_id}',
-        'resume_command': f'oks task select {task_id}',
+        'resume_command': f'oks task select {task_id}' if value['status'] == 'current' else None,
         'learning': 'Use explicit feedback/proposals; no automatic Wiki approval.'}, ensure_ascii=False, indent=2) + '\n'

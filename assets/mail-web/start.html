@@ -1,14 +1,14 @@
 <!doctype html>
 <html lang="zh-CN">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>接入 · OKS</title><link rel="icon" href="/favicon.svg"><link rel="stylesheet" href="/tasks.css"><link rel="stylesheet" href="/start.css"><script src="/workspace-ui.js" defer></script><script src="/start.js" defer></script></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>接入检查 · OKS</title><link rel="icon" href="/favicon.svg"><link rel="stylesheet" href="/tasks.css"><link rel="stylesheet" href="/start.css"><script src="/workspace-ui.js" defer></script><script src="/start.js" defer></script></head>
 <body>
-<header class="topbar"><a class="brand" href="/" aria-label="OKS 工作区">oks<span>.</span></a><nav aria-label="主导航"><a href="/#collaboration">讨论</a><a href="/tasks">目标</a><a href="/#wiki">学习</a></nav><details class="more-nav"><summary>更多</summary><div class="more-nav-menu"><a href="/#messages">通信</a><a href="/#agents">成员</a><a href="/start" aria-current="page">接入</a><a href="/review">学习审核</a><a href="/versions">版本</a><a href="/debug">诊断</a></div></details><button id="refresh" class="quiet" type="button">刷新</button></header>
+<header class="topbar"><a class="brand" href="/" aria-label="OKS 工作区">oks<span>.</span></a><nav aria-label="主导航"><a href="/#collaboration">讨论</a><a href="/tasks">目标</a><a href="/#wiki">学习</a></nav><details class="more-nav"><summary>更多</summary><div class="more-nav-menu"><a href="/#messages">通信记录</a><a href="/#agents">成员</a><a href="/start" aria-current="page">接入检查</a><a href="/review">学习审核</a><a href="/versions">技能版本</a><a href="/debug">诊断</a></div></details><button id="refresh" class="quiet" type="button">刷新</button></header>
 <main>
-  <header class="intro"><p class="eyebrow">本地工作区</p><h1>接入</h1><p>检查当前实例，或运行一次只读查询。此页不会更改知识库路径或安装软件。</p><span id="pageStatus" role="status" aria-live="polite">正在检查…</span></header>
-  <section class="instance-card"><h2>当前实例</h2><dl><div><dt>知识库</dt><dd id="knowledgeBase">读取中…</dd></div><div><dt>实例有效</dt><dd id="instanceValid">—</dd></div><div><dt>Python</dt><dd id="python">—</dd></div></dl></section>
+  <header class="intro"><p class="eyebrow">本地工作区</p><h1>接入检查</h1><p>确认当前知识库可用，再试着查询知识。此页不会更改知识库位置或安装软件。</p><span id="pageStatus" role="status" aria-live="polite">正在检查…</span></header>
+  <section class="instance-card"><h2>当前知识库</h2><dl><div><dt>状态</dt><dd id="instanceValid">—</dd></div></dl></section>
   <section><div class="section-heading"><div><h2>接入检查</h2><p>检查知识库和本地检索环境。</p></div></div><div id="checks" class="check-list"><p class="empty">正在读取检查项…</p></div></section>
-  <section class="commands"><h2>可复制命令</h2><div id="commandList"></div></section>
-  <section class="query-section"><div class="section-heading"><div><h2>首次查询</h2><p>提交后显示真实 Recall 响应及其诊断字段。</p></div></div><form id="queryForm"><label for="query">查询内容</label><textarea id="query" rows="3" required placeholder="输入你要查找的知识"></textarea><button id="querySubmit" type="submit">运行 Recall</button></form><div id="retrievalStatus" role="status" aria-live="polite"></div><div id="retrieval" class="retrieval-results"></div></section>
-  <div class="page-footer"><p>查询只读。接入失败时按检查项查看指令和原因。</p><a href="/review">审核与学习 <span aria-hidden="true">↗</span></a></div>
+  <details class="commands technical-details"><summary>技术详情：完整路径、运行环境与命令</summary><p>知识库完整路径：<code id="knowledgeBase">读取中…</code></p><p>Python 版本：<code id="python">—</code></p><div id="commandList"></div></details>
+  <section class="query-section"><div class="section-heading"><div><h2>查询知识</h2><p>输入要找的内容，查看相关知识和来源。</p></div></div><form id="queryForm"><label for="query">要查找什么？</label><textarea id="query" rows="3" required placeholder="输入问题或关键词"></textarea><button id="querySubmit" type="submit">查询知识</button></form><div id="retrievalStatus" role="status" aria-live="polite"></div><div id="retrieval" class="retrieval-results"></div></section>
+  <div class="page-footer"><p>查询只读。接入检查未通过时，请先处理页面显示的问题。</p><a href="/review">学习审核 <span aria-hidden="true">↗</span></a></div>
 </main>
 </body></html>

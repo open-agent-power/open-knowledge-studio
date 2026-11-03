@@ -2,9 +2,9 @@
 <html lang="zh-CN">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>检索与上下文 · OKS Debug</title><link rel="icon" href="/favicon.svg"><link rel="stylesheet" href="/debug.css"><script src="/debug.js" defer></script></head>
 <body>
-<header><a class="brand" href="/">oks<span>.</span></a><a href="/#collaboration">讨论</a><a href="/tasks">目标</a><a href="/#wiki">学习</a><a href="/review">审核</a><a href="/versions">版本</a><a href="#feedback">反馈</a><button id="refresh" type="button">刷新</button></header>
+<header><a class="brand" href="/">oks<span>.</span></a><a href="/#collaboration">讨论</a><a href="/tasks">目标</a><a href="/#wiki">学习</a><a href="/review">学习审核</a><a href="/versions">技能版本</a><a href="#feedback">反馈</a><button id="refresh" type="button">刷新</button></header>
 <main>
-<div class="intro"><h1>检索记录</h1><span class="meta">本地 · 只读</span></div>
+<div class="intro"><h1>检索记录</h1><span class="meta">本地 · 只读 · 耗时以实测为准</span></div>
 <section class="summary" aria-label="记录概览"><div><strong id="total">—</strong><span>次查询</span></div><div><strong id="emitted">—</strong><span>次 Hook 输出</span></div><div><strong id="degraded">—</strong><span>次降级 / 实验</span></div></section>
 <section aria-labelledby="recordsTitle"><div class="section-head"><h2 id="recordsTitle">最近查询</h2><span>命中与输出不代表实际执行</span></div>
 <div class="filters"><label>搜索<input id="filter" type="search" placeholder="标题或来源"></label><label>阶段<select id="stage"><option value="">全部阶段</option><option value="retrieved">检索命中</option><option value="hook_emitted">Hook 已输出</option><option value="hook_skipped">Hook 未输出</option></select></label><label>后端<select id="backend"><option value="">全部后端</option><option value="fts5">FTS5 / BM25</option><option value="like">LIKE 降级</option><option value="native">Native 对照</option><option value="fusion">Fusion 实验</option></select></label></div>

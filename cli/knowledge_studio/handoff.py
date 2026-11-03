@@ -137,6 +137,9 @@ def prepare(root: Path, goal: str, knowledge: list[str], scope: str) -> dict:
 def check(root: Path, agreement: dict, scope: str) -> dict:
     """Check current source identity, not truth, execution or user authorization."""
     validate(agreement)
+    from .recall import load_recall_params
+    from .memory_policy import evaluate
+    enforce_time = load_recall_params(root).get('memory_validity', 'shadow') == 'enforce'
     issues = []
     if scope != agreement["scope"]:
         issues.append({"code": "scope_mismatch"})
@@ -148,6 +151,9 @@ def check(root: Path, agreement: dict, scope: str) -> dict:
                     issues.append({"code": "source_changed", "path": source["path"]})
                 meta = _meta(data)
                 if bucket == "wiki":
+                    validity = evaluate(meta.get('applicability'))
+                    if enforce_time and not validity['eligible']:
+                        issues.append({'code': 'source_' + validity['status'], 'path': source['path']})
                     if not _reviewed(meta):
                         issues.append({"code": "source_not_reviewed_active", "path": source["path"]})
                     if meta.get("options") != source["options"] or meta.get("title", Path(source["path"]).stem) != source["title"]:
