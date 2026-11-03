@@ -2,9 +2,11 @@
 import json
 import os
 from pathlib import Path
+import re
 import socket
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 from urllib.request import urlopen
@@ -222,14 +224,22 @@ def test_server_survives_actual_launcher_job_termination(instance, backend):
               "sys.stdin.readline(); "
               f"print(json.dumps(mail_server.start_background(Path({str(instance)!r}),{port})),flush=True); "
               "sys.stdin.readline(); print('UNEXPECTED_NORMAL_EXIT',flush=True)")
+    # Do not let a traceback fill a pipe while waiting for the readiness line.
+    launcher_errors = tempfile.TemporaryFile(mode="w+", encoding="utf-8")
     launcher = subprocess.Popen([sys.executable, "-B", "-X", "utf8", "-c", script],
-                                env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=launcher_errors,
                                 text=True, encoding="utf-8")
     try:
         assert kernel.AssignProcessToJobObject(job, int(launcher._handle))
         launcher.stdin.write("start\n")
         launcher.stdin.flush()
-        result = json.loads(launcher.stdout.readline())
+        ready = launcher.stdout.readline()
+        if not ready:
+            launcher.wait(timeout=5)
+            launcher_errors.seek(0)
+            pytest.fail(f"Mail launcher exited with code {launcher.returncode} before readiness:\n"
+                        + launcher_errors.read())
+        result = json.loads(ready)
         assert result["status"] == "running"
         assert launcher.poll() is None  # Still blocked on its open stdin pipe.
         kernel.CloseHandle(job)
@@ -251,7 +261,7 @@ def test_server_survives_actual_launcher_job_termination(instance, backend):
         if launcher.poll() is None:
             launcher.terminate()
             launcher.wait(timeout=5)
-        for stream in [launcher.stdin, launcher.stdout, launcher.stderr]:
+        for stream in [launcher.stdin, launcher.stdout, launcher_errors]:
             stream.close()
         mail_server.stop_background(instance, port)
 
@@ -295,3 +305,51 @@ def test_wmi_bridge_does_not_execute_a_shell_from_the_knowledge_directory(instan
     monkeypatch.setattr(mail_server.subprocess, "run", run)
     monkeypatch.setattr(mail_server, "_WindowsWorker", lambda pid: pid)
     assert mail_server._spawn_windows([sys.executable], instance, dict(os.environ)) == 1234
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows WMI bridge")
+@pytest.mark.parametrize(("reply", "returncode", "expected"), [
+    ({"error": "access_denied", "stage": "process_create", "hresult": "0x80041003"}, 1,
+     "access denied during process creation (0x80041003)"),
+    ({"code": 2, "pid": 0}, 0, "access denied (return code 2)"),
+    ({"code": 3, "pid": 0}, 0, "insufficient privilege (return code 3)"),
+    ({"code": 9, "pid": 0}, 0, "path not found (return code 9)"),
+    ({"code": 21, "pid": 0}, 0, "invalid parameter (return code 21)"),
+    ({"code": 8, "pid": 0}, 0, "process creation failed (return code 8)"),
+])
+def test_wmi_structured_failure_preserves_reason_without_environment(instance, monkeypatch, reply, returncode, expected):
+    from types import SimpleNamespace
+    secret = "must-not-appear-in-errors"
+    reply = {**reply, "message": secret, "environment": {"secret": secret}}
+    monkeypatch.setattr(mail_server.subprocess, "run", lambda *a, **k:
+                        SimpleNamespace(returncode=returncode, stdout=json.dumps(reply), stderr=secret))
+    with pytest.raises(RuntimeError, match=re.escape(expected)) as error:
+        mail_server.start_background(instance, free_port())
+    assert secret not in str(error.value)
+    assert "foreground serve remains available" in str(error.value)
+    assert not list((instance / ".oks/mail-web").glob("*.json"))
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows WMI bridge")
+@pytest.mark.parametrize(("reply", "returncode"), [
+    (None, 0), ([], 0), ("secret", 0), ({}, 0),
+    ({"code": False, "pid": 1234}, 0),
+    ({"code": 0, "pid": True}, 0),
+    ({"code": 0, "pid": 0}, 0),
+    ({"code": "secret", "pid": 1234}, 0),
+    ({"code": -1, "pid": 1234}, 0),
+    ({"code": 0, "pid": 0x100000000}, 0),
+    ({"error": "secret", "code": 0, "pid": 1234}, 0),
+    ({"code": 0, "pid": 1234}, 1),
+    ({"error": "secret", "stage": "secret", "hresult": "secret"}, 1),
+    ({"error": "access_denied", "stage": ["secret"], "hresult": "secret"}, 1),
+])
+def test_wmi_invalid_reply_is_sanitized_and_never_adopted(instance, monkeypatch, reply, returncode):
+    from types import SimpleNamespace
+    monkeypatch.setattr(mail_server.subprocess, "run", lambda *a, **k:
+                        SimpleNamespace(returncode=returncode, stdout=json.dumps(reply), stderr="secret"))
+    monkeypatch.setattr(mail_server, "_WindowsWorker", lambda pid: pytest.fail("Invalid reply adopted"))
+    with pytest.raises(RuntimeError) as error:
+        mail_server._spawn_windows([sys.executable], instance, dict(os.environ))
+    assert "secret" not in str(error.value)
+    assert "foreground serve remains available" in str(error.value)

@@ -158,18 +158,32 @@ def _spawn_windows(command, cwd, env):
                  Path(os.environ["SystemRoot"]) / "System32/WindowsPowerShell/v1.0/powershell.exe")
     script = r"""
 $ErrorActionPreference = 'Stop'
-$spec = $env:_OKS_MAIL_LAUNCH_SPEC | ConvertFrom-Json
-$startup = New-CimInstance -ClassName Win32_ProcessStartup -ClientOnly -Property @{
-    ShowWindow = [uint16]0
-    CreateFlags = [uint32]0x01000608
-    EnvironmentVariables = [string[]]@($spec.env.PSObject.Properties | ForEach-Object { $_.Name + '=' + [string]$_.Value })
+$stage = 'configuration'
+try {
+    $spec = $env:_OKS_MAIL_LAUNCH_SPEC | ConvertFrom-Json
+    $stage = 'startup'
+    $startup = New-CimInstance -ClassName Win32_ProcessStartup -ClientOnly -Property @{
+        ShowWindow = [uint16]0
+        CreateFlags = [uint32]0x01000608
+        EnvironmentVariables = [string[]]@($spec.env.PSObject.Properties | ForEach-Object { $_.Name + '=' + [string]$_.Value })
+    }
+    $stage = 'process_create'
+    $created = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{
+        CommandLine = [string]$spec.command
+        CurrentDirectory = [string]$spec.cwd
+        ProcessStartupInformation = $startup
+    }
+    @{ code = [int]$created.ReturnValue; pid = [int]$created.ProcessId } | ConvertTo-Json -Compress
+} catch {
+    # Exception messages/PowerShell diagnostics can contain the launch environment.
+    $kind = if ($_.CategoryInfo.Category -eq 'PermissionDenied') { 'access_denied' } else { 'launch_failed' }
+    $hresult = $null
+    if ([string]$_.FullyQualifiedErrorId -match '^HRESULT (0x[0-9a-fA-F]{8}),') {
+        $hresult = $Matches[1]
+    }
+    @{ error = $kind; stage = $stage; hresult = $hresult } | ConvertTo-Json -Compress
+    exit 1
 }
-$created = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{
-    CommandLine = [string]$spec.command
-    CurrentDirectory = [string]$spec.cwd
-    ProcessStartupInformation = $startup
-}
-@{ code = [int]$created.ReturnValue; pid = [int]$created.ProcessId } | ConvertTo-Json -Compress
 """
     payload = {"command": subprocess.list2cmdline(command), "cwd": str(cwd),
                "env": {**env, "_OKS_MAIL_WMI_STDIO": "1"}}
@@ -182,15 +196,35 @@ $created = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Argumen
                                   creationflags=subprocess.CREATE_NO_WINDOW)
     except subprocess.TimeoutExpired:
         raise RuntimeError("Windows WMI launch timed out; foreground serve remains available") from None
-    # PowerShell diagnostics can contain environment values; do not echo them.
-    if launched.returncode:
-        raise RuntimeError("Windows WMI could not launch Mail; foreground serve remains available")
+    hint = "; foreground serve remains available"
     try:
         result = json.loads(launched.stdout.lstrip("\ufeff"))
-        if result["code"] != 0 or type(result["pid"]) is not int or result["pid"] <= 0:
-            raise ValueError("Process was not created")
-    except (ValueError, KeyError, TypeError):
-        raise RuntimeError("Windows WMI did not confirm a Mail process; foreground serve remains available") from None
+        if not isinstance(result, dict):
+            raise ValueError("Expected an object")
+    except ValueError:
+        reason = "could not launch Mail" if launched.returncode else "did not confirm a Mail process"
+        raise RuntimeError("Windows WMI " + reason + hint) from None
+    if launched.returncode:
+        # Only fixed labels and a strictly validated HRESULT may leave this boundary.
+        reason = "access denied" if result.get("error") == "access_denied" else "could not launch Mail"
+        stage = result.get("stage")
+        stages = {"configuration": "launch configuration", "startup": "startup setup",
+                  "process_create": "process creation"}
+        if isinstance(stage, str) and stage in stages:
+            reason += " during " + stages[stage]
+        hresult = result.get("hresult")
+        if isinstance(hresult, str) and re.fullmatch(r"0x[0-9a-fA-F]{8}", hresult):
+            reason += " (" + hresult + ")"
+        raise RuntimeError("Windows WMI " + reason + hint)
+    code, pid = result.get("code"), result.get("pid")
+    if "error" in result or type(code) is not int or not 0 <= code <= 0xFFFFFFFF:
+        raise RuntimeError("Windows WMI did not confirm a Mail process" + hint)
+    if code:
+        reason = {2: "access denied", 3: "insufficient privilege",
+                  9: "path not found", 21: "invalid parameter"}.get(code, "process creation failed")
+        raise RuntimeError(f"Windows WMI {reason} (return code {code})" + hint)
+    if type(pid) is not int or not 0 < pid <= 0xFFFFFFFF:
+        raise RuntimeError("Windows WMI did not confirm a Mail process" + hint)
     return _WindowsWorker(result["pid"])
 
 

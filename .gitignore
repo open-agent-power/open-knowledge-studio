@@ -59,6 +59,7 @@ cli/oks_connector/
 cli/scripts/*
 !cli/scripts/bundle_assets.py
 !cli/scripts/check_dist.py
+!cli/scripts/smoke_installed.py
 
 # Logs
 *.log
