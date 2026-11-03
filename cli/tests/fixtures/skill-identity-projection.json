@@ -6,6 +6,7 @@
   },
   "package_manifest": {
     "schema_version": "oks-skill-package/v1",
+    "instruction_card_format": "exact/v1",
     "skill_id": "sample",
     "version": "471fe47227f77f84b039ede0c29b56e8ca54aced46f5b61838071a8239bc3f52",
     "files": {

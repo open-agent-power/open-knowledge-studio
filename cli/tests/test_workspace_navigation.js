@@ -18,6 +18,7 @@ test('return links stay inside this workspace, reject external destinations and 
   const nav=navigation();
   for(const url of ['https://evil.example','//evil.example','/\\evil.example','javascript:alert(1)',null])assert.equal(nav.localPath(url),null);
   assert.equal(nav.localPath('/start?return_to=%2Ftasks'),'/start');
+  assert.equal(nav.localPath('/versions?id=query&return_to=%2Ftasks'),'/versions?id=query');
   assert.equal(nav.localPath('/tasks?id=abc&q=report&return_to=%2Freview'),'/tasks?id=abc&q=report');
 });
 test('a review or communication link retains the exact selected task and list query',()=>{

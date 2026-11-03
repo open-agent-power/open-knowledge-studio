@@ -680,7 +680,7 @@ def write_wiki_page(
                 old = parse_wiki_file(existing) or {}
                 expected_dir = wiki_dir() / area / wiki_type / subdirectory
                 if existing.parent != expected_dir or any(old.get(key) != skill_metadata.get(key)
-                        for key in ("artifact_kind", "skill_id", "skill_version", "skill_category")):
+                        for key in ("artifact_kind", "skill_id", "skill_version", "skill_category", "skill_lineage")):
                     raise ValueError("Skill content matches another Wiki identity; keep classifications distinct")
             if enforce_classification:
                 from knowledge_studio.knowledge_policy import is_source_material, TYPE_DIRS
@@ -1035,7 +1035,12 @@ def _promote_draft(
     if meta.get("artifact_kind") == "skill":
         if final_area != "skills":
             raise ValueError("Skill knowledge belongs under the independent skills area")
-        from knowledge_studio.skills import entries
+        from knowledge_studio.skills import entries, validate_skill_instruction_body
+        validate_skill_instruction_body(meta, body, root=repo_root())
+        lineage = meta.get("skill_lineage")
+        if isinstance(lineage, dict) and isinstance(lineage.get("parents"), list) and len(lineage["parents"]) == 2:
+            from knowledge_studio.skills import validate_skill_merge_parents
+            validate_skill_merge_parents(repo_root(), lineage)
         # Several candidates may have been imported against the same old version.
         # Link to the active reviewed baseline at approval time, not import time.
         canonical_type = {"concepts": "concept", "strategies": "strategy", "anti-patterns": "anti-pattern"}[final_type]

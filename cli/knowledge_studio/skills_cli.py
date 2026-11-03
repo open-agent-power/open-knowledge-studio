@@ -155,3 +155,69 @@ def router_cmd(
             raise ValueError("No bundled Skill assets available")
         return skills.install_router(source, host=target, compact=compact)
     _run(execute)
+
+
+@app.command('derive')
+def derive_cmd(
+    skill_id: str = typer.Argument(),
+    version: str = typer.Option(..., '--version'),
+    notes: Optional[str] = typer.Option(None, '--notes', help='Personal requirements appended to the approved instructions'),
+    changes: Optional[Path] = typer.Option(None, '--changes', help='JSON map of relative files to UTF-8 content or null'),
+    variant_id: Optional[str] = typer.Option(None, '--id'),
+):
+    """Prepare a separate personal Skill Draft; preserve the reviewed base."""
+    def execute():
+        from . import skill_derivation, store
+        root = store.repo_root()
+        if (notes is None) == (changes is None):
+            raise ValueError('Choose exactly one of --notes or --changes')
+        if changes:
+            if changes.stat().st_size > 2 * 1024 * 1024:
+                raise ValueError('Changes file exceeds 2 MiB')
+            edits = json.loads(changes.read_text(encoding='utf-8-sig'))
+        else:
+            if not notes.strip():
+                raise ValueError('Personal notes must not be empty')
+            source = skill_derivation.detail(root, {'id': skill_id, 'version': version})
+            edits = {'SKILL.md': source['instructions'] + '\n\n## 我的补充要求\n\n' + notes.strip() + '\n'}
+        return skill_derivation.derive(root, {'base': {'id': skill_id, 'version': version},
+                                            'variant_id': variant_id, 'changes': edits})
+    _run(execute)
+
+
+@app.command('merge-preview')
+def merge_preview_cmd(
+    skill_id: str = typer.Argument(),
+    version: str = typer.Option(..., '--version'),
+    upstream_version: str = typer.Option(..., '--upstream-version'),
+):
+    """Compare a personal Skill, its recorded base and an approved upstream version."""
+    def execute():
+        from . import skill_derivation, store
+        root = store.repo_root()
+        source = skill_derivation.detail(root, {'id': skill_id, 'version': version})
+        lineage = source.get('lineage')
+        if not lineage:
+            raise ValueError('This Skill has no recorded upstream lineage')
+        return skill_derivation.preview_merge(root, {'ours': {'id': skill_id, 'version': version},
+            'theirs': {'id': lineage['upstream_base']['id'], 'version': upstream_version}})
+    _run(execute)
+
+
+@app.command('merge-prepare')
+def merge_prepare_cmd(
+    preview: Path = typer.Argument(help='JSON returned by merge-preview'),
+    resolutions: Optional[Path] = typer.Option(None, '--resolutions', help='Explicit per-file conflict choices as JSON'),
+):
+    """Recheck the exact preview and prepare a reviewed update candidate."""
+    def execute():
+        from . import skill_derivation, store
+        if preview.stat().st_size > 2 * 1024 * 1024 or resolutions and resolutions.stat().st_size > 2 * 1024 * 1024:
+            raise ValueError('Input exceeds 2 MiB')
+        plan = json.loads(preview.read_text(encoding='utf-8-sig'))
+        choices = json.loads(resolutions.read_text(encoding='utf-8-sig')) if resolutions else {}
+        return skill_derivation.prepare_merge(store.repo_root(), {
+            'ours': {'id': plan['ours']['id'], 'version': plan['ours']['version']},
+            'theirs': {'id': plan['theirs']['id'], 'version': plan['theirs']['version']},
+            'expected_plan_digest': plan['plan_digest'], 'resolutions': choices})
+    _run(execute)
