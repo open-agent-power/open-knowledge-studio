@@ -196,7 +196,7 @@ class FTS5Backend:
             cur = self._conn.execute(
                 "SELECT value FROM meta WHERE key='schema_version'"
             ).fetchone()
-            if cur and cur[0] not in {"node-v2", "node-v3"}:
+            if cur and cur[0] not in {"node-v2", "node-v3", "node-v4"}:
                 # 旧 schema（flat page-level），DROP 重建
                 self._conn.execute("DROP TABLE IF EXISTS wiki_fts")
                 self._conn.execute("DROP TABLE IF EXISTS pages")
@@ -211,6 +211,10 @@ class FTS5Backend:
             )
             columns = {row[1] for row in self._conn.execute("PRAGMA table_info(pages)")}
             for name, definition in (
+                ("title", "TEXT NOT NULL DEFAULT ''"),
+                ("capability", "TEXT NOT NULL DEFAULT ''"),
+                ("reviewed", "INTEGER NOT NULL DEFAULT 0"),
+                ("skill_category", "TEXT NOT NULL DEFAULT ''"),
                 ("status", "TEXT NOT NULL DEFAULT 'active'"),
                 ("archived", "INTEGER NOT NULL DEFAULT 0"),
                 ("area", "TEXT NOT NULL DEFAULT ''"),
@@ -218,8 +222,11 @@ class FTS5Backend:
             ):
                 if name not in columns:
                     self._conn.execute(f"ALTER TABLE pages ADD COLUMN {name} {definition}")
+            if not cur or cur[0] != "node-v4":
+                # Derived state only: force a complete source refresh after migration.
+                self._conn.execute("DELETE FROM meta WHERE key='wiki_fingerprint'")
             self._conn.execute(
-                "INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', 'node-v3')"
+                "INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', 'node-v4')"
             )
             self._conn.execute(
                 "CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT)"
@@ -229,6 +236,20 @@ class FTS5Backend:
                     "CREATE VIRTUAL TABLE IF NOT EXISTS wiki_fts USING fts5("
                     "slug UNINDEXED, node_idx UNINDEXED, title, body, tags, code_blocks)"
                 )
+
+            if self._use_fts5:
+                self._conn.execute(
+                    "CREATE VIRTUAL TABLE IF NOT EXISTS skill_fts USING fts5("
+                    "slug UNINDEXED, node_idx UNINDEXED, title, body, tags, code_blocks)"
+                )
+            engine = "fts5" if self._use_fts5 else "like"
+            prior_engine = self._conn.execute("SELECT value FROM meta WHERE key='index_engine'").fetchone()
+            if prior_engine and prior_engine[0] != engine:
+                # A LIKE-only refresh could update metadata without updating FTS
+                # rows. Rebuild from source when FTS support returns.
+                self._conn.execute("UPDATE pages SET content_hash=''")
+                self._conn.execute("DELETE FROM meta WHERE key='wiki_fingerprint'")
+            self._conn.execute("INSERT OR REPLACE INTO meta VALUES ('index_engine', ?)", (engine,))
 
     def index(self, pages: list[dict[str, Any]], *, complete: bool = False) -> None:
         """Incrementally index pages, optionally reconciling a complete Wiki snapshot.
@@ -262,7 +283,11 @@ class FTS5Backend:
 
             front, md_body, code = _parse_md(f"{title}\n\n{body}")
             abstract = _extract_abstract(md_body, page.get("abstract"))
-            content = f"{title}\n{body}\n{tags}\n{code}\n{abstract}"
+            capability = " ".join(str(page.get(k) or "") for k in
+                                  ("skill_id", "skill_description", "skill_category")) if page.get("artifact_kind") == "skill" else ""
+            reviewed = int(bool(page.get("human_reviewed_at")))
+            skill_category = str(page.get("skill_category") or "")
+            content = f"{title}\n{body}\n{tags}\n{code}\n{abstract}\n{capability}\n{reviewed}"
             content_hash = hashlib.md5(content.encode()).hexdigest()[:16]
 
             row = self._conn.execute(
@@ -290,6 +315,13 @@ class FTS5Backend:
                 "VALUES (?, ?, ?, ?, ?, ?, ?)",
                 (slug, content_hash, abstract, status, archived, area, wiki_type),
             )
+            self._conn.execute("UPDATE pages SET title=?, capability=?, reviewed=?, skill_category=? WHERE slug=?",
+                               (title, capability, reviewed, skill_category, slug))
+            if self._use_fts5:
+                self._conn.execute("DELETE FROM skill_fts WHERE slug=?", (slug,))
+                if capability:
+                    self._conn.execute("INSERT INTO skill_fts VALUES (?, 0, ?, ?, '', '')",
+                                       (slug, _tokenize_for_fts(title), _tokenize_for_fts(capability)))
             if self._use_fts5:
                 # v0.6.0: node-level 索引——吸收 TreeSearch tree parser，
                 # 每个 `##` heading 段落一个 FTS5 row，多词同段出现 BM25 高分。
@@ -318,6 +350,8 @@ class FTS5Backend:
                 self._conn.execute("DELETE FROM pages WHERE slug=?", (stale_slug,))
                 if self._use_fts5:
                     self._conn.execute("DELETE FROM wiki_fts WHERE slug=?", (stale_slug,))
+        if self._use_fts5:
+            self._conn.execute("DELETE FROM skill_fts WHERE slug NOT IN (SELECT slug FROM pages)")
         self._conn.commit()
         self._indexed = True
 
@@ -394,8 +428,9 @@ class FTS5Backend:
         tokens = _tokenize_for_fts(query)
         if not tokens.strip():
             return None
+        tokens = _RE_FTS5_SPECIAL.sub(" ", tokens)
         words = [
-            _RE_FTS5_SPECIAL.sub("", w).strip()
+            w.strip()
             for w in tokens.split()
             if w and w.upper() not in _FTS5_OPERATORS
         ]
@@ -411,7 +446,7 @@ class FTS5Backend:
         if limit <= 0:
             return []
         if not self._use_fts5:
-            return self._search_like(query, limit=limit)
+            return self._search_like(query, limit=limit, scope=scope, **kwargs)
 
         match_expr = self._build_match_expr(query)
         if match_expr is None:
@@ -419,6 +454,10 @@ class FTS5Backend:
 
         from ..recall import _INACTIVE_WIKI_STATUSES
 
+        strategy = kwargs.get("strategy", "knowledge")
+        if strategy not in {"knowledge", "capability", "capability_body"}:
+            raise ValueError("Unknown retrieval strategy")
+        table = "skill_fts" if strategy == "capability" else "wiki_fts"
         w = self._weights
         # FTS5 rank is mapped to the same weighted BM25 expression. Ordering
         # through the virtual table avoids a temporary sort for broad terms.
@@ -427,9 +466,9 @@ class FTS5Backend:
             f"bm25(0, 0, {w['title']}, {w['body']}, {w['tags']}, {w['code_blocks']})"
         )
         sql = (
-            "SELECT f.slug, f.title, p.abstract, f.rank "
-            f"FROM wiki_fts f JOIN pages p ON f.slug = p.slug "
-            f"WHERE wiki_fts MATCH ? AND f.rank MATCH ? "
+            "SELECT f.slug, p.title, p.abstract, f.rank, f.node_idx "
+            f"FROM {table} f JOIN pages p ON f.slug = p.slug "
+            f"WHERE {table} MATCH ? AND f.rank MATCH ? "
             f"AND COALESCE(LOWER(TRIM(p.status)), 'active') NOT IN "
             f"({', '.join('?' for _ in _INACTIVE_WIKI_STATUSES)}) "
             f"AND COALESCE(p.archived, 0) = 0"
@@ -443,20 +482,27 @@ class FTS5Backend:
         if type_filter:
             sql += " AND LOWER(TRIM(COALESCE(p.wiki_type, 'concept'))) = ?"
             params.append(type_filter)
-        sql += " ORDER BY f.rank"
+        if strategy.startswith("capability"):
+            sql += " AND p.reviewed=1 AND p.status='active' AND p.capability != ''"
+        category = kwargs.get("category")
+        if category:
+            sql += " AND (p.skill_category=? OR substr(p.skill_category, 1, ?)=?)"
+            params.extend((category, len(category) + 1, category + "/"))
+        sql += " ORDER BY f.rank, f.slug"
         # Each page's first ranked node is its best one. Stream until enough
         # distinct pages are found instead of repeatedly sorting wider prefixes.
         hits: list[SearchHit] = []
         seen: set[str] = set()
         cursor = self._conn.execute(sql, params)
         try:
-            for slug, title, abstract, rank in cursor:
+            for slug, title, abstract, rank, node_idx in cursor:
                 if slug in seen:
                     continue
                 seen.add(slug)
                 hits.append(SearchHit(
                     slug=slug, title=title or slug, score=float(-rank),
                     abstract=abstract or None, backend="fts5",
+                    extra={"best_node": {"index": node_idx}, "strategy": strategy},
                 ))
                 if len(hits) >= limit:
                     break
@@ -464,20 +510,36 @@ class FTS5Backend:
             cursor.close()
         return hits
 
-    def _search_like(self, query: str, limit: int = 10) -> list[SearchHit]:
-        """FTS5 不可用时的 LIKE fallback（保证可用性，不崩）。"""
-        ql = query.lower()
-        rows = self._conn.execute("SELECT slug, title, abstract FROM pages").fetchall()
+    @property
+    def actual_backend(self) -> str:
+        return "fts5" if self._use_fts5 else "like"
+
+    def _search_like(self, query: str, limit: int = 10, scope=None, **kwargs) -> list[SearchHit]:
+        """Explicitly labelled, filtered lexical degradation; not BM25."""
+        from ..recall import _INACTIVE_WIKI_STATUSES
+        terms = _tokenize_for_fts(query).lower().split()
+        if not terms:
+            return []
+        rows = self._conn.execute("SELECT slug,title,abstract,status,archived,area,wiki_type,capability,reviewed,skill_category FROM pages ORDER BY slug")
+        scopes = {s.strip().lower() for s in (scope or "").split(",") if s.strip()}
         hits = []
-        for slug, title, abstract in rows:
-            if ql in (title or "").lower() or ql in slug.lower():
-                hits.append(
-                    SearchHit(
-                        slug=slug, title=title or slug, score=0.1,
-                        abstract=abstract or None, backend="fts5",
-                    )
-                )
-        return hits[:limit]
+        for slug,title,abstract,status,archived,area,kind,capability,reviewed,category in rows:
+            if status in _INACTIVE_WIKI_STATUSES or archived or (scopes and area not in scopes):
+                continue
+            if kwargs.get("type_filter") and kind != kwargs["type_filter"]:
+                continue
+            wanted = kwargs.get("category")
+            if wanted and category != wanted and not category.startswith(wanted + "/"):
+                continue
+            if str(kwargs.get("strategy", "")).startswith("capability") and (not capability or not reviewed or status != "active"):
+                continue
+            text = f"{title} {slug} {capability if kwargs.get('strategy') == 'capability' else abstract}".lower()
+            if any(term in text for term in terms):
+                hits.append(SearchHit(slug=slug,title=title or slug,score=0.1,abstract=abstract,backend="like",
+                                      extra={"fallback_reason": "sqlite_fts5_unavailable"}))
+                if len(hits) >= limit:
+                    break
+        return hits
 
     def close(self) -> None:
         try:

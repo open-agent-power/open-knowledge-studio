@@ -74,7 +74,7 @@ def _files_snapshot(root: Path, pattern: str) -> str:
 
 def _comparison_context(root: Path, backend: str | None) -> dict[str, str]:
     params = dict(load_recall_params(root=root))
-    selected = backend or params.pop("search_backend", "native")
+    selected = backend or params.pop("search_backend", "fts5")
     params.pop("search_backend", None)
     return {
         "schema_version": CONTEXT_SCHEMA,

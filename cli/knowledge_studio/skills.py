@@ -283,8 +283,11 @@ def import_skill(source: Path, *, kind: str = "strategy", category: str = "gener
         return {"duplicate": False, "entry": summary(store.parse_wiki_file(path)), "skipped": skipped, "next_step": f"oks drafts get {slug}; then, after human review: oks drafts promote {slug}"}
 
 
-def search(query: str, *, limit: int = 5, kind: str | None = None, category: str | None = None) -> list[dict]:
-    from knowledge_studio.recall import _recall_knowledge_with_context, _resolve_goal_context
+def search(query: str, *, limit: int = 5, kind: str | None = None, category: str | None = None, agreement: dict | None = None, task_scope: str | None = None, debug_record: bool = False) -> list[dict]:
+    from knowledge_studio.retrieval_debug import agreement_context, record
+    task = agreement_context(_root(), agreement, task_scope)
+    diagnostics = {"task": task}
+    from knowledge_studio.recall import _recall_knowledge_via_backend, _resolve_goal_context
     pages = [p for p in entries(include_drafts=False) if p.get("status") == "active" and p.get("human_reviewed_at") and not p.get("archived")]
     if category:
         category = validate_category(category)
@@ -300,23 +303,23 @@ def search(query: str, *, limit: int = 5, kind: str | None = None, category: str
     }
     for term, translated in translations.items():
         routed_query = routed_query.replace(term, translated)
-    routing_pages = [{**p, "body": " ".join(str(p.get(key) or "") for key in
-                      ("skill_id", "skill_description", "skill_category"))}
-                     for p in pages]
     options = dict(topic_id=None, limit=limit, scope="skills",
                    goal_context=_resolve_goal_context("none", goal_boost=False),
-                   explain=True, type_filter=kind)
-    # Retain original terms so Chinese-authored/custom capability metadata works.
+                   explain=True, type_filter=kind, search_backend="fts5",
+                   strategy="capability", category=category, diagnostics=diagnostics)
     search_query = f"{query} {routed_query}" if routed_query != query.lower() else query
-    hits = _recall_knowledge_with_context(query=search_query, candidate_pages=routing_pages, **options)
-    # Keep instruction-level discovery for specific terms not in task metadata.
+    hits = _recall_knowledge_via_backend(query=search_query, **options)
     if not hits and routed_query == query.lower():
-        hits = _recall_knowledge_with_context(query=query, candidate_pages=pages, **options)
+        options["strategy"] = "capability_body"
+        hits = _recall_knowledge_via_backend(query=query, **options)
+        diagnostics["capability_fallback"] = "instructions_no_metadata_match"
     by_slug = {p["slug"]: p for p in pages}
     for hit in hits:
         hit.update({key: by_slug[hit["slug"]].get(key, "") for key in ("skill_id", "skill_version", "skill_category")})
         hit["load_command"] = f"oks skills load {hit['skill_id']} --version {hit['skill_version']}"
         hit["body_preview"] = str(by_slug[hit["slug"]].get("skill_description") or hit["body_preview"])
+    if debug_record:
+        record(_root(), query, diagnostics, hits)
     return hits
 
 

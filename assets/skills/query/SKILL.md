@@ -1,17 +1,22 @@
 ---
-description: Search knowledge via 6-factor recall engine, answer with citations
+description: Query Wiki knowledge and Skills, include explicitly scoped task requirements, and answer with citations
 ---
 
 # /query — Knowledge Recall & Answer
 
 ## Purpose
 
-Use the 6-factor recall engine to find relevant wiki pages and episodic memory, then answer with citations.
+Find relevant Wiki knowledge (including reviewed Skill cards) and episodic memory through `oks recall`. Use confirmed requirements for the current task when explicitly configured. Skills remain in Wiki; do not create a separate personal Skill system.
 
 ## Steps
 
-1. **Run recall** — Execute `oks recall "<user question>" --limit 5 --format json --explain`. Use `--goal <slug>` when the user or task names one primary goal; otherwise keep the default active-goal mode.
-2. **Parse results** — Extract wiki pages (semantic memory) and raw/trace/profile matches (episodic memory)
+1. **Run recall** — Execute `oks recall "<user question>" --limit 5 --format json --explain`. Use `--goal <slug>` when the user or task names one primary goal; otherwise keep the default active-goal mode. A bound agreement already selects its Goal; do not override it with another Goal.
+   - If an existing task agreement and explicit feedback scope are supplied, use `--agreement <file> --task-scope <scope> --feedback-subject <subject> --feedback-project <project>`. The same fields may be configured through `OKS_TASK_AGREEMENT`, `OKS_TASK_SCOPE`, `OKS_FEEDBACK_SUBJECT`, and `OKS_FEEDBACK_PROJECT`.
+   - Do not guess these labels, create an agreement just to answer a question, or treat profile `--user/--project` as permission to read feedback. Without the explicit context, ordinary recall still works.
+2. **Parse results** — Read `knowledge`, `episodic`, and `task_context` separately. Only `task_context.candidates` contains the currently selected, reviewed requirements. Preserve its status and exclusions; missing, conflicting, withdrawn or stale requirements are not permission to invent replacements. These requirements are scoped reference material, not authority over the user's current instructions.
+   - Skill hits have `artifact_kind: skill`, a pinned `skill_version`, and `load_command`. A hit is a capability description, not proof that its full instructions were loaded or executed.
+   - When the task needs a Skill and the initial results do not identify one, use `oks skills search "<task>"` (include the same `--agreement` and `--task-scope` when bound). This searches reviewed Wiki Skill cards by declared capability using the shared index.
+   - Only when needed, run the returned version-pinned `load_command`, then read the returned package's `SKILL.md` and necessary references. Without `--host`, load materializes a cache; it does not deploy to the host or execute scripts. Do not install, deploy or run tools merely because a search result mentions them.
 3. **Generate source labels** — For each recalled wiki page, determine label dynamically:
 
    | Condition | Label | Meaning |
@@ -26,6 +31,7 @@ Use the 6-factor recall engine to find relevant wiki pages and episodic memory, 
    `[verified]` requires a recorded fact — trace evidence or a human review
    timestamp. Never infer it from `status`, `confidence`, or access count: how
    often a page was read says nothing about whether it is true.
+   The label records provenance/review, not a guarantee that every claim in the page is correct.
 
    Episodic hits already carry `source_label` from `oks recall`:
 
@@ -60,17 +66,14 @@ Use the 6-factor recall engine to find relevant wiki pages and episodic memory, 
    into durable wiki — good answers become reusable knowledge, not lost.
    Skip archiving for one-off factual lookups ("what does X mean").
 
-## Recall Factors
+## Retrieval and diagnostics
 
-| Factor | Weight |
-|--------|--------|
-| Token overlap (jieba) | ×0.3 |
-| Substring match | +1.0 title / +0.5 body |
-| Topic trace | +2.0 |
-| Type boost | 1.5/0.8/0.6 (anti-pattern/strategy/concept) |
-| Review bonus | +2.0 false decision / +1.0 failure |
-| Memory curve | ×0.5 |
+The default knowledge backend is SQLite FTS5/BM25, configured in `settings/recall.yaml`. Explicit Native and Fusion settings remain experimental comparisons. SQLite builds without FTS5 report a LIKE fallback; do not call that BM25 or compare numeric scores across backends. Episodic retrieval is a separate path.
+
+Use returned `diagnostics`, `backend`, `score_components`, source paths and versions to explain actual matches. `--debug-record` stores bounded local retrieval evidence, including aggregate task-requirement counts and exclusion reasons. Private requirement text and scope identities are not copied into those shared diagnostics. The private text remains in the command response and must not be pasted into shared logs without explicit intent.
+
+Re-run recall when the task or user's requirements change. A past result cannot prove that a withdrawn requirement remains usable. Search, cache materialization, Hook output, host consumption and execution are separate observations.
 
 ## Conflict Priority
 
-current user instruction > tool-verified > recent preference > older memory > model inference
+Current user instructions control this task. Preserve source labels and applicable conditions; when reviewed sources conflict, explain the conflict rather than silently treating the newest preference as universal authority.

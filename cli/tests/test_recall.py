@@ -285,7 +285,7 @@ def test_connector_refill_is_bounded_for_nonconforming_results(kb_root, monkeypa
 
 def test_recall_knowledge_anti_pattern_boosted(kb_root):
     from knowledge_studio.recall import recall_knowledge
-    results = recall_knowledge("deployment", limit=5)
+    results = recall_knowledge("deployment", search_backend="native", limit=5)
     slugs = [r["slug"] for r in results]
     if "no-tests" in slugs and "docker-deployment" in slugs:
         assert slugs.index("no-tests") <= slugs.index("docker-deployment")
@@ -338,8 +338,8 @@ def test_goal_boost_lifts_matching_page(kb_root):
     from knowledge_studio.recall import recall_knowledge
     _write_goal(kb_root, "g", domains=["computing"], keywords=["docker"])
 
-    off = recall_knowledge("deployment", limit=5, goal_boost=False)
-    on = recall_knowledge("deployment", limit=5, goal_boost=True)
+    off = recall_knowledge("deployment", search_backend="native", limit=5, goal_boost=False)
+    on = recall_knowledge("deployment", search_backend="native", limit=5, goal_boost=True)
 
     def rel(results, slug):
         return next((r["relevance"] for r in results if r["slug"] == slug), None)
@@ -357,7 +357,7 @@ def test_goal_boost_noop_without_goals(kb_root):
 def test_recall_explain_components_rebuild_final_score(kb_root):
     from knowledge_studio.recall import RECALL_HIT_SCHEMA, recall_knowledge
 
-    result = recall_knowledge("deployment", goal="none", explain=True)[0]
+    result = recall_knowledge("deployment", search_backend="native", goal="none", explain=True)[0]
     components = result["score_components"]
     rebuilt = sum(
         components[key]
@@ -382,8 +382,8 @@ def test_recall_explain_components_rebuild_final_score(kb_root):
 def test_recall_explain_does_not_change_ranking(kb_root):
     from knowledge_studio.recall import recall_knowledge
 
-    plain = recall_knowledge("deployment", goal="none")
-    explained = recall_knowledge("deployment", goal="none", explain=True)
+    plain = recall_knowledge("deployment", search_backend="native", goal="none")
+    explained = recall_knowledge("deployment", search_backend="native", goal="none", explain=True)
 
     assert [item["slug"] for item in explained] == [item["slug"] for item in plain]
     assert [item["relevance"] for item in explained] == [
@@ -399,8 +399,8 @@ def test_explicit_goal_does_not_merge_other_active_goals(kb_root):
     _write_goal(kb_root, "docker-goal", keywords=["docker"])
     _write_goal(kb_root, "testing-goal", keywords=["tests"])
 
-    baseline = recall_knowledge("deployment", goal="none", explain=True)
-    selected = recall_knowledge("deployment", goal="docker-goal", explain=True)
+    baseline = recall_knowledge("deployment", search_backend="native", goal="none", explain=True)
+    selected = recall_knowledge("deployment", search_backend="native", goal="docker-goal", explain=True)
 
     def hit(results, slug):
         return next(item for item in results if item["slug"] == slug)

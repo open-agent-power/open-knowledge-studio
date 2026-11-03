@@ -1,0 +1,42 @@
+{
+  "example_kind": "projection-not-import-payload",
+  "source_files": {
+    "SKILL.md": "---\nname: sample\ndescription: Synthetic identity example\n---\nRead the provided notes.\n",
+    "references/example.txt": "Synthetic content only.\n"
+  },
+  "package_manifest": {
+    "schema_version": "oks-skill-package/v1",
+    "skill_id": "sample",
+    "version": "471fe47227f77f84b039ede0c29b56e8ca54aced46f5b61838071a8239bc3f52",
+    "files": {
+      "SKILL.md": "66d94a32e4304d8681e51575ae43d4f0b861834d4c05e0e31c13bd38bc9bdf0f",
+      "references/example.txt": "e6a95372289804c97adf0c30acf3741acc36603156936d2e45b8a086cebbbe67"
+    }
+  },
+  "card_projections": [
+    {
+      "artifact_kind": "skill",
+      "skill_id": "sample",
+      "skill_version": "471fe47227f77f84b039ede0c29b56e8ca54aced46f5b61838071a8239bc3f52",
+      "type": "strategy",
+      "skill_category": "general"
+    },
+    {
+      "artifact_kind": "skill",
+      "skill_id": "sample",
+      "skill_version": "471fe47227f77f84b039ede0c29b56e8ca54aced46f5b61838071a8239bc3f52",
+      "type": "concept",
+      "skill_category": "reference"
+    }
+  ],
+  "receipt_projection": {
+    "agents/sample": {
+      "version": "471fe47227f77f84b039ede0c29b56e8ca54aced46f5b61838071a8239bc3f52",
+      "files": {
+        "SKILL.md": "66d94a32e4304d8681e51575ae43d4f0b861834d4c05e0e31c13bd38bc9bdf0f",
+        "references/example.txt": "e6a95372289804c97adf0c30acf3741acc36603156936d2e45b8a086cebbbe67"
+      },
+      "loaded_at": "2026-01-01T00:00:00Z"
+    }
+  }
+}

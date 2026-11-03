@@ -629,6 +629,8 @@ def write_wiki_page(
     worker_records: list[dict] | None = None,
     candidate_metadata: dict | None = None,
 ) -> Path:
+    from knowledge_studio.decisions import validate_options
+    validate_options(options)
     candidate_metadata = _merge_candidate_metadata({}, candidate_metadata or {})
     for field, value in (("importance", importance), ("confidence", confidence)):
         if value is not None:
@@ -672,11 +674,15 @@ def write_wiki_page(
                     raise ValueError("Matching content has a different classification or is source material; candidate retained. Review the existing page explicitly.")
             # Reject conflicting provenance before changing review/score state.
             # Merge only explicit candidate fields, never arbitrary draft state.
-            if candidate_metadata:
+            if candidate_metadata or options is not None:
                 def merge_metadata(text):
                     parts = text.split("---", 2)
                     meta = yaml.safe_load(parts[1]) or {}
+                    if options is not None and meta.get("options") is not None and meta["options"] != options:
+                        raise ValueError("Matching content has conflicting options; candidate retained. Review the existing decisions explicitly.")
                     meta.update(_merge_candidate_metadata(meta, candidate_metadata))
+                    if options is not None:
+                        meta["options"] = options
                     return "---\n" + yaml.safe_dump(meta, allow_unicode=True, sort_keys=False) + "---\n" + parts[2]
                 _locked_atomic_update(existing, merge_metadata)
             # Dedup must not swallow what the caller newly established. A human
@@ -755,7 +761,7 @@ def write_wiki_page(
         "tags": ", ".join(tags) if tags else "",
         "fingerprint": fp,
     }
-    if options:
+    if options is not None:
         frontmatter["options"] = options
     frontmatter.update(candidate_metadata)
     if human_reviewed:
@@ -915,14 +921,15 @@ def promote_draft(
     tags: list[str] | None = None,
     slug_hint: str | None = None,
 ) -> str:
-    # Serialize Skill review with import/load/compaction. Ordinary draft behavior
-    # is unchanged. Re-read the draft inside the lock before committing a review.
-    meta = parse_wiki_file(_draft_path(slug)) or {}
-    if meta.get("artifact_kind") == "skill":
-        from knowledge_studio.skills import _inside, _root
-        with _file_lock(_inside(_root(), ".oks/locks/skills.lock")):
-            return _promote_draft(slug, title, wiki_type, area, tags, slug_hint)
-    return _promote_draft(slug, title, wiki_type, area, tags, slug_hint)
+    from knowledge_studio.feedback import export_guard
+    with export_guard(repo_root(), _draft_path(slug)):
+        # Re-read under the feedback guard; Skill review keeps its existing lock.
+        meta = parse_wiki_file(_draft_path(slug)) or {}
+        if meta.get("artifact_kind") == "skill":
+            from knowledge_studio.skills import _inside, _root
+            with _file_lock(_inside(_root(), ".oks/locks/skills.lock")):
+                return _promote_draft(slug, title, wiki_type, area, tags, slug_hint)
+        return _promote_draft(slug, title, wiki_type, area, tags, slug_hint)
 
 
 def _promote_draft(
@@ -1003,6 +1010,7 @@ def _promote_draft(
         confidence=meta.get("confidence"),
         default_importance=0.7,
         tags=tags if tags is not None else draft_tags,
+        options=meta.get("options"),
         traces=meta.get("traces") if isinstance(meta.get("traces"), list) else None,
         review=meta.get("review") if isinstance(meta.get("review"), dict) else None,
         human_note=human_note,

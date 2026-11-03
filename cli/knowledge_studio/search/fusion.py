@@ -65,7 +65,8 @@ class FusionBackend:
         for h in fts5_hits:
             f_norm = h.score / fts5_max  # 0-1
             n_norm = native_map.get(h.slug, 0) / native_max if native_map else 0
-            h.score = 0.7 * f_norm + 0.3 * n_norm  # fts5 主 + native 灵魂
+            h.score = 0.7 * f_norm + 0.3 * n_norm
+            h.backend = "fusion"
         fts5_hits.sort(key=lambda h: -h.score)
         return fts5_hits[:limit]
 

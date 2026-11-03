@@ -245,7 +245,9 @@ def test_evaluation_metrics_manifest_and_read_only(tmp_path, monkeypatch):
     assert "code_commit" not in result["manifest"]
     assert "kb_commit" in result["manifest"] and "code_version" in result["manifest"]
     assert (wiki / "alpha.md").read_bytes() == before
-    assert not (tmp_path / ".oks").exists()
+    # Default FTS5 may create derived cache, never knowledge or usage mutations.
+    assert (tmp_path / ".oks/fts5.db").exists()
+    assert not (tmp_path / ".oks/retrieval-debug.json").exists()
 
 
 def test_limit_below_five_is_rejected(tmp_path, monkeypatch):
