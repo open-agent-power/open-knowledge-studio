@@ -170,7 +170,7 @@ def task_handoff(root, task_id, expected_revision):
     if type(expected_revision) is not int or task['revision'] != expected_revision:
         raise ValueError('Task revision changed; inspect before copying handoff')
     return {'task_id': task_id, 'revision': task['revision'], 'knowledge_base': str(root),
-            'text': tasks._handoff_text(task), 'state_mutated': False}
+            'text': f'知识库：{root.resolve()}\n\n' + tasks._handoff_text(task), 'state_mutated': False}
 
 
 def task_sources(root, task_id, expected_revision):
@@ -434,16 +434,54 @@ def draft(root, relative, review_sha256=None):
                     continue
         if isinstance(context, dict):
             result['workflow_context'] = {**context, 'source_status': 'historical'}
+        try:
+            result['reuse'] = learning_reuse(root, reviewed['wiki_path'], origin_task=context.get('task_id') if isinstance(context, dict) else None)
+        except (OSError, ValueError, KeyError, TypeError, UnicodeError):
+            result['reuse'] = {'status': 'unavailable', 'tasks': []}
         return result
     if result is None:
         raise FileNotFoundError('Draft or unambiguous reviewed Wiki not found')
-    result['review_status'] = 'rejected' if disposition == 'rejected' else 'draft'
+    result['review_status'] = disposition if disposition in ('rejected', 'not_proposed') else 'draft'
     context = draft_context(root, result['text'])
     if context is None and relative.startswith('drafts/task-learning-'):
         context = {'task_id': '', 'source_status': 'changed', 'warning': '任务来源标记缺失，请重新整理候选。'}
     if context:
         result['workflow_context'] = context
     return result
+
+
+def learning_reuse(root, relative, *, origin_task=None):
+    """Read-only retained receipts for later tasks; no inferred adoption or writes."""
+    from . import retrieval_debug
+    handoff._relative(relative, 'wiki')
+    source = _text_file(root, relative, {'.md'})
+    result = {'source_path': relative, 'source_sha256': source['sha256'],
+              'scope': 'retained_records_current_version', 'tasks': [], 'read_count': 0, 'citation_count': 0}
+    if not handoff._reviewed(handoff._meta(source['text'].encode('utf-8'))):
+        return {**result, 'status': 'not_reviewed'}
+    try:
+        data = retrieval_debug.overview(root)
+        grouped = {}
+        for key, count in [('native_reads', 'read_count'), ('native_uses', 'citation_count')]:
+            for receipt in data.get(key, []):
+                tid = receipt.get('task_id')
+                if (not isinstance(tid, str) or not tid or tid == origin_task
+                        or receipt.get('source_path') != relative or receipt.get('source_sha256') != source['sha256']):
+                    continue
+                row = grouped.setdefault(tid, {'task_id': tid, 'read_count': 0, 'citation_count': 0})
+                row[count] += 1
+                result[count] += 1
+        for tid, row in list(grouped.items())[:20]:
+            try:
+                task = tasks.show(root, tid)
+                row['title'] = handoff._meta(task['agreement']['goal']['text'].encode('utf-8')).get('title') or tid
+                result['tasks'].append(row)
+            except (OSError, ValueError, KeyError, TypeError):
+                continue
+        result['truncated'] = len(grouped) > 20
+        return {**result, 'status': 'ok'}
+    except (OSError, ValueError, KeyError, TypeError):
+        return {**result, 'status': 'unavailable'}
 
 
 def invoke(root, operation, payload):

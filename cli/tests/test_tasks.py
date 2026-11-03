@@ -15,6 +15,56 @@ from knowledge_studio.cli import app
 from knowledge_studio.recall import recall
 
 
+def test_native_return_is_waiting_for_confirmation_without_completing_task(task_kb):
+    root, workspace = task_kb
+    task = tasks.show(root,'report')
+    target=root/'report.md';target.write_text('Actual returned output.',encoding='utf-8')
+    tasks.capture_outputs(root,'report',task['agreement']['sha256'],'native-event',[tasks._artifact(root,'report.md')],host='claude',run_id='native-run')
+    current=tasks.show(root,'report')
+    assert current['awaiting_confirmation'] and current['lifecycle']=='active'
+    overview=tasks.overview(root)
+    assert overview['counts']['needs_review']==1
+    assert overview['tasks'][0]['awaiting_confirmation']
+    tasks.checkpoint(root,'report',current['revision'],'User-owned progress','Continue after review',['report.md'])
+    current=tasks.show(root,'report')
+    assert not current['awaiting_confirmation']
+    target.write_text('A newly returned revision.',encoding='utf-8')
+    tasks.capture_outputs(root,'report',task['agreement']['sha256'],'native-event-two',[tasks._artifact(root,'report.md')],host='claude',run_id='native-run')
+    current=tasks.show(root,'report')
+    assert current['awaiting_confirmation'] and current['progress_origin']=='caller'
+    assert current['progress']=='User-owned progress'
+    tasks.transition(root,'report',current['revision'],'complete','Trial output inspected.')
+    assert not tasks.show(root,'report')['awaiting_confirmation']
+
+
+def test_repeated_native_output_is_one_current_file_with_readable_history(task_kb):
+    from knowledge_studio import workspace as reader
+    root, project=task_kb
+    task=tasks.show(root,'report')
+    def captured(letter, origin, text):
+        run_id='claude-'+letter*40
+        relative=f'outputs/{run_id}/report.md'
+        path=root/relative;path.parent.mkdir(parents=True);path.write_text(text,encoding='utf-8')
+        ref=tasks._artifact(root,relative)
+        run=root/'.oks/workflow-runs'/f'{run_id}.json';run.parent.mkdir(parents=True,exist_ok=True)
+        run.write_text(json.dumps({'run_id':run_id,'task_id':'report','workspace':str(origin),'artifacts':[ref]}),encoding='utf-8')
+        tasks.capture_outputs(root,'report',task['agreement']['sha256'],letter,[ref],host='claude',run_id=run_id)
+        return ref
+    first=captured('a',project,'First version.')
+    second=captured('b',project,'Corrected version.')
+    current=tasks.show(root,'report')
+    assert current['artifacts']==[second]
+    assert reader.artifact(root,'report',first['path'],2)['text']=='First version.'
+    # Old records containing both archives are projected without rewriting them.
+    path=root/'.oks/tasks/report.json';legacy=json.loads(path.read_text(encoding='utf-8'))
+    legacy['artifacts']=[first,second];path.write_text(json.dumps(legacy),encoding='utf-8');before=path.read_bytes()
+    projected=tasks.show(root,'report')
+    assert projected['artifacts']==[second] and projected['artifact_versions']==[first,second]
+    assert path.read_bytes()==before
+    third=captured('c',project.parent/'different-project','Unrelated project file.')
+    assert tasks.show(root,'report')['artifacts']==[second,third]
+
+
 @pytest.fixture
 def task_kb(tmp_path, monkeypatch):
     root=tmp_path/'kb'; workspace=tmp_path/'work'; workspace.mkdir()
@@ -118,9 +168,27 @@ def test_handoff_is_local_read_only(task_kb):
     before=(root/'.oks/tasks/report.json').read_bytes()
     text=tasks.export_handoff(root,'report')
     assert 'oks task select report' in text and 'Keep source citations.' in text
+    assert '## 目标' in text and '## 当前进度' in text and '## 下一步' in text
     assert (root/'.oks/tasks/report.json').read_bytes()==before
-    command=json.loads(text.split('\n\n',1)[1])['check_command']
-    assert CliRunner().invoke(app,shlex.split(command)[1:]).exit_code==0
+    assert CliRunner().invoke(app,['task','show','--task-id','report']).exit_code==0
+    assert tasks.binding(root,workspace) is None
+
+
+def test_handoff_text_carries_source_options_and_pending_state(task_kb):
+    root,workspace=task_kb
+    wiki=root/'wiki/rule.md';wiki.parent.mkdir(parents=True,exist_ok=True)
+    wiki.write_text('---\ntitle: Source rule\ntype: concept\nstatus: active\nhuman_reviewed_at: "2026-10-29T00:00:00Z"\noptions:\n  - id: cite\n    chosen: true\n    rationale: Preserve exact citations\n---\nReviewed rule.\n',encoding='utf-8')
+    task=tasks.update_sources(root,'report',1,['wiki/rule.md'])
+    artifact=root/'reports/result.md';artifact.parent.mkdir();artifact.write_text('Actual output',encoding='utf-8')
+    task=tasks.capture_outputs(root,'report',task['agreement']['sha256'],'handoff-test',
+        [tasks._artifact(root,'reports/result.md')],host='claude',run_id='run',
+        handoff_declaration={'progress':'One section drafted.','next_action':'Verify citations.',
+            'judgment':'Keep exact source citations.','pending':'Confirm audience.'})
+    text=tasks.export_handoff(root,'report')
+    assert 'Source rule' in text and 'Preserve exact citations' in text
+    assert '判断依据' in text and 'Keep exact source citations.' in text
+    assert 'Confirm audience.' in text and 'reports/result.md' in text
+    assert '未独立验证' in text and '不证明内容正确或任务完成' in text
     assert tasks.binding(root,workspace) is None
 
 

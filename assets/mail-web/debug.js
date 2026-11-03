@@ -4,6 +4,47 @@ const el = (tag, text, cls) => { const n=document.createElement(tag); if(text!==
 const array = value => Array.isArray(value) ? value : [];
 const stages = {retrieved:'查询',hook_emitted:'Hook 输出',hook_skipped:'Hook 跳过'};
 let data={records:[],deployments:[]}, stale=false;
+let heatLoaded=false;
+const debugParams=new URLSearchParams(location.search), taskId=debugParams.get('task')||'';
+const eventNames={query:'查询命中',hook_output:'Hook 已输出上下文',cli_return:'CLI 已返回内容',host_read:'宿主读取了文件',caller_reported:'调用者关联了产物',output_citation:'产物明确引用了此来源'};
+function taskHref(id,artifact,revision){return '/tasks?'+new URLSearchParams({id,...(artifact?{artifact}:{}),...(revision?{artifact_revision:revision}:{})});}
+function chooseHeat(row,phase){const url=new URL(location.href);url.searchParams.set('source',row.path);url.searchParams.set('version',row.sha);url.searchParams.set('phase',phase);history.pushState(null,'',url);renderHeatmap();}
+function renderHeatmap(){
+ const host=$('heatmapGrid');host.replaceChildren();
+ if(!heatLoaded){$('heatmapStatus').textContent=stale?'无法读取知识记录，请重试。':'正在读取记录…';return;}
+ const model=OksKnowledgeHeatmap.build(data,{taskId,query:$('heatSearch').value}),params=new URLSearchParams(location.search);
+ $('heatmapStatus').textContent=stale?'刷新失败，保留上次记录。':`${$('heatSearch').value.trim()?(model.rows.length+model.hidden)+' / ':''}${model.sourceCount} 个来源版本 · ${taskId?'当前目标':'当前保留记录'}${model.hidden?' · 筛选后显示前40项':''}${data.status==='error'?' · 查询日志读取失败':''}`;
+ const table=el('table',undefined,'heatmap-table'),thead=el('thead'),heads=el('tr');heads.append(el('th','知识来源'));
+ for(const [key,label]of model.columns){const th=el('th',({retrieved:'查到',emitted:'输出',read:'读取',used:'关联产物'})[key]);th.scope='col';th.title=label;heads.append(th);}thead.append(heads);table.append(thead);const tbody=el('tbody');
+ for(const row of model.rows){
+  const tr=el('tr'),heading=el('th'),name=el('button',row.title,'heatmap-source');heading.scope='row';name.type='button';name.title=row.path;
+  name.addEventListener('click',()=>chooseHeat(row,model.columns.find(([key])=>row.events[key].length)?.[0]||'retrieved'));heading.append(name,el('small',row.kind));tr.append(heading);
+  for(const [key,label]of model.columns){
+   const td=el('td'),count=row.events[key].length,cell=el('button',count?count:'—','heatmap-cell');cell.type='button';cell.disabled=!count;cell.dataset.level=count?String(Math.min(4,Math.max(1,Math.ceil(count/model.maximum*4)))):'0';
+   cell.setAttribute('aria-label',`${row.title} · ${label} · ${count?count+'条记录':'未记录'}`);
+   cell.setAttribute('aria-pressed',String(params.get('source')===row.path&&params.get('version')===row.sha&&params.get('phase')===key));cell.addEventListener('click',()=>chooseHeat(row,key));td.append(cell);tr.append(td);
+  }tbody.append(tr);
+ }
+ table.append(tbody);host.append(table);
+ if(!model.rows.length)host.append(el('p',$('heatSearch').value?'没有匹配的知识。':'尚未记录到知识。可先完成一次查询或在已接入的任务中读取知识。','empty'));
+ const row=model.rows.find(row=>row.path===params.get('source')&&row.sha===params.get('version')),phase=params.get('phase'),detail=$('heatmapDetail');detail.replaceChildren();
+ if(!row||!row.events[phase]){detail.append(el('p','选择一个有记录的格子，查看来源和对应任务。','meta'));return;}
+ const heading=el('div',undefined,'heatmap-detail-heading');heading.append(el('h3',row.title),el('span',model.columns.find(([key])=>key===phase)[1]+' · '+row.events[phase].length+' 条','meta'));detail.append(heading);
+ const source=el('a','阅读当前知识 →');source.href='/#wiki-reader&path='+encodeURIComponent(row.path);detail.append(source);
+ for(const event of row.events[phase].slice(0,20)){
+  const item=el('article',undefined,'heatmap-event');item.append(el('strong',eventNames[event.kind]),el('span',event.at?new Date(event.at).toLocaleString('zh-CN'):'时间未记录','meta'));
+  if(event.taskId){const link=el('a','查看目标与产物 →');link.href=taskHref(event.taskId);item.append(link);}
+  if(event.recordId){const link=el('button','查看本次查询');link.type='button';link.addEventListener('click',()=>{$('queryHistory').open=true;const card=$('query-'+event.recordId);if(card){card.open=true;card.scrollIntoView({behavior:'smooth',block:'start'});}});item.append(link);}
+  for(const artifact of array(event.artifacts)){const link=el('a',artifact.path.split('/').pop());link.href=taskHref(event.taskId,artifact.path,event.revision);item.append(link);}
+  const metadata=el('details');metadata.append(el('summary','查看记录与版本'),facts([['记录类型',eventNames[event.kind]],['来源',row.path],[event.kind==='host_read'?'文件版本（记录时）':'来源版本',row.sha],['任务',event.taskId||'未关联'],['运行',event.runId||'未记录'],['记录标识',event.id]]));item.append(metadata);detail.append(item);
+ }
+ if(row.events[phase].length>20)detail.append(el('p','显示前20条记录。','meta'));
+}
+$('heatSearch').value=debugParams.get('q')||'';
+$('heatSearch').addEventListener('input',()=>{const url=new URL(location.href);if($('heatSearch').value)url.searchParams.set('q',$('heatSearch').value);else url.searchParams.delete('q');history.replaceState(null,'',url);renderHeatmap();});
+window.addEventListener('popstate',()=>{$('heatSearch').value=new URLSearchParams(location.search).get('q')||'';renderHeatmap();});
+$('heatmapDetail').addEventListener('click',event=>{const link=event.target.closest('a[href]');if(link&&/^\/(?:tasks(?:\?|$)|#)/.test(link.getAttribute('href')))link.href=OksNavigation.fromTask(link.href);});
+if(taskId){const context=$('debugTask');context.hidden=false;const link=el('a','查看本次目标与产物 →');link.href=OksNavigation.origin?.startsWith('/tasks')?OksNavigation.origin:taskHref(taskId);context.append(link);}
 function facts(values) {
  const list=el('dl',undefined,'facts');
  for(const [key,value] of values) list.append(el('dt',key),el('dd',typeof value==='string'?value:JSON.stringify(value??'未记录')));
@@ -18,6 +59,7 @@ function taskRequirements(context) {
  return box;
 }
 function render() {
+ renderHeatmap();
  const q=$('filter').value.toLowerCase(),stage=$('stage').value,backend=$('backend').value;
  const records=array(data.records).filter(r=>(!stage||r.stage===stage)&&(!backend||array(r.diagnostics?.actual_backends).includes(backend))&&(!q||JSON.stringify(r.hits||[]).toLowerCase().includes(q)));
  $('records').replaceChildren();
@@ -25,6 +67,7 @@ function render() {
  if(!records.length) $('records').append(el('div',data.status==='error'?'记录读取失败，原文件已保留。':data.records.length?'没有匹配结果。':'暂无记录。完成一次带诊断的查询后，这里会显示结果。','empty'));
  records.forEach((record,index)=>{
   const d=record.diagnostics||{},hits=array(record.hits),emitted=array(record.emitted),card=el('details',undefined,'record'),summary=el('summary');
+  card.id='query-'+record.id;
   summary.append(el('span',stages[record.stage]||record.stage,'stage-label'),el('span',hits[0]?.title||d.task?.scope||'无知识命中','record-title'),el('span',new Date(record.at).toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}),'time'),el('span',`${hits.length} 项`,'count'));
   card.append(summary);card.open=index===0;
   const body=el('div',undefined,'record-body'),flow=el('div',undefined,'flow');
@@ -94,16 +137,16 @@ function render() {
 async function refresh() {
  $('refresh').disabled=true;$('status').textContent='读取中…';
  try {
-  const response=await fetch('/api/retrieval/debug',{cache:'no-store'});
+  const response=await fetch('/api/retrieval/debug'+(taskId?'?'+new URLSearchParams({task:taskId}):''),{cache:'no-store'});
   if(!response.ok)throw Error('HTTP '+response.status);
-  const next=await response.json();if(!Array.isArray(next.records))throw Error('记录格式错误');data=next;stale=false;
+  const next=await response.json();if(!Array.isArray(next.records))throw Error('记录格式错误');data=next;stale=false;heatLoaded=true;
   $('total').textContent=data.records.length;$('emitted').textContent=data.records.filter(r=>r.stage==='hook_emitted').length;
   $('degraded').textContent=data.records.filter(r=>r.diagnostics?.fallback_reason||r.diagnostics?.experimental).length;
   $('deploymentsCount').textContent=array(data.deployments).length;$('deployments').replaceChildren();
   for(const receipt of array(data.deployments))$('deployments').append(el('div',`${receipt.host_skill} · ${receipt.version} · ${receipt.loaded_at}`,'deployment'));
   if(!array(data.deployments).length)$('deployments').append(el('p',data.deployment_error||'暂无部署记录。','meta'));
   render();
- } catch(error) {stale=true;$('status').textContent='刷新失败，当前显示上次记录。请重试。';}
+ } catch(error) {stale=true;$('status').textContent='刷新失败，当前显示上次记录。请重试。';renderHeatmap();}
  finally {$('refresh').disabled=false;}
 }
 $('refresh').addEventListener('click',refresh);

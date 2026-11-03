@@ -230,3 +230,30 @@ def test_review_cli_option_is_separate_and_foreground_only(case):
     root, *_ = case
     result = CliRunner().invoke(app, ['mail', 'serve', '--path', str(root), '--local-review', '--background'])
     assert result.exit_code == 2 and 'foreground' in result.output
+
+
+def test_calendar_review_is_available_in_read_only_workspace(case):
+    root, *_ = case
+    with http(root, mode='reader') as request:
+        value = request('/api/tasks/work-review?period=week&date=2026-10-29')
+        assert value['window']['start'] == '2026-10-26'
+        assert value['knowledge_base'] == str(root.resolve())
+        with pytest.raises(HTTPError) as error:
+            request('/api/tasks/work-review?period=forever&date=2026-10-29')
+        assert error.value.code == 400
+
+
+def test_later_learning_receipts_require_exact_version_and_different_task(case, monkeypatch):
+    from knowledge_studio import retrieval_debug
+    root, _, task, _ = case
+    source = task['agreement']['knowledge'][0]
+    later = tasks.start(root, 'later-task', task['agreement']['goal']['path'], [source['path']])
+    item = {'source_path': source['path'], 'source_sha256': source['sha256'], 'task_id': later['task_id']}
+    monkeypatch.setattr(retrieval_debug, 'overview', lambda root: {
+        'native_reads': [item, {**item, 'task_id': task['task_id']}, {**item, 'source_sha256': 'f' * 64}],
+        'native_uses': [item]})
+    before = {p: p.read_bytes() for p in root.rglob('*') if p.is_file()}
+    result = workspace.learning_reuse(root, source['path'], origin_task=task['task_id'])
+    assert result['read_count'] == result['citation_count'] == 1
+    assert [item['task_id'] for item in result['tasks']] == ['later-task']
+    assert {p: p.read_bytes() for p in root.rglob('*') if p.is_file()} == before

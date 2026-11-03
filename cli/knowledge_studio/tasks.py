@@ -154,12 +154,33 @@ def _artifact(root, relative):
     return {'path': relative, 'sha256': hashlib.sha256(raw).hexdigest()}
 
 
+def _artifact_origin(root, task_id, ref):
+    """Identify snapshots of one paired project output, never by basename."""
+    parts = ref['path'].split('/')
+    if len(parts) > 2 and parts[0] == 'outputs' and re.fullmatch(r'(?:claude|codex)-[0-9a-f]{40}', parts[1]):
+        try:
+            run = _read(_inside(root, '.oks/workflow-runs/' + parts[1] + '.json'))
+            workspace = run.get('workspace')
+            if (run.get('task_id') == task_id and run.get('run_id') == parts[1]
+                    and isinstance(workspace, str) and Path(workspace).is_absolute()
+                    and ref in run.get('artifacts', [])):
+                return ('project', str(Path(workspace)), '/'.join(parts[2:]))
+        except (OSError, ValueError, TypeError):
+            pass
+    return ('path', ref['path'])
+
+
+def _current_artifacts(root, task_id, refs):
+    return list({_artifact_origin(root, task_id, ref): ref for ref in refs}.values())
+
+
 def _archive(value):
     if len(value['history']) >= 100:
         raise ValueError("Task history capacity reached; preserve it and start a new task")
     value['history'].append({key: value[key] for key in ('revision', 'agreement', 'progress', 'next_action', 'artifacts', 'updated_at')} | {
         'uses': value.get('uses', []), 'lifecycle': value.get('lifecycle', 'active'),
-        'activation': value.get('activation', 1), 'lifecycle_reason': value.get('lifecycle_reason', '')})
+        'activation': value.get('activation', 1), 'lifecycle_reason': value.get('lifecycle_reason', ''),
+        'progress_origin': value.get('progress_origin'), 'host_handoff': value.get('host_handoff')})
     value['revision'] += 1
     value['updated_at'] = datetime.now(UTC).isoformat()
 
@@ -207,7 +228,7 @@ def checkpoint(root, task_id, expected_revision, progress, next_action, artifact
     return show(root, task_id)
 
 
-def capture_outputs(root, task_id, agreement_sha256, event_id, artifacts, *, host, run_id):
+def capture_outputs(root, task_id, agreement_sha256, event_id, artifacts, *, host, run_id, handoff_declaration=None):
     """Register observed host writes, preserving manual state and review gates."""
     path = _path(root, task_id)
     with store._file_lock(path.with_suffix('.lock')):
@@ -222,16 +243,32 @@ def capture_outputs(root, task_id, agreement_sha256, event_id, artifacts, *, hos
         for ref in artifacts:
             if set(ref) != {'path', 'sha256'} or _artifact(root, ref['path']) != ref:
                 raise ValueError('An observed output changed; inspect it before recording progress')
-        merged = {item['path']: item for item in value['artifacts']}
-        merged.update({item['path']: item for item in artifacts})
+        if handoff_declaration is not None:
+            if (not isinstance(handoff_declaration, dict)
+                    or set(handoff_declaration) != {'progress', 'next_action', 'judgment', 'pending'}
+                    or any(not isinstance(handoff_declaration[key], str) or len(handoff_declaration[key]) > 2000
+                           for key in handoff_declaration)):
+                raise ValueError('Invalid host handoff declaration; task record preserved')
+        merged = {_artifact_origin(root, task_id, item): item for item in value['artifacts']}
+        merged.update({_artifact_origin(root, task_id, item): item for item in artifacts})
         if len(merged) > 16:
             raise ValueError('Task output capacity reached; preserve existing outputs')
         _archive(value)
         value['artifacts'] = list(merged.values())
-        if not value.get('progress') or value.get('progress_origin') == 'host':
+        if handoff_declaration is not None:
+            value['host_handoff'] = handoff_declaration | {
+                'event_id': event_id, 'run_id': run_id, 'revision': value['revision'],
+                'verification': 'assistant_declared',
+                'execution_verified': False}
+        if value.get('progress_origin') != 'caller' and handoff_declaration and handoff_declaration.get('progress'):
+            value['progress'] = handoff_declaration['progress']
+            value['progress_origin'] = 'host_declared'
+        elif not value.get('progress') or value.get('progress_origin') == 'host':
             value['progress'] = f'宿主已返回，已收集{len(merged)}个产物；内容待确认。'
             value['progress_origin'] = 'host'
-        if not value.get('next_action'):
+        if value.get('progress_origin') != 'caller' and handoff_declaration and handoff_declaration.get('next_action'):
+            value['next_action'] = handoff_declaration['next_action']
+        elif not value.get('next_action'):
             value['next_action'] = '阅读产物与学习建议，确认后继续或结束任务。'
         value.setdefault('capture_events', []).append(event_id)
         value.setdefault('host_returns', []).append({'host': host, 'run_id': run_id, 'revision': value['revision'],
@@ -283,6 +320,10 @@ def update_sources(root, task_id, expected_revision, knowledge, *, expected_sour
 
 def show(root, task_id):
     value = _load(root, task_id)
+    artifact_versions = value['artifacts']
+    value['artifacts'] = _current_artifacts(root, task_id, artifact_versions)
+    if value.get('progress_origin') == 'host' and re.fullmatch(r'宿主已返回，已收集\d+个产物；内容待确认。', value.get('progress', '')):
+        value['progress'] = f"宿主已返回，已收集{len(value['artifacts'])}个产物；内容待确认。"
     check = handoff.check(root, value['agreement'], task_id)
     try:
         current_goal_text = handoff._read(root, value['agreement']['goal']['path'], 'profiles/goals').decode('utf-8')
@@ -295,7 +336,13 @@ def show(root, task_id):
                 issues.append({'path': artifact['path'], 'code': 'artifact_changed'})
         except (OSError, ValueError):
             issues.append({'path': artifact['path'], 'code': 'artifact_unavailable'})
+    awaiting = (value.get('lifecycle', 'active') == 'active'
+                and bool(value['artifacts']) and any(item.get('verification') == 'host_write_observed'
+                    and item.get('revision') == value['revision']
+                    for item in value.get('host_returns', []) if isinstance(item, dict)))
     return {**value, 'lifecycle': value.get('lifecycle', 'active'), 'activation': value.get('activation', 1),
+            'awaiting_confirmation': awaiting,
+            'artifact_versions': artifact_versions,
             'status': check['status'], 'issues': check['issues'], 'artifact_issues': issues,
             'current_goal_text': current_goal_text, 'execution_verified': False, 'review_required': True}
 
@@ -343,7 +390,8 @@ def overview(root, *, now=None):
             title = handoff._meta(task['agreement']['goal']['text'].encode('utf-8')).get('title')
             item = {key: task[key] for key in ('task_id', 'revision', 'status', 'lifecycle', 'updated_at')}
             item.update(title=title if isinstance(title, str) and title.strip() else task['task_id'],
-                        next_action=task['next_action'][:240], artifact_issue_count=len(task['artifact_issues']))
+                        next_action=task['next_action'][:240], artifact_issue_count=len(task['artifact_issues']),
+                        awaiting_confirmation=task['awaiting_confirmation'])
             try:
                 values = reminders.listing(root, task['task_id'], now=now, task=task)['items']
                 item['reminders'] = {'due_count': sum(v['status'] == 'due' for v in values),
@@ -360,7 +408,7 @@ def overview(root, *, now=None):
         elif item['lifecycle'] != 'active': counts['closed'] += 1
         else:
             counts['active'] += 1
-            if (item['status'] != 'current' or item.get('artifact_issue_count')
+            if (item.get('awaiting_confirmation') or item['status'] != 'current' or item.get('artifact_issue_count')
                     or item.get('reminders', {}).get('review_count') or item.get('reminders', {}).get('status') == 'unavailable'):
                 counts['needs_review'] += 1
         counts['due'] += item.get('reminders', {}).get('due_count', 0)
@@ -370,8 +418,18 @@ def overview(root, *, now=None):
 def continuation(value):
     if value.get('lifecycle', 'active') != 'active':
         raise ValueError('Task is closed; inspect before reopening')
+    knowledge = value['agreement']['knowledge']
     return {key: value[key] for key in ('task_id', 'revision', 'status', 'progress', 'next_action', 'artifacts', 'artifact_issues')} | {
-        'goal_text': value['agreement']['goal']['text'], 'knowledge': value['agreement']['knowledge'],
+        'lifecycle': value.get('lifecycle', 'active'), 'progress_origin': value.get('progress_origin'),
+        'awaiting_confirmation': value.get('awaiting_confirmation', False),
+        'goal_text': value['agreement']['goal']['text'], 'knowledge': knowledge,
+        'judgment_basis': [{'path': item['path'], 'title': item.get('title'), 'sha256': item['sha256'],
+                            'options': item.get('options', [])} for item in knowledge],
+        'uses': [{'source_path': item.get('source_path'), 'source_sha256': item.get('source_sha256'),
+                  'verification': item.get('verification'), 'artifacts': item.get('artifacts', [])}
+                 for item in value.get('uses', [])],
+        'host_handoff': value.get('host_handoff'), 'issues': value.get('issues', []),
+        'current_goal_text': value.get('current_goal_text'),
         'agreement_sha256': value['agreement']['sha256'], 'execution_verified': False}
 
 
@@ -381,12 +439,62 @@ def export_handoff(root, task_id):
 
 def _handoff_text(value):
     task_id = value['task_id']
+    def lines(text):
+        return '\n'.join('> ' + part.replace('>', '\\>') for part in str(text or '').splitlines()) or '> （未记录）'
+    def artifacts(items):
+        return '\n'.join(f"- `{item['path']}`" for item in items) or '- 暂无已记录产物'
+    def judgment(items):
+        rows = []
+        for item in items:
+            rows.append(f"- {item.get('title') or item['path']} · `{item['path']}`")
+            if item.get('options'):
+                rows.extend('  - ' + json.dumps(option, ensure_ascii=False) for option in item['options'])
+        return '\n'.join(rows) or '- 未固定 Wiki 判断依据'
     if value['lifecycle'] != 'active':
-        return '# Closed task (historical reference; not active work)\n\n' + json.dumps({
-            'task_id': task_id, 'revision': value['revision'], 'lifecycle': value['lifecycle'],
-            'progress': value['progress'], 'artifacts': value['artifacts'],
-            'check_command': f'oks task show --task-id {task_id}', 'execution_verified': False}, ensure_ascii=False, indent=2) + '\n'
-    return '# Task handoff (reference material; current user instructions prevail)\n\n' + json.dumps(continuation(value) | {
-        'issues': value['issues'], 'check_command': f'oks task show --task-id {task_id}',
-        'resume_command': f'oks task select {task_id}' if value['status'] == 'current' else None,
-        'learning': 'Use explicit feedback/proposals; no automatic Wiki approval.'}, ensure_ascii=False, indent=2) + '\n'
+        return (f'# 已结束任务：{task_id}（仅供回看，不是当前工作）\n\n'
+                f'- 状态：`{value["lifecycle"]}` · 修订 {value["revision"]}\n\n'
+                f'## 当时的进度\n\n{lines(value.get("progress"))}\n\n'
+                f'## 结束说明\n\n{lines(value.get("lifecycle_reason"))}\n\n'
+                f'## 已记录产物\n\n{artifacts(value.get("artifacts", []))}\n\n'
+                f'核对命令：`oks task show --task-id {task_id}`\n')
+    context = continuation(value)
+    out = [f'# 接手说明：{task_id}', '', f"- 当前修订：{context['revision']}",
+           f"- 目标/来源状态：{'当前' if context['status'] == 'current' else '有变化，需先核对'}",
+           f"- 执行验证：{'是' if context['execution_verified'] else '未验证'}", '', '## 目标', '',
+           lines(context['goal_text']), '', '## 当前进度', '', lines(context['progress']), '',
+           '## 下一步', '', lines(context['next_action']), '', '## 判断依据', '',
+           judgment(context['judgment_basis']), '', '## 已记录的来源使用声明', '']
+    if context['uses']:
+        out.extend(f"- `{item['source_path']}` · `{item['source_sha256']}` · {item['verification']}"
+                   for item in context['uses'])
+    else:
+        out.append('- 暂无来源使用声明')
+    out.extend(['', '## 产物', '', artifacts(context['artifacts']), ''])
+    if context['artifact_issues']:
+        out.extend(['## 产物待核对', '', *[f"- `{item['path']}` · {item['code']}" for item in context['artifact_issues']], ''])
+    if context['awaiting_confirmation']:
+        out.extend(['## 待确认', '', '- 宿主报告了产物；请先阅读并核对，记录不证明内容正确或任务完成。', ''])
+    if context['issues']:
+        out.extend(['## 目标或来源变化', '', *[f"- `{item.get('path', '')}` · {item.get('code', 'needs_review')}" for item in context['issues']], ''])
+        if context['current_goal_text'] and context['current_goal_text'] != context['goal_text']:
+            out.extend(['当前目标文件：', '', lines(context['current_goal_text']), ''])
+        out.extend(['先检查：`oks task show --task-id ' + task_id + '`；核对后再明确更新来源。', ''])
+    if context['host_handoff']:
+        note = context['host_handoff']
+        out.extend([f"## 上一会话的工作交接声明（修订 {note.get('revision', '未知')}；未独立验证）", ''])
+        for label, key in [('进度声明', 'progress'), ('下一步声明', 'next_action'),
+                           ('判断声明', 'judgment'), ('待确认', 'pending')]:
+            if note.get(key): out.extend([f'**{label}**', '', lines(note[key]), ''])
+    if context['status'] == 'current':
+        out.extend(['## 在接手目录恢复', '', f'1. 检查：`oks task show --task-id {task_id}`',
+                    f'2. 选择任务：`oks task select {task_id}`',
+                    '3. 再按当前用户要求继续；选择任务不会代替阅读产物或核对待确认项。', ''])
+    else:
+        out.extend(['## 恢复边界', '', '来源变化已阻止接续；先核对并明确更新，不会自动接受新目标或新来源。', ''])
+    out.extend(['## 技术详情', '', f"任务 ID：`{task_id}` · 修订 {context['revision']}",
+                f"任务依据版本：`{context['agreement_sha256']}`"])
+    for item in context['judgment_basis']:
+        out.append(f"- 来源 `{item['path']}` SHA-256 `{item['sha256']}`")
+    for item in context['artifacts']:
+        out.append(f"- 产物 `{item['path']}` SHA-256 `{item['sha256']}`")
+    return '\n'.join(out) + '\n'

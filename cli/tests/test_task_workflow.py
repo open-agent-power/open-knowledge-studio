@@ -81,6 +81,51 @@ def test_manual_progress_preserved_and_changed_evidence_blocks_review(setup):
     assert (kb/run['draft_path']).exists()
 
 
+def test_new_session_restores_manual_state_handoff_and_exact_source_options(setup):
+    kb,workspace=setup
+    wiki=kb/'wiki/computing/rule.md';wiki.parent.mkdir(parents=True)
+    wiki.write_text('---\ntitle: Citation rule\ntype: concept\nstatus: active\nhuman_reviewed_at: "2026-10-01T00:00:00Z"\noptions:\n  - id: cite\n    chosen: true\n    rationale: Keep exact citations\n---\nReviewed knowledge.\n',encoding='utf-8')
+    task=tasks.update_sources(kb,'report',1,['wiki/computing/rule.md'])
+    task=tasks.checkpoint(kb,'report',task['revision'],'人工已核对范围','人工指定：检查引用',[])
+    output=workspace/'result.md';output.write_text('Actual output with [source](/wiki/computing/rule.md).\n',encoding='utf-8')
+    flow.observe(kb,native(workspace,'PostToolUse',tool_name='Write',tool_input={'file_path':str(output)}),'claude')
+    final=native(workspace,'Stop',last_assistant_message=(
+        '完成。\n\n## 工作交接\n- 当前进度：已写完初稿。\n- 下一步：逐条核对引用。\n'
+        '- 判断依据：保留知识页中的精确引文。\n- 待确认：受众是否包含新人。'))
+    returned=flow.observe(kb,final,'claude')
+    current=tasks.show(kb,'report')
+    assert returned['status']=='returned' and current['awaiting_confirmation']
+    assert current['progress']=='人工已核对范围' and current['next_action']=='人工指定：检查引用'
+    assert current['host_handoff']['progress']=='已写完初稿。'
+    assert current['progress_origin']=='caller'
+    resumed=flow.observe(kb,native(workspace,'SessionStart',session_id='new-session-id'),'claude')
+    assert '人工已核对范围' in resumed['context'] and '人工指定：检查引用' in resumed['context']
+    assert '已写完初稿。' in resumed['context'] and '受众是否包含新人' in resumed['context']
+    assert 'Citation rule' in resumed['context'] and 'Keep exact citations' in resumed['context']
+    assert 'outputs/' in resumed['context'] and 'SHA-256' in resumed['context']
+    assert '不判断正确性，也不结束业务任务' in resumed['context']
+
+
+def test_session_start_does_not_resume_closed_or_changed_tasks(setup):
+    kb,workspace=setup
+    tasks.clear(kb,workspace)
+    unselected=flow.observe(kb,native(workspace,'SessionStart',session_id='unselected-session'),'claude')
+    assert unselected['status']=='no_task' and '普通问答不要自动创建任务' in unselected['context']
+    assert 'Write a source-backed brief.' not in unselected['context']
+    tasks.select(kb,workspace,'report')
+    tasks.transition(kb,'report',1,'complete','操作者明确结束')
+    closed=flow.observe(kb,native(workspace,'SessionStart',session_id='closed-session'),'claude')
+    assert closed['status']=='closed_task' and '不会自动重新打开' in closed['context']
+    assert tasks.show(kb,'report')['lifecycle']=='completed'
+    tasks.transition(kb,'report',2,'reopen','操作者明确继续')
+    goal=kb/'profiles/goals/report.md'
+    goal.write_text(goal.read_text(encoding='utf-8')+'\nNew requirement.\n',encoding='utf-8')
+    stale=flow.observe(kb,native(workspace,'SessionStart',session_id='stale-session'),'claude')
+    assert stale['status']=='source_changed' and '不会自动接受新内容' in stale['context']
+    assert 'Write a source-backed brief.' not in stale['context']
+    assert tasks.show(kb,'report')['revision']==3 and tasks.show(kb,'report')['status']=='needs_review'
+
+
 def test_private_scope_never_generates_shared_learning(setup):
     kb,workspace=setup
     tasks.select(kb,workspace,'report','private-subject','private-project')
@@ -91,6 +136,96 @@ def test_private_scope_never_generates_shared_learning(setup):
     assert run['learning_status']=='private_scope'
     assert not list((kb/'drafts').glob('*.md'))
     assert 'private-subject' not in json.dumps(flow.overview(kb,'report'))
+
+
+def test_native_read_observation_is_reviewed_bounded_and_private_safe(setup):
+    import hashlib
+    kb, workspace = setup
+    wiki = kb/'wiki/computing'
+    wiki.mkdir(parents=True)
+    reviewed = wiki/'reviewed.md'
+    reviewed.write_text('---\ntitle: Reviewed guide\ntype: concept\nstatus: active\nhuman_reviewed_at: "2026-10-01T00:00:00Z"\noptions: []\n---\nSECRET BODY MUST NOT BE COPIED.\n', encoding='utf-8')
+    unreviewed = wiki/'pending.md'
+    unreviewed.write_text('---\ntitle: Pending\ntype: concept\nstatus: active\noptions: []\n---\nPending body.\n', encoding='utf-8')
+
+    def read(path, *, tool_id='read-once', response=None):
+        payload = native(workspace, 'PostToolUse', tool_name='Read',
+                         tool_input={'file_path':str(path)}, tool_response=response or {})
+        if tool_id is not None:
+            payload['tool_use_id'] = tool_id
+        return payload
+
+    accepted = flow.observe(kb, read(reviewed), 'claude')
+    receipt = accepted['native_reads'][0]
+    assert receipt['source_path'] == 'wiki/computing/reviewed.md'
+    assert receipt['source_sha256'] == hashlib.sha256(reviewed.read_bytes()).hexdigest()
+    assert receipt['title'] == 'Reviewed guide' and receipt['revision'] == 1
+    assert receipt['event_id'] == hashlib.sha256(b'read-once').hexdigest()
+    assert receipt['host'] == 'claude' and receipt['task_id'] == 'report'
+    assert 'SECRET BODY' not in json.dumps(accepted)
+    flow.observe(kb, read(reviewed), 'claude')
+    assert len(accepted['native_reads']) == 1
+    assert len(json.loads(next((kb/'.oks/workflow-runs').glob('*.json')).read_text())['native_reads']) == 1
+
+    prior_ids = {item['event_id'] for item in accepted['native_reads']}
+    for payload in (read(reviewed, tool_id='failed', response={'is_error':True}),
+                    read(unreviewed, tool_id='pending'),
+                    read(workspace/'outside.md', tool_id='outside')):
+        result = flow.observe(kb, payload, 'claude')
+        assert {item['event_id'] for item in result['native_reads']} == prior_ids
+
+    first_missing_id = flow.observe(kb, read(reviewed, tool_id=None), 'claude')
+    second_missing_id = flow.observe(kb, read(reviewed, tool_id=None), 'claude')
+    assert len(first_missing_id['native_reads']) == len(second_missing_id['native_reads']) == 2
+    assert first_missing_id['native_reads'][-1]['event_id'] == second_missing_id['native_reads'][-1]['event_id']
+
+    tasks.select(kb, workspace, 'report', 'private-user', 'private-project')
+    private_event = read(reviewed, tool_id='private-read'); private_event['session_id'] = 'private-session'
+    private_run = flow.observe(kb, private_event, 'claude')
+    assert private_run['native_reads'] == [] and private_run['private_scope'] is True
+    from knowledge_studio import retrieval_debug
+    projected = retrieval_debug.overview(kb)
+    assert all(item['event_id'] != hashlib.sha256(b'private-read').hexdigest() for item in projected['native_reads'])
+
+
+def test_lesson_no_proposal_long_form_is_distinguished_from_advice():
+    assert flow._lesson('## 学习建议\n无（按你的要求不再提出新的学习建议）') == ''
+    assert flow._lesson('## 学习建议\n无（本次仅复用已有经验，不新增建议）') == ''
+    assert flow._lesson('## 学习建议\n无（本次仅接续已有任务）。\n\n（补充说明：新文件约188字，未修改原文件。）') == ''
+    assert flow._lesson('## Learning\nnone (nothing new this time)') == ''
+    assert flow._lesson('## 学习建议\n无（具体改法：改用短句并保留出处）')
+    assert flow._lesson('## 学习建议\n无（本次仅接续已有任务）。\n\n下次建议保存后校验来源哈希。')
+    assert flow._lesson('## 学习建议\n无（本次仅接续已有任务）。\n\n适用条件：来源文件可能在写入后变化时，需重新核对哈希。')
+    assert flow._lesson('## 学习建议\n暂无可复用经验，但具体改法为：每次保存后校验来源哈希。')
+
+
+@pytest.mark.parametrize('content', ['', '无（本次仅接续已有任务）。\n\n（补充说明：已写出接续说明，未改动旧文件。）'])
+def test_empty_legacy_learning_candidate_is_projected_not_proposed_and_cannot_promote(setup, content):
+    kb, workspace = setup
+    _, run = write_and_return(kb, workspace)
+    path = kb / run['draft_path']
+    post = __import__('frontmatter').loads(path.read_text(encoding='utf-8'))
+    post.content = content
+    path.write_text(__import__('frontmatter').dumps(post), encoding='utf-8')
+
+    projected = flow.overview(kb, 'report')['drafts'][0]
+    assert projected['status'] == 'not_proposed'
+    with pytest.raises(ValueError, match='no proposed content'):
+        flow.require_current_draft(kb, path.read_text(encoding='utf-8'))
+    with pytest.raises(ValueError):
+        store.promote_draft(Path(run['draft_path']).stem)
+    assert path.exists()
+    from knowledge_studio import workspace as reader, mail_knowledge
+    assert reader.draft(kb, run['draft_path'])['review_status'] == 'not_proposed'
+    assert mail_knowledge.knowledge_map(kb)['counts']['points'] == 0
+
+
+def test_native_handoff_keeps_markdown_fields_and_multiline_pending_items():
+    note = flow._handoff_declaration('## 工作交接\n\n**进度**：已写文件\n\n- **下一步：** 核对来源\n\n**判断依据**：真实产物\n\n**待确认**：\n- 字数\n- 链接\n\n## 学习建议\n无')
+    assert note['progress'] == '已写文件'
+    assert note['next_action'] == '核对来源'
+    assert note['pending'] == '- 字数\n- 链接'
+    assert '学习建议' not in str(note)
 
 
 def test_goal_change_pauses_capture_without_accepting_new_sources(setup):

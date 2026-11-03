@@ -1,10 +1,11 @@
 <!doctype html>
 <html lang="zh-CN">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>接入检查 · OKS</title><link rel="icon" href="/favicon.svg"><link rel="stylesheet" href="/tasks.css"><link rel="stylesheet" href="/start.css"><script src="/workspace-ui.js" defer></script><script src="/start.js" defer></script></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>开始使用 · OKS</title><link rel="icon" href="/favicon.svg"><link rel="stylesheet" href="/tasks.css"><link rel="stylesheet" href="/start.css"><link rel="stylesheet" href="/workspace-shell.css"><script src="/workspace-shell.js" defer></script><script src="/workspace-ui.js" defer></script><script src="/start.js" defer></script></head>
 <body>
 <header class="topbar"><a class="brand" href="/" aria-label="OKS 工作区">oks<span>.</span></a><nav aria-label="主导航"><a href="/#collaboration">讨论</a><a href="/tasks">目标</a><a href="/#wiki">学习</a></nav><details class="more-nav"><summary>更多</summary><div class="more-nav-menu"><a href="/#messages">通信记录</a><a href="/#agents">成员</a><a href="/start" aria-current="page">接入检查</a><a href="/review">学习审核</a><a href="/versions">技能版本</a><a href="/debug">诊断</a></div></details><button id="refresh" class="quiet" type="button">刷新</button></header>
-<main>
-  <header class="intro"><p class="eyebrow">本地工作区</p><h1>接入检查</h1><p>确认当前知识库可用，再试着查询知识。此页不会更改知识库位置或安装软件。</p><span id="pageStatus" role="status" aria-live="polite">正在检查…</span></header>
+<main class="onboarding">
+  <header class="intro"><p class="eyebrow">本地工作区</p><h1>从一个目标开始</h1><p>接好知识库，照常工作，把值得留下的经验带到下一次。</p><span id="pageStatus" role="status" aria-live="polite">正在检查…</span></header>
+  <section class="first-steps" aria-label="开始使用"><a href="/tasks?new=1"><span>01</span><strong>明确目标</strong><p>写下要交付什么。</p></a><a href="/tasks"><span>02</span><strong>查看结果</strong><p>看产物、进度和下一步。</p></a><a href="/review"><span>03</span><strong>留下经验</strong><p>审核建议，让以后能查到。</p></a></section>
   <section class="instance-card"><h2>当前知识库</h2><dl><div><dt>状态</dt><dd id="instanceValid">—</dd></div></dl></section>
   <section><div class="section-heading"><div><h2>接入检查</h2><p>检查知识库和本地检索环境。</p></div></div><div id="checks" class="check-list"><p class="empty">正在读取检查项…</p></div></section>
   <details class="commands technical-details"><summary>启用自动归档与学习候选（可选）</summary><p>在当前知识库目录运行一次，为 Claude Code 或 Codex 安装工作流钩子。钩子只记录实际发生的工作事件；不会自动批准学习建议。</p><code>oks hook install --editor claude --workflow</code><code>oks hook install --editor codex --workflow</code><p>子代理通信留痕需单独启用 <code>--collaboration</code>；两项功能相互独立。</p></details>

@@ -206,12 +206,12 @@ def test_frontend_serves_modular_graph_assets(kb):
     base = f"http://127.0.0.1:{server.server_port}"
     try:
         for name in ("force-layout.js", "tag-graph.js", "mail-view-model.js",
-                     "knowledge-browser.js", "knowledge-navigation.js"):
+                     "knowledge-browser.js", "knowledge-navigation.js", "workspace-shell.js", "knowledge-heatmap.js"):
             with urlopen(base + "/" + name, timeout=5) as response:
                 assert response.status == 200
                 assert "javascript" in response.headers["Content-Type"]
                 assert response.read()
-        for name in ("tag-graph.css", "knowledge-browser.css", "knowledge-reading.css", "knowledge-workspace.css"):
+        for name in ("tag-graph.css", "knowledge-browser.css", "knowledge-reading.css", "knowledge-workspace.css", "workspace-shell.css"):
             with urlopen(base + "/" + name, timeout=5) as response:
                 assert response.status == 200
                 assert "text/css" in response.headers["Content-Type"]

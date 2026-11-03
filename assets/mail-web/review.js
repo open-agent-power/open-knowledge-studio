@@ -4,6 +4,84 @@ const el = (tag, text, className) => { const item = document.createElement(tag);
 let localReview = false, currentScope = null, events = [], candidates = [], draft = null, draftSequence = 0, scopeSequence = 0, draftReviewStatus = 'draft';
 const conditionEdits = new Map();
 const reviewNotes = new Map();
+let draftParam = new URLSearchParams(location.search).get('draft'), inboxItems = [], inboxTicket = 0;
+const reviewStage = document.querySelector('.review-stage');
+history.scrollRestoration = 'manual';
+function reviewUrl(path, mode = '') {
+  const params = new URLSearchParams(location.search);
+  for(const key of ['draft','revision','mode','task'])params.delete(key);
+  if(path)params.set('draft',path);
+  if(mode)params.set('mode',mode);
+  if($('reviewSearch').value)params.set('q',$('reviewSearch').value);else params.delete('q');
+  return '/review'+(params.size?'?'+params:'');
+}
+function rememberReviewPosition() {
+  history.replaceState({...history.state,reviewListScroll:document.querySelector('.review-inbox').scrollTop,reviewDetailScroll:reviewStage.scrollTop},'',location.href);
+}
+function renderInbox() {
+  const query=$('reviewSearch').value.trim().toLocaleLowerCase(),host=$('reviewInbox');host.replaceChildren();
+  const matches=inboxItems.filter(item=>[item.title,item.summary].some(value=>String(value||'').toLocaleLowerCase().includes(query)));
+  $('inboxCount').textContent=`${inboxItems.length} 条共享草稿待审核`;
+  for(const item of matches){
+    const link=el('a','','review-inbox-item');link.href=reviewUrl(item.path);link.setAttribute('aria-current',String(item.path===draftParam));
+    link.append(el('strong',item.title),el('p',item.summary||'阅读内容与依据后决定是否入库。'));
+    const date=item.updated_at?new Date(item.updated_at):null;
+    link.append(el('small',(date&&!Number.isNaN(date.valueOf())?date.toLocaleDateString('zh-CN')+' · ':'')+'待人工审核'));
+    link.addEventListener('click',event=>{if(event.button||event.ctrlKey||event.metaKey||event.shiftKey||event.altKey)return;event.preventDefault();navigateReview(item.path);});host.append(link);
+  }
+  if(!matches.length)host.append(el('p',query?'没有匹配的建议。':'暂无待审核的共享草稿。','empty'));
+  $('reviewBack').href=reviewUrl(null);$('openPrivate').href=reviewUrl(null,'private');
+}
+async function loadInbox() {
+  const ticket=++inboxTicket;
+  try {
+    // This is the same public knowledge projection shown by Learning; do not enumerate private feedback scopes.
+    const data=await request('/api/mail/knowledge-map');
+    if(ticket!==inboxTicket)return;
+    const points=(data.domains||[]).flatMap(domain=>(domain.clusters||[]).flatMap(cluster=>cluster.points||[]));
+    inboxItems=[...new Map(points.filter(item=>item.kind==='candidate'&&String(item.path).startsWith('drafts/')).map(item=>[item.path,item])).values()];
+    renderInbox();
+  }catch(error){if(ticket===inboxTicket){$('inboxCount').textContent='建议列表暂时无法读取';$('reviewInbox').replaceChildren(el('p',error.message,'empty'));}}
+}
+async function applyReviewRoute() {
+  const params=new URLSearchParams(location.search);draftParam=params.get('draft');
+  const privateMode=!draftParam&&(params.get('mode')==='private'||params.has('task'));
+  const selected=!!draftParam||privateMode;
+  $('main').dataset.reviewMode=draftParam?'draft':privateMode?'private':'list';
+  ++draftSequence;draft=null;draftReviewStatus='draft';$('confirmReview').checked=false;
+  document.querySelector('.intro').hidden=!selected;$('reviewEmpty').hidden=selected;$('main').classList.toggle('detail-open',selected);
+  for(const selector of ['.scope-section','.suggestions-section','.event-section'])document.querySelector(selector).hidden=!privateMode;
+  $('draftPanel').hidden=!selected;$('draftPanel').open=!!draftParam;
+  document.querySelector('#draftPanel>summary').textContent=draftParam?'待审核的内容':'把共享草稿加入知识库';
+  const refreshLink=document.querySelector('.workspace-topbar a.quiet');if(refreshLink)refreshLink.href=location.href;
+  $('draftForm').hidden=!!draftParam;document.querySelector('#draftPanel>.scope-help').hidden=!!draftParam;
+  document.querySelector('#draftPanel>.review-check').hidden=$('promote').hidden=false;
+  document.title='学习审核 · OKS';
+  setStatus('capabilityStatus',localReview?'可以在此审核建议。':'当前只能查看。',localReview?'ready':'disabled');
+  document.querySelector('.intro h1').textContent=draftParam?'审核共享草稿':'本次使用的建议';
+  document.querySelector('.intro>p:last-of-type').textContent=draftParam?'阅读内容和来源，确认后加入知识库。':'选择使用范围后读取，批准仅对该范围生效。';
+  document.querySelector('.page-footer').hidden=!selected;
+  document.querySelector('.page-footer p').textContent=draftParam?'加入后可被当前知识库的后续查询使用。':'批准、分享和加入知识库分别确认。';
+  const back=document.querySelector('.page-footer a');back.href=OksNavigation.origin||reviewUrl(null);back.textContent=OksNavigation.origin?.startsWith('/tasks')?'← 返回本次目标':'← 全部建议';
+  $('draftPreview').replaceChildren();$('promoteHandoff').hidden=true;$('draftStatus').textContent=$('promoteStatus').textContent='';
+  updateDraftControls();renderInbox();
+  if(draftParam){$('draftPath').value=draftParam;await loadDraft(draftParam);}else $('draftPath').value='';
+}
+async function navigateReview(path,mode='') {
+  rememberReviewPosition();
+  history.pushState({reviewListScroll:document.querySelector('.review-inbox').scrollTop,reviewDetailScroll:0},'',reviewUrl(path,mode));
+  await applyReviewRoute();reviewStage.scrollTop=0;
+}
+$('reviewSearch').value=new URLSearchParams(location.search).get('q')||'';
+$('reviewSearch').addEventListener('input',()=>{const url=new URL(location.href);if($('reviewSearch').value)url.searchParams.set('q',$('reviewSearch').value);else url.searchParams.delete('q');history.replaceState({...history.state},'',url);renderInbox();});
+$('reviewBack').addEventListener('click',event=>{event.preventDefault();navigateReview(null);});
+$('openPrivate').addEventListener('click',event=>{event.preventDefault();navigateReview(null,'private');});
+window.addEventListener('pagehide',rememberReviewPosition);
+$('draftPreview').addEventListener('click',event=>{
+  const link=event.target.closest('a[href]');
+  if(link&&/^\/(?:tasks(?:\?|$)|#)/.test(link.getAttribute('href'))){rememberReviewPosition();link.href=OksNavigation.fromTask(link.href);}
+});
+window.addEventListener('popstate',async()=>{const saved=history.state;$('reviewSearch').value=new URLSearchParams(location.search).get('q')||'';await applyReviewRoute();document.querySelector('.review-inbox').scrollTop=saved?.reviewListScroll||0;reviewStage.scrollTop=saved?.reviewDetailScroll||0;});
 const asText = value => typeof value === 'string' ? value : JSON.stringify(value, null, 2);
 function friendlyError(message) {
   const text = String(message || '操作失败，请重新读取当前状态。');
@@ -56,7 +134,7 @@ async function loadCapability() {
   try {
     const data = await request('/api/mail/capabilities');
     localReview = data.local_review === true;
-    setStatus('capabilityStatus', draftReviewStatus === 'promoted' ? '本条已审核，仅供查看。' : draftReviewStatus === 'rejected' ? '本条已拒绝，仅供查看。' : localReview ? '可以在此审核建议。' : '当前只能查看。启用本地审核后，才能批准或拒绝。', localReview ? 'ready' : 'disabled');
+    setStatus('capabilityStatus', draftReviewStatus === 'promoted' ? '本条已审核，仅供查看。' : draftReviewStatus==='not_proposed'?'未提出经验，仅供回看。':draftReviewStatus === 'rejected' ? '本条已拒绝，仅供查看。' : localReview ? '可以在此审核建议。' : '当前只能查看。启用本地审核后，才能批准或拒绝。', localReview ? 'ready' : 'disabled');
     $('localGate').hidden = localReview;
     const workspace = await request('/api/workspace');
     $('serveCommand').textContent = workspace.commands.review;
@@ -236,11 +314,11 @@ async function loadDraft(path) {
     const data = await request('/api/learning/draft?' + new URLSearchParams({path,...(revision?{revision}: {})}));
     if (ticket !== draftSequence) return;
     if (typeof data.text !== 'string' || typeof data.sha256 !== 'string' || !data.path) throw Error('草稿无法完整读取，请核对路径后重试。');
-    const reviewed = data.review_status === 'promoted', rejected = data.review_status === 'rejected'; draftReviewStatus = data.review_status || 'draft';
-    document.querySelector('#draftPanel > summary').textContent = reviewed ? '审核依据' : rejected ? '原始建议' : '待审核的内容';
+    const reviewed = data.review_status === 'promoted', rejected = data.review_status === 'rejected', noProposal=data.review_status==='not_proposed'; draftReviewStatus = data.review_status || 'draft';
+    document.querySelector('#draftPanel > summary').textContent = reviewed ? '审核依据' : noProposal?'原始记录':rejected ? '原始建议' : '待审核的内容';
     if(draftParam && (reviewed || rejected))document.querySelector('.page-footer p').textContent = '历史记录只读；新内容需要另行审核。';
-    draft = reviewed || rejected ? null : {path:data.path,sha256:data.sha256,text:data.text};
-    document.querySelector('#draftPanel > .review-check').hidden = reviewed || rejected; $('promote').hidden = reviewed || rejected;
+    draft = reviewed || rejected || noProposal ? null : {path:data.path,sha256:data.sha256,text:data.text};
+    document.querySelector('#draftPanel > .review-check').hidden = reviewed || rejected || noProposal; $('promote').hidden = reviewed || rejected || noProposal;
     const raw = data.text.replace(/^\uFEFF/, ''), front = raw.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/);
     const title = front?.[1].match(/^title:\s*(.+)$/m)?.[1].trim().replace(/^(['"])(.*)\1$/, '$2');
     const header = el('header', ''), integrity = el('details', ''), pre = el('article', '', 'draft-body markdown-body');
@@ -250,17 +328,26 @@ async function loadDraft(path) {
       const evidence = el('details'), reading = el('article', '', 'markdown-body'); reading.innerHTML = data.evidence_html;
       evidence.append(el('summary', '查看本次依据'), reading); pre.append(evidence);
     }
-    header.append(el('h2', title || '待审核草稿'));
+    if(draftParam)document.querySelector('.intro h1').textContent=(title||'待审核草稿').replace(/^任务经验\s*·\s*/,'');
+    else header.append(el('h2', title || '待审核草稿'));
     if(rejected){header.append(el('p','这条建议已拒绝，原稿保留供追溯。'));setStatus('capabilityStatus','本条已拒绝，仅供查看。');if(draftParam){document.querySelector('.intro h1').textContent='已拒绝的建议';document.querySelector('.intro>p:last-of-type').textContent='已拒绝的建议保留原文与依据；新内容需另行提出。';}}
+    if(noProposal){header.append(el('p','原记录明确表示没有学习建议；保留原文，不列入待审经验。'));setStatus('capabilityStatus','未提出经验，仅供回看。');if(draftParam){document.querySelector('.intro h1').textContent='未提出经验';document.querySelector('.intro>p:last-of-type').textContent='这是旧的空建议记录，不代表人工批准或拒绝。';}}
     if(reviewed){
       header.append(el('p','已人工审核 · '+(data.reviewed_at ? new Date(data.reviewed_at).toLocaleString('zh-CN') : '时间未记录')));
       const link=el('a','阅读已入库的知识');link.href='/#wiki-reader&path='+encodeURIComponent(data.wiki_path);header.append(link);
+      const reuse=data.reuse,followup=el('section','','learning-followup');followup.append(el('h3','后续任务中的记录'));
+      if(reuse?.status==='ok'){
+        followup.append(el('p',reuse.tasks.length?`${reuse.tasks.length} 项后续任务 · ${reuse.read_count} 条读取 · ${reuse.citation_count} 份产物引用`:'尚未记录到其他任务读取这份知识。'));
+        for(const item of reuse.tasks){const row=el('p'),task=el('a',item.title||item.task_id);task.href=OksNavigation.fromTask('/tasks?id='+encodeURIComponent(item.task_id));row.append(task,document.createTextNode(` · 读取 ${item.read_count} 次 · 产物引用 ${item.citation_count} 份`));followup.append(row);}
+        followup.append(el('p','仅统计当前知识版本保留的记录，引用不代表内容已验收。','scope-help'));
+      }else followup.append(el('p','后续使用记录暂时不可用；原审核记录不受影响。','scope-help'));
+      header.append(followup);
       if(draftParam){document.title='审核记录 · OKS';document.querySelector('.intro h1').textContent='审核记录';document.querySelector('.intro>p:last-of-type').textContent='批准状态来自审核记录；原始提案中的待审措辞属于历史内容。';}
       setStatus('capabilityStatus','本条已审核，仅供查看。','ready');
     }
     if (data.workflow_context) {
       const source = data.workflow_context;
-      if(source.task_id){const link=el('a','返回本次任务');link.href='/tasks?id='+encodeURIComponent(source.task_id);header.append(link);}
+      if(source.task_id){const link=el('a','查看本次目标');link.href=OksNavigation.origin?.startsWith('/tasks')?OksNavigation.origin:'/tasks?id='+encodeURIComponent(source.task_id);header.append(link);}
       header.append(el('p',reviewed || rejected?'以下链接追溯任务与产物，后续变化不改写原审核决定。':source.source_status==='current'?'任务依据与产物版本一致。':source.warning||'来源已变化，请重新整理候选。'));
       if(!reviewed && source.source_status!=='current'){draft=null;}
       if(Array.isArray(source.artifacts))for(const item of source.artifacts){if(typeof item.path!=='string')continue;const artifact=el('a',item.path.split('/').pop(),'review-output');artifact.href='/tasks?'+new URLSearchParams({id:source.task_id,artifact:item.path});header.append(artifact);}
@@ -271,7 +358,7 @@ async function loadDraft(path) {
       const notice=el('p',data.original_available?'原始审核稿已保存，字节校验一致。':'原始审核稿未保存或无法校验；当前知识正文不能代替当时的审核原文。','scope-help');
       $('draftPreview').replaceChildren(header,notice,history,integrity);
     }else $('draftPreview').replaceChildren(header, pre, integrity);
-    setStatus('draftStatus', reviewed ? '已加入知识库；此页仅查看审核历史。' : rejected ? '已拒绝；同一提案重试不会恢复为待审。' : !draft ? '依据已变化，当前不能加入知识库。请核对后重新提出建议。' : '草稿已完整读取。请检查内容和来源，再勾选确认。');
+    setStatus('draftStatus', reviewed ? '已加入知识库；此页仅查看审核历史。' : noProposal?'原记录已保留，没有需要批准的学习内容。':rejected ? '已拒绝；同一提案重试不会恢复为待审。' : !draft ? '依据已变化，当前不能加入知识库。请核对后重新提出建议。' : '草稿已完整读取。请检查内容和来源，再勾选确认。');
     $('confirmReview').disabled = !canWrite() || !draft;
   } catch (error) { if (ticket === draftSequence) setStatus('draftStatus', error.message, 'error'); }
   updateDraftControls();
@@ -307,7 +394,7 @@ $('promote').addEventListener('click', async () => {
       $('promoteHandoff').hidden = false;
     }
     $('confirmReview').checked = false; draft = null; updateDraftControls();
-    await loadDraft(reviewedPath);
+    await loadDraft(reviewedPath); await loadInbox();
   } catch (error) { setStatus('promoteStatus', error.message, 'error'); updateDraftControls(); }
 });
 loadCapability();
@@ -330,20 +417,7 @@ document.addEventListener('oks:reconnected', event => {
   $('promoteHandoff').replaceChildren(); $('promoteHandoff').hidden = true;
   ++taskContextTicket; $('taskContext').hidden = true; $('taskContext').replaceChildren();
   describeScope(true);
-  renderCandidates(); renderEvents(); updateDraftControls(); loadCapability();
+  renderCandidates(); renderEvents(); updateDraftControls(); loadCapability();applyReviewRoute();void loadInbox();
   setStatus('scopeStatus', '连接已恢复，请重新确认范围并读取。');
 });
-const draftParam = new URLSearchParams(location.search).get('draft');
-if (draftParam) {
-  document.title = '审核共享草稿 · OKS';
-  document.querySelector('.intro .eyebrow').textContent = '学习 / 共享知识';
-  document.querySelector('.intro h1').textContent = '审核共享草稿';
-  document.querySelector('.intro>p:last-of-type').textContent = '阅读建议与依据，确认后供后续查询复用。';
-  $('draftForm').hidden = true;
-  document.querySelector('#draftPanel > .scope-help').hidden = true;
-  document.querySelector('#draftPanel > summary').textContent = '待审核的内容';
-  for (const selector of ['.scope-section','.suggestions-section','.event-section']) document.querySelector(selector).hidden = true;
-  document.querySelector('.page-footer p').textContent = '加入后可被当前知识库的后续查询使用，请核对内容与来源。';
-  const back = document.querySelector('.page-footer a'); back.href = '/#wiki'; back.textContent = '返回知识库 ↗';
-  $('draftPath').value = draftParam; loadDraft(draftParam);
-}
+applyReviewRoute();void loadInbox();
