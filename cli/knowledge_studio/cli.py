@@ -228,6 +228,8 @@ ingest_app = typer.Typer(
     no_args_is_help=True,
     cls=_LegacyIngestGroup,
 )
+from .daily_cli import app as capture_app
+app.add_typer(capture_app, name="capture")
 app.add_typer(wiki_app, name="wiki")
 app.add_typer(skills_app, name="skills")
 app.add_typer(drafts_app, name="drafts")
@@ -2281,7 +2283,7 @@ def init(
         try:
             subprocess.run(
                 ["git", "init"], cwd=str(root),
-                check=True, capture_output=True, text=True,
+                check=True, capture_output=True, text=True, encoding="utf-8", errors="replace",
             )
             console.print(f"[green]git init[/green] {root}")
         except (subprocess.CalledProcessError, FileNotFoundError) as e:

@@ -1,6 +1,7 @@
 import json
+import hashlib
 
-from knowledge_studio import store
+from knowledge_studio import store, draft_review
 from knowledge_studio.worker_records import clean_fields, clean_records, merge_records
 
 
@@ -55,13 +56,18 @@ def test_promotion_and_content_dedup_preserve_worker_observations(monkeypatch, t
     slug = store.promote_draft("first")
     assert store.get_wiki_page(slug)["worker_records"][0]["fields"]["质量状态"] == "partial"
 
-    (drafts / "second.md").write_text(
+    second_path = drafts / "second.md"
+    second_path.write_text(
         "---\ntitle: Second\ndraft_type: concept\ndraft_area: computing\n"
         f"worker_records:\n  - source: {source}\n    observed_at: '2026-10-19T02:00:00Z'\n"
         "    fields:\n      质量状态: failed\n      审核动作: accept\n---\n\n" + body + "\n",
         encoding="utf-8",
     )
+    original = second_path.read_bytes()
     assert store.promote_draft("second") == slug
     row = store.get_wiki_page(slug)["worker_records"][0]
     assert row["fields"] == {"质量状态": "failed", "审核动作": "accept"}
-    assert not (drafts / "second.md").exists()
+    assert second_path.read_bytes() == original
+    proof = draft_review.read_receipt(tmp_path, "second", hashlib.sha256(original).hexdigest())
+    assert proof["decision"] == "promoted"
+    assert draft_review.read_original(tmp_path, proof) == original

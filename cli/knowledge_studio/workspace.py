@@ -406,6 +406,25 @@ def draft(root, relative, review_sha256=None):
         result = _text_file(root, relative, {'.md'})
     except FileNotFoundError:
         result = None
+    from . import draft_review
+    ordinary = draft_review.read_receipt(root, Path(relative).stem,
+        review_sha256 or (result['sha256'] if result is not None else None))
+    if ordinary is not None:
+        original = draft_review.read_original(root, ordinary)
+        if original is None:
+            raise ValueError('Original review snapshot is unavailable; existing decision retained')
+        value = {'path': relative, 'text': original.decode('utf-8-sig'),
+                 'sha256': ordinary['draft_sha256'], 'format': 'markdown',
+                 'text_role': 'reviewed_draft', 'review_status': ordinary['decision'],
+                 'reviewed_at': ordinary['decided_at'], 'original_available': True,
+                 'snapshot_status': 'preserved_original'}
+        if ordinary.get('wiki_path'):
+            value['wiki_path'] = ordinary['wiki_path']
+            try:
+                value['reuse'] = learning_reuse(root, ordinary['wiki_path'])
+            except (OSError, ValueError, KeyError, TypeError, UnicodeError):
+                value['reuse'] = {'status': 'unavailable', 'tasks': []}
+        return value
     disposition = candidate_disposition(root, relative, sha256=result['sha256']) if result is not None else None
     if review_sha256 is not None and not re.fullmatch(r'[0-9a-f]{64}', review_sha256):
         raise ValueError('Choose an exact review revision')

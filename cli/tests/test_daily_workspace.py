@@ -119,7 +119,11 @@ def test_export_inspect_promote_new_task_and_withdrawal(case, monkeypatch, tmp_p
             request('/api/learning/promote', {'path': shared['path'], 'expected_sha256': '0' * 64, 'confirm_review': True})
         assert draft_path.is_file()
         promoted = request('/api/learning/promote', {'path': shared['path'], 'expected_sha256': document['sha256'], 'confirm_review': True})
-        assert (root / promoted['path']).is_file() and not draft_path.exists()
+        assert (root / promoted['path']).is_file() and draft_path.is_file()
+        assert hashlib.sha256(draft_path.read_bytes()).hexdigest() == document['sha256']
+        history = request('/api/learning/draft?' + urlencode({'path': shared['path']}))
+        assert history['review_status'] == 'promoted'
+        assert history['original_available'] and history['sha256'] == document['sha256']
         second = tasks.start(root, 'new-task', 'profiles/goals/report.md', [promoted['path']])
         assert second['agreement']['knowledge'][0]['path'] == promoted['path']
         assert feedback.inspect(root, {**selection, 'task': 'new-task'})['candidates'] == []

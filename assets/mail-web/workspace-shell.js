@@ -24,9 +24,9 @@ window.OksNavigation = (() => {
       header.classList.add('workspace-topbar');
       const refresh = header.querySelector('#refresh') || header.querySelector('a.quiet');
       const label = document.createElement('span'); label.className = 'workspace-title';
-      label.textContent = ({'/tasks':'目标','/review':'学习 / 审核','/debug':'知识使用','/start':'开始使用','/versions':'学习 / 技能'})[location.pathname] || '工作区';
+      label.textContent = ({'/tasks':'目标','/review':'学习 / 待审建议','/debug':'学习 / 使用记录','/start':'工作台','/versions':'学习 / 方法'})[location.pathname] || '工作区';
       const tools = document.createElement('div'); tools.className = 'workspace-tools';
-      for (const [text, href] of [['接入检查','/start'],['学习审核','/review'],['技能版本','/versions'],['知识热力图','/debug#heatmap']]) {
+      for (const [text, href] of [['工作台','/start'],['学习审核','/review'],['个人方法','/versions'],['知识热力图','/debug#heatmap']]) {
         const link = document.createElement('a'); link.textContent = text; link.href = href;
         if (new URL(href,location.origin).pathname === location.pathname) link.setAttribute('aria-current','page');
         tools.append(link);
@@ -37,7 +37,7 @@ window.OksNavigation = (() => {
       }
       header.replaceChildren(label, tools);
       const rail = document.createElement('aside'); rail.className = 'workspace-rail'; rail.setAttribute('aria-label','主导航');
-      const brand = document.createElement('a'); brand.className = 'workspace-brand'; brand.href = '/#collaboration'; brand.textContent = 'oks.'; brand.setAttribute('aria-label','OKS 首页'); rail.append(brand);
+      const brand = document.createElement('a'); brand.className = 'workspace-brand'; brand.href = '/start'; brand.textContent = 'oks.'; brand.setAttribute('aria-label','OKS 工作台'); rail.append(brand);
       const paths = {
         discussion:'<circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="7" r="2.5"/><circle cx="6" cy="18" r="2.5"/><path d="M6 8.5v7M8.5 17c6 0 9.5-3 9.5-7.5"/>',
         goals:'<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1"/>',
@@ -60,7 +60,7 @@ window.OksNavigation = (() => {
       const menu=document.createElement('details');menu.className='workspace-mobile-tools';
       const summary=document.createElement('summary');summary.textContent='更多';menu.append(summary);
       const links=document.createElement('div');
-      for(const [text,href] of [['开始使用','/start'],['学习审核','/review'],['技能版本','/versions'],['知识热力图','/debug#heatmap']]){const link=document.createElement('a');link.textContent=text;link.href=fromTask(href);links.append(link);}
+      for(const [text,href] of [['工作台','/start'],['学习审核','/review'],['个人方法','/versions'],['知识热力图','/debug#heatmap']]){const link=document.createElement('a');link.textContent=text;link.href=fromTask(href);links.append(link);}
       menu.append(links);utilityHost.prepend(menu);
     }
     if (origin) {

@@ -1,4 +1,5 @@
 import json
+import hashlib
 from pathlib import Path
 
 import pytest
@@ -152,9 +153,13 @@ def test_worker_records_survive_promotion_and_content_dedup(monkeypatch,tmp_path
     page=store.get_wiki_page(slug)
     assert page['worker_records'][0]['fields']['质量状态']=='partial'
     second={'source':source,'observed_at':'2026-10-02','fields':{'审核动作':'accept','质量状态':'failed'}}
-    write(tmp_path,'drafts/b.md',title='B',draft_area='computing',draft_type='concept',worker_records=[second])
+    candidate=write(tmp_path,'drafts/b.md',title='B',draft_area='computing',draft_type='concept',worker_records=[second])
+    original=candidate.read_bytes()
     repeated=store.promote_draft('b')
     assert repeated==slug
     row=store.get_wiki_page(slug)['worker_records'][0]
     assert row['fields']=={'知识域':'computing','评级':'A','质量状态':'failed','审核动作':'accept'}
-    assert not (tmp_path/'drafts/b.md').exists()
+    assert candidate.read_bytes()==original
+    from knowledge_studio import draft_review
+    proof=draft_review.read_receipt(tmp_path,'b',hashlib.sha256(original).hexdigest())
+    assert proof['decision']=='promoted' and draft_review.read_original(tmp_path,proof)==original

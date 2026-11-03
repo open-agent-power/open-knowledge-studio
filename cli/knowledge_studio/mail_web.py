@@ -303,6 +303,8 @@ def memory_status(root):
     from .task_workflow import candidate_disposition, _promotions, _rejections
     promotions, rejections = _promotions(root), _rejections(root)
     drafts = [path for path in drafts if not candidate_disposition(root, path.relative_to(root).as_posix(), promotions=promotions, rejections=rejections)]
+    from .draft_review import disposition as ordinary_review
+    drafts = [path for path in drafts if not ordinary_review(root, path.relative_to(root).as_posix(), hashlib.sha256(path.read_bytes()).hexdigest())]
     wiki = files_under("wiki")
     knowledge = wiki + drafts
     visible = []
@@ -484,6 +486,20 @@ def _memory_item(root: Path, relative: str, *, full: bool = False) -> dict:
         raise ValueError("memory path must be a relative wiki/ or drafts/ path")
     candidate = (root / relative).resolve()
     allowed = [(root / "wiki").resolve(), (root / "drafts").resolve()]
+    if relative.startswith('drafts/') and candidate.is_file():
+        from . import draft_review
+        from .ingest_workflow import _inside
+        bounded = _inside(root.resolve(), relative, 'drafts')
+        ordinary = draft_review.disposition(root, relative, hashlib.sha256(bounded.read_bytes()).hexdigest())
+        if ordinary and ordinary['decision'] == 'promoted':
+            wiki = _inside(root.resolve(), ordinary['wiki_path'], 'wiki')
+            reviewed_meta = store.parse_wiki_file(wiki) if wiki.is_file() else None
+            if (not reviewed_meta or reviewed_meta.get('status') != 'active'
+                    or not reviewed_meta.get('human_reviewed_at') or reviewed_meta.get('archived')
+                    or not isinstance(reviewed_meta.get('source_candidates'), list)
+                    or relative not in reviewed_meta['source_candidates']):
+                raise FileNotFoundError('Reviewed knowledge is unavailable')
+            candidate = wiki
     from .task_workflow import candidate_disposition
     retained = relative.startswith('drafts/') and candidate.exists() and candidate_disposition(root, relative) == 'promoted'
     if retained:
@@ -635,6 +651,8 @@ def _md_link(match):
     target = match.group(2)
     if target.startswith(("http://", "https://")):
         return f'<a href="{target}" rel="noreferrer noopener" target="_blank">{label}</a>'
+    if re.fullmatch(r'/#collaboration&amp;entry=capture-[0-9a-f]{32}', target):
+        return f'<a href="{target}">{label}</a>'
     # 相对路径指向知识库里的其他文件，本页面不代理它们，所以只标出引用目标。
     return f'<span class="md-ref" title="{target}">{label}</span>'
 
@@ -894,6 +912,27 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(403, {"error": "loopback Host required"})
             return
         route = self.path.split("?", 1)[0]
+        if route in {'/api/daily/overview', '/api/daily/entry'}:
+            try:
+                from . import daily_capture, daily_learning
+                query = parse_qs(urlsplit(self.path).query)
+                result = daily_learning.overview(self.server.kb_root) if route.endswith('/overview') else daily_capture.entry(self.server.kb_root, query.get('id', [''])[0])
+                self.send_json(200, result)
+            except (OSError, ValueError, KeyError, TypeError, UnicodeError):
+                self.send_json(400, {'error': '来源记录暂时无法读取；原文保留。'})
+            return
+        if route in {'/api/workspace/overview', '/api/workspace/retrieval'}:
+            try:
+                if route.endswith('/overview'):
+                    from .workspace_home import build
+                    result = build(self.server.kb_root)
+                else:
+                    from .retrieval_audit import report
+                    result = report(self.server.kb_root)
+                self.send_json(200, result)
+            except (OSError, ValueError, KeyError, TypeError, UnicodeError):
+                self.send_json(400, {'error': '无法完整读取工作区；原记录保留。'})
+            return
         if route in {'/api/workspace', '/api/tasks/work-review', '/api/tasks/workflow', '/api/tasks/source', '/api/tasks/artifact', '/api/tasks/options', '/api/tasks/goal', '/api/tasks/reminders', '/api/tasks/overview', '/api/tasks/review', '/api/tasks/handoff', '/api/tasks/sources', '/api/learning/draft', '/api/skills/versions', '/api/skills/diff', '/api/skills/bundled-diff', '/api/skills/catalog', '/api/skills/source', '/api/skills/merge-preview'}:
             from . import workspace
             query = parse_qs(urlsplit(self.path).query)
@@ -1227,7 +1266,7 @@ class Handler(BaseHTTPRequestHandler):
             except (OSError, ValueError, KeyError, TypeError):
                 self.send_json(400, {"error": "Cannot read this exact private scope; data preserved"})
             return
-        if route in {'/api/feedback/review', '/api/feedback/withdraw-candidate', '/api/feedback/export', '/api/learning/promote'}:
+        if route in {'/api/feedback/review', '/api/feedback/withdraw-candidate', '/api/feedback/export', '/api/learning/promote', '/api/learning/reject'}:
             if not getattr(self.server, 'local_review', False):
                 self._reject_post(403, 'Local review is disabled; use oks mail serve --local-review')
                 return
@@ -1240,6 +1279,8 @@ class Handler(BaseHTTPRequestHandler):
                 request = self.read_json()
                 if route == '/api/learning/promote':
                     result = workspace.invoke(self.server.kb_root, 'promote', request)
+                elif route == '/api/learning/reject':
+                    result = workspace.invoke(self.server.kb_root, 'reject', request)
                 elif route == '/api/feedback/export':
                     result = feedback.export(self.server.kb_root, request, confirm_share=request.get('confirm_share') is True)
                 elif route == '/api/feedback/withdraw-candidate':
@@ -1431,6 +1472,12 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(400, {"error": str(exc)})
 
 class _LoopbackHTTPServer(ThreadingHTTPServer):
+    def server_close(self):
+        service = getattr(self, 'daily_service', None)
+        if service is not None:
+            service.stop()
+        super().server_close()
+
     def server_bind(self):
         # HTTPServer's reverse DNS can block macOS detached startup. This
         # service only binds loopback and needs no externally resolved name.
@@ -1451,6 +1498,9 @@ def create_server(root: Path, port: int = 3182, *, mode: str = "reader", knowled
     server.local_edit = bool(local_edit)
     server.knowledge_source = knowledge_source
     server.session_id = None
+    if local_edit and (root / 'settings/daily-capture.json').is_file():
+        from .daily_learning import CaptureService
+        server.daily_service = CaptureService(root).start()
     if mode == "reader":
         return server
     machine_id = identity.normalise_machine_id()

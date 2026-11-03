@@ -319,6 +319,9 @@ def entries(*, include_drafts: bool = True, root: Path | str | None = None) -> l
             safe_path = _inside(root, path.relative_to(root).as_posix())
             if safe_path.is_symlink() or not safe_path.is_file():
                 continue
+            from .draft_review import disposition
+            if disposition(root, safe_path.relative_to(root).as_posix(), _digest(safe_path.read_bytes())):
+                continue
             meta = store.parse_wiki_file(safe_path)
             if meta and meta.get("artifact_kind") == "skill":
                 meta["type"] = meta.get("draft_type", "strategy")
