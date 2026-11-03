@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from knowledge_studio.retrieval_audit import report
 
 
@@ -50,20 +52,23 @@ def test_unknown_config_is_reported_without_claiming_fallback(tmp_path):
     assert result["actual_backend"] == "not_probed"
 
 
-def test_observation_is_separate_and_filters_sensitive_diagnostic_text(tmp_path):
+@pytest.mark.parametrize("root_name", ["knowledge-base", "private"])
+def test_observation_is_separate_and_filters_sensitive_diagnostic_text(tmp_path, root_name):
+    root = tmp_path / root_name
     result = report(
-        tmp_path,
+        root,
         {
             "requested_backend": "fts5",
             "actual_backends": ["like", 17, "native"],
             "fallback_reason": "sqlite_fts5_unavailable",
             "fallback_error": "ValueError: C:\\private\\secret query words",
             "query": "do not return",
-            "wiki_path": "C:\\private\\wiki",
+            "wiki_path": "C:\\private\\wiki-secret-source",
             "stderr": "sensitive output",
         },
     )
 
+    assert result["knowledge_base"] == str(root.resolve())
     assert result["actual_backend"] == "not_probed"
     assert result["observed"] == {
         "requested_backend": "fts5",
@@ -73,7 +78,10 @@ def test_observation_is_separate_and_filters_sensitive_diagnostic_text(tmp_path)
     }
     serialized = json.dumps(result)
     assert "do not return" not in serialized
-    assert "private" not in serialized
+    # The declared KB root may legitimately include macOS's /private prefix.
+    # Only caller-supplied diagnostic paths and text must be filtered out.
+    assert "secret query words" not in serialized
+    assert "wiki-secret-source" not in serialized
     assert "sensitive output" not in serialized
 
 
