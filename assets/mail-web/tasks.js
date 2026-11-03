@@ -50,6 +50,96 @@ function status(text, state = '') {
   $('status').textContent = text;
   $('status').dataset.state = state;
 }
+let workflowTicket = 0, workflowRoot = null, workflowLoading = false;
+function workflowBusy() { return progressSaving || sourceSaving || lifecycleSaving || copyingHandoff || correctionSaving || reminderSaving; }
+const workflowStatusNames = {running:'进行中',working:'工作中',active:'进行中',returned:'已返回',completed:'已结束',stopped:'已结束',partial:'部分完成',source_changed:'来源有变化',failed:'未完成',error:'未完成',unknown:'状态未知'};
+const workflowPhaseNames = {working:'工作中',returned:'已返回',partial:'部分完成'};
+const learningStatusNames = {pending_review:'待人工审核',rejected:'已拒绝',not_proposed:'尚无学习候选',private_scope:'仅保留在私人范围',source_changed:'来源已变化，待核对',error:'候选生成未完成'};
+function renderWorkflow(data, task) {
+  if (currentTask !== task || OksWorkspace.context()?.knowledge_base !== workflowRoot) return;
+  const runs = $('workflowRuns'), drafts = $('workflowDrafts'); runs.replaceChildren(); drafts.replaceChildren();
+  if (!data.enabled) { $('workflowStatus').textContent = '自动归档未启用'; runs.append(node('p','接入检查页可查看启用命令。','empty')); }
+  else if (!data.runs?.length) $('workflowStatus').textContent = '等待本次工作记录';
+  if (data.runs?.length) {
+    $('workflowStatus').textContent = '按宿主事件更新';
+    for (const run of data.runs) {
+      const card = node('article','','workflow-run'), head = node('div','','workflow-run-head');
+      const label = ({return_observed:'已收到返回',output_observed:'已记录产物',handoff_observed:'已记录交接',partial:'有未完成的记录'})[run.evidence_state] || (run.status === 'returned' ? '已收到返回' : '已记录宿主事件');
+      head.append(node('strong', (run.host || '工作会话') + (run.role === 'main' ? ' · 主会话' : run.role === 'collaborator' ? ' · 协作成员' : '')), node('span', label, 'workflow-state'));
+      card.append(head);
+      const candidate = data.drafts?.find(item => item.path === run.draft_path);
+      const learned = candidate?.status === 'promoted';
+      if (!data.learning_groups?.length && learningStatusNames[run.learning_status]) card.append(node('p', '学习：' + learningStatusNames[run.learning_status]));
+      if (run.warning) card.append(node('p',run.warning,'file-warning'));
+      const artifacts = Array.isArray(run.artifacts) ? run.artifacts : [];
+      if (artifacts.length) {
+        const list = node('ul','','workflow-artifacts');
+        for (const item of artifacts) { const row = node('li',''), link = node('button', item.path.split('/').pop() || item.path); link.type = 'button'; link.title = item.path; link.addEventListener('click', () => { loadArtifact(task,{...item,revision:task.revision}); $('artifactReader').scrollIntoView({behavior:'smooth',block:'start'}); }); row.append(link); list.append(row); }
+        card.append(list);
+      } else card.append(node('p','尚未归档产物。','empty'));
+      if (run.thread_id) { const link = node('a','查看通信记录'); link.href = '/#collaboration&thread=' + encodeURIComponent(run.thread_id); link.className = 'workflow-thread'; card.append(link); }
+      if (run.draft_path && !data.learning_groups?.length) { const link = node('a',learned ? '阅读已入库的经验' : '查看学习候选并审核'); link.href = learned ? wikiHref(candidate.wiki_path) : '/review?draft=' + encodeURIComponent(run.draft_path); link.className = 'workflow-draft-link'; card.append(link); }
+      runs.append(card);
+    }
+  }
+  if (data.connections?.length) {
+    const history=node('details','','workflow-connections');history.append(node('summary',`仅接入记录 · ${data.connections.length} 条`),node('p','这些记录没有产物、交接或返回证据，不表示仍在运行。'));
+    for(const row of data.connections)history.append(node('p',`${row.host || '宿主'} · ${new Date(row.updated_at).toLocaleString('zh-CN')} · 原记录保留`));
+    runs.append(history);
+  }
+  if(data.unreadable_records)runs.append(node('p',`${data.unreadable_records} 条记录暂时无法读取，原文件保留。`,'file-warning'));
+  if (data.learning_groups?.length) {
+    drafts.append(node('h3','学习建议'));
+    for(const group of data.learning_groups){
+      const card=node('section','','workflow-learning'),variants=group.variants || [];
+      const pending=variants.filter(item=>item.status==='draft').length,approved=variants.filter(item=>item.status==='promoted').length,rejected=variants.filter(item=>item.status==='rejected').length;
+      card.append(node('p',`${variants.length} 条建议 · ${approved} 条已入库 · ${pending} 条待审`+(rejected?` · ${rejected} 条已拒绝`:'')));
+      if(variants.length>1)card.append(node('p','来自同一份产物，每条建议分别审核。','scope-help'));
+      for(const item of variants){
+        const row=node('div','','workflow-variant'),name=item.role==='main'?'主会话建议':'协作成员建议';
+        const label=({draft:'待人工审核',promoted:'已加入知识库',rejected:'已拒绝',missing:'原文不可用',ambiguous:'审核来源待核对'})[item.status] || '待核对';
+        row.append(node('span',name),node('span',label));
+        if(item.status==='draft' || item.status==='promoted'){
+          const link=node('a',item.status==='draft'?'阅读并审核':'查看审核记录');link.href='/review?'+new URLSearchParams({draft:item.path,...(item.status==='promoted' && item.reviewed_sha256?{revision:item.reviewed_sha256}:{})});row.append(link);
+        }
+        if(item.status==='promoted' && item.wiki_path){const link=node('a','阅读知识');link.href=wikiHref(item.wiki_path);row.append(link);}
+        card.append(row);
+      }
+      drafts.append(card);
+    }
+  } else if (data.drafts?.length) {
+    drafts.append(node('h3','学习候选'));
+    for (const draft of data.drafts) { const row = node('p','','workflow-draft'); const link = node('a',draft.title || draft.path); link.href = draft.status === 'promoted' ? wikiHref(draft.wiki_path) : '/review?draft=' + encodeURIComponent(draft.path); const state = ({draft:'待人工审核',promoted:'已加入知识库',rejected:'已拒绝',missing:'草稿不可用'})[draft.status] || '状态待核对'; row.append(link,node('span',state)); drafts.append(row); }
+  }
+}
+async function loadWorkflow(task, quiet = false) {
+  if (workflowLoading || workflowBusy()) return;
+  const ticket = ++workflowTicket, root = OksWorkspace.context()?.knowledge_base; workflowRoot = root;
+  if (!task || !root) return;
+  workflowLoading = true;
+  if (!quiet) $('workflowStatus').textContent = '正在读取…';
+  try {
+    const [workflowResult, taskResult] = await Promise.allSettled([
+      get('/api/tasks/workflow?id=' + encodeURIComponent(task.task_id)),
+      get('/api/tasks/show?id=' + encodeURIComponent(task.task_id))
+    ]);
+    if (ticket !== workflowTicket || currentTask !== task || workflowBusy() || OksWorkspace.context()?.knowledge_base !== root) return;
+    const latestTask = taskResult.status === 'fulfilled' ? taskResult.value : task;
+    if (latestTask.knowledge_base === root && latestTask.task_id === task.task_id) {
+      currentTask = latestTask.revision === task.revision && latestTask.status === task.status && latestTask.lifecycle === task.lifecycle ? task : latestTask;
+      $('progress').textContent = latestTask.progress || '暂无进度记录';
+      $('next').textContent = (latestTask.lifecycle || 'active') === 'active' ? latestTask.next_action || '尚未记录下一步' : latestTask.lifecycle_reason || '任务已结束。';
+      if ($('progressText').value === (task.progress || '')) $('progressText').value = latestTask.progress || '';
+      if ($('nextText').value === (task.next_action || '')) $('nextText').value = latestTask.next_action || '';
+      if (latestTask.artifacts?.length !== task.artifacts?.length || latestTask.artifacts?.some((item,index)=>item.path!==task.artifacts?.[index]?.path || item.sha256!==task.artifacts?.[index]?.sha256)) renderArtifacts(latestTask, true);
+      updateTaskEditors();
+    }
+    if (workflowResult.status === 'rejected') throw workflowResult.reason;
+    renderWorkflow(workflowResult.value, currentTask);
+  } catch (error) {
+    if (ticket === workflowTicket && currentTask?.task_id === task.task_id && OksWorkspace.context()?.knowledge_base === root) $('workflowStatus').textContent = '暂时无法连接，正在重试';
+  } finally { workflowLoading = false; }
+}
 let artifactTicket = 0;
 function wikiHref(path) { return '/#wiki-reader&path=' + encodeURIComponent(path); }
 async function loadArtifact(task, item) {
@@ -69,6 +159,26 @@ async function loadArtifact(task, item) {
     const markdown = node('article', '', 'markdown-body');
     if (typeof data.body_html === 'string') markdown.innerHTML = data.body_html;
     else markdown.append(node('pre', data.text || '产物内容为空。', 'artifact-text'));
+    for (const ref of markdown.querySelectorAll('.md-ref[title]')) {
+      const original = ref.getAttribute('title');
+      if (!original || /^[a-z][a-z0-9+.-]*:|^\/\//i.test(original)) continue;
+      const source = data.source_links?.[original];
+      if (!source) continue;
+      if (!/^(raw|wiki|reports|outputs|artifacts)\//.test(source)) continue;
+      const link = node('button',ref.textContent,'source-link'); link.type='button';
+      link.addEventListener('click',async()=>{
+        const sourceTicket=++artifactTicket;
+        try {
+          const query=new URLSearchParams({id:task.task_id,path:item.path,revision:String(item.revision),source});
+          const document=await get('/api/tasks/source?'+query);
+          if(sourceTicket!==artifactTicket)return;
+          const back=node('button','← 返回产物');back.type='button';back.addEventListener('click',()=>loadArtifact(task,item));
+          const reading=node('article','','markdown-body');reading.innerHTML=document.body_html;
+          $('artifactStatus').textContent=document.notice;
+          $('artifactView').replaceChildren(back,node('p',document.path,'artifact-meta'),reading);
+        } catch(error){if(sourceTicket===artifactTicket)$('artifactStatus').textContent=error.message;}
+      });ref.replaceWith(link);
+    }
     const details = node('details', '', 'artifact-raw');
     details.append(node('summary', '原文与校验信息'), node('p', '格式：' + (data.format || '未提供')),
       node('p', '记录哈希：' + (data.expected_sha256 || item.sha256 || '未记录')),
@@ -82,19 +192,18 @@ async function loadArtifact(task, item) {
     $('artifactView').replaceChildren(node('p', error.message, 'file-warning'));
   }
 }
-function renderArtifacts(task) {
-  artifactTicket++;
+function renderArtifacts(task, preserveReader = false) {
+  if (!preserveReader) artifactTicket++;
   const versions = [
     ...task.history.map(entry => ({revision: entry.revision, artifacts: entry.artifacts || []})),
     {revision: task.revision, artifacts: task.artifacts || []}
   ];
   const items = versions.flatMap(version => version.artifacts.map(artifact => ({...artifact, revision: version.revision})));
   $('artifactList').replaceChildren();
-  $('artifactStatus').textContent = '';
-  $('artifactStatus').dataset.state = '';
+  if (!preserveReader) { $('artifactStatus').textContent = ''; $('artifactStatus').dataset.state = ''; }
   if (!items.length) {
     $('artifactList').append(node('p', '暂无已记录产物。', 'empty'));
-    $('artifactView').replaceChildren(node('p', '可在“记录进度”中关联已有产物。', 'empty'));
+    if (!preserveReader) $('artifactView').replaceChildren(node('p', '可在“记录进度”中关联已有产物。', 'empty'));
     return;
   }
   for (const item of [...items].reverse()) {
@@ -104,7 +213,7 @@ function renderArtifacts(task) {
     button.addEventListener('click', () => loadArtifact(task, item));
     $('artifactList').append(button);
   }
-  loadArtifact(task, [...items].reverse()[0]);
+  if (!preserveReader) { const requested=new URLSearchParams(location.search).get('artifact'); loadArtifact(task,[...items].reverse().find(item=>item.path===requested) || [...items].reverse()[0]); }
 }
 let sourcesTicket = 0;
 async function renderSources(task) {
@@ -235,6 +344,7 @@ function render(task) {
   renderArtifacts(task);
   renderSources(task);
   renderCorrection(task);
+  loadWorkflow(task);
   $('decisions').replaceChildren();
   for (const source of task.agreement.knowledge) {
     const item = node('details', '', 'decision');
@@ -517,6 +627,7 @@ $('createForm').addEventListener('submit', async event => {
   }
   creating = true; updateCreate(); $('createStatus').textContent = '正在创建…';
   try {
+    request.start_now = true;
     const task = await OksWorkspace.request('/api/tasks/create', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(request)});
     $('createPanel').hidden = true;
     const option = node('option', task.task_id); option.value = task.task_id; $('taskSelect').append(option); $('taskSelect').value = task.task_id;
@@ -538,6 +649,19 @@ document.addEventListener('oks:reconnected', event => {
   refresh(); updateCreate();
 });
 refresh();
+let overviewPolling = false;
+setInterval(async () => {
+  if (document.hidden || OksWorkspace.isReconnecting?.()) return;
+  if (currentTask) { loadWorkflow(currentTask, true); return; }
+  if (overviewPolling || $('content').hidden === false) return;
+  overviewPolling = true;
+  const root = OksWorkspace.context()?.knowledge_base;
+  try {
+    const data = await get('/api/tasks/overview');
+    if (!currentTask && root === OksWorkspace.context()?.knowledge_base) { overviewData = data; renderOverview(); status(''); }
+  } catch { if (!currentTask && root === OksWorkspace.context()?.knowledge_base) status('列表暂时无法连接，保留当前内容并自动重试。','warning'); }
+  finally { overviewPolling = false; }
+}, 12000);
 
 let reminderTicket = 0, reminderTask = null, reminderSaving = false;
 const reminderNames = {due:'已到时间',scheduled:'待提醒',needs_review:'任务或来源有变化，待确认',task_closed:'任务已结束，暂停提醒',completed:'已完成',cancelled:'已取消'};

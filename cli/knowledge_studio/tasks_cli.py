@@ -25,6 +25,27 @@ def start(task_id: str, goal: str = typer.Option(..., '--goal'), wiki: list[str]
     _run(lambda: tasks.start(store.repo_root(), task_id, goal, wiki))
 
 
+@app.command('begin')
+def begin(task_id: Optional[str] = typer.Argument(None), title: str = typer.Option(..., '--title'),
+          goal: str = typer.Option(..., '--goal'), wiki: list[str] = typer.Option([], '--wiki'),
+          path: Optional[Path] = typer.Option(None, '--path', help='Independent KB; does not change global configuration')):
+    """Create and select one confirmed task without assembling a Goal file."""
+    def create():
+        from . import workspace
+        from .task_workflow import instructions
+        import uuid
+        root = path.resolve() if path is not None else store.repo_root()
+        identifier = task_id or 'task-' + uuid.uuid4().hex[:12]
+        refs = [tasks._artifact(root, path) for path in wiki]
+        value = workspace.create_task(root, {'task_id': identifier, 'new_goal': {'title': title, 'text': goal}, 'wiki': refs})
+        try:
+            tasks.select(root, Path.cwd(), identifier)
+        except (OSError, ValueError) as exc:
+            raise ValueError(f'Task {identifier} created but not selected; inspect it and use task select') from exc
+        return {**value, 'selected': True, 'knowledge_base': str(root), 'workflow_instructions': instructions(value, root)}
+    _run(create)
+
+
 @app.command('select')
 def select(task_id: str, subject: Optional[str] = None, project: Optional[str] = None):
     """Bind this workspace to a task; optional private feedback needs both labels."""

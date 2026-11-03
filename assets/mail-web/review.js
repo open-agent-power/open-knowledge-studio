@@ -1,7 +1,7 @@
 'use strict';
 const $ = id => document.getElementById(id);
 const el = (tag, text, className) => { const item = document.createElement(tag); item.textContent = text == null ? '' : String(text); if (className) item.className = className; return item; };
-let localReview = false, currentScope = null, events = [], candidates = [], draft = null, draftSequence = 0, scopeSequence = 0;
+let localReview = false, currentScope = null, events = [], candidates = [], draft = null, draftSequence = 0, scopeSequence = 0, draftReviewStatus = 'draft';
 const conditionEdits = new Map();
 const reviewNotes = new Map();
 const asText = value => typeof value === 'string' ? value : JSON.stringify(value, null, 2);
@@ -56,7 +56,7 @@ async function loadCapability() {
   try {
     const data = await request('/api/mail/capabilities');
     localReview = data.local_review === true;
-    setStatus('capabilityStatus', localReview ? '可以在此审核建议。' : '当前只能查看。启用本地审核后，才能批准或拒绝。', localReview ? 'ready' : 'disabled');
+    setStatus('capabilityStatus', draftReviewStatus === 'promoted' ? '本条已审核，仅供查看。' : draftReviewStatus === 'rejected' ? '本条已拒绝，仅供查看。' : localReview ? '可以在此审核建议。' : '当前只能查看。启用本地审核后，才能批准或拒绝。', localReview ? 'ready' : 'disabled');
     $('localGate').hidden = localReview;
     const workspace = await request('/api/workspace');
     $('serveCommand').textContent = workspace.commands.review;
@@ -232,18 +232,47 @@ async function loadDraft(path) {
   setStatus('draftStatus', '正在读取完整草稿…'); $('draftPreview').replaceChildren(); $('promoteStatus').textContent = '';
   if (!path) return;
   try {
-    const data = await request('/api/learning/draft?path=' + encodeURIComponent(path));
+    const revision = path === new URLSearchParams(location.search).get('draft') ? new URLSearchParams(location.search).get('revision') : null;
+    const data = await request('/api/learning/draft?' + new URLSearchParams({path,...(revision?{revision}: {})}));
     if (ticket !== draftSequence) return;
     if (typeof data.text !== 'string' || typeof data.sha256 !== 'string' || !data.path) throw Error('草稿无法完整读取，请核对路径后重试。');
-    draft = {path:data.path,sha256:data.sha256,text:data.text};
+    const reviewed = data.review_status === 'promoted', rejected = data.review_status === 'rejected'; draftReviewStatus = data.review_status || 'draft';
+    document.querySelector('#draftPanel > summary').textContent = reviewed ? '审核依据' : rejected ? '原始建议' : '待审核的内容';
+    if(draftParam && (reviewed || rejected))document.querySelector('.page-footer p').textContent = '历史记录只读；新内容需要另行审核。';
+    draft = reviewed || rejected ? null : {path:data.path,sha256:data.sha256,text:data.text};
+    document.querySelector('#draftPanel > .review-check').hidden = reviewed || rejected; $('promote').hidden = reviewed || rejected;
     const raw = data.text.replace(/^\uFEFF/, ''), front = raw.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/);
     const title = front?.[1].match(/^title:\s*(.+)$/m)?.[1].trim().replace(/^(['"])(.*)\1$/, '$2');
-    const header = el('header', ''), integrity = el('details', ''), pre = el('pre', front ? raw.slice(front[0].length).trim() : raw, 'draft-body');
+    const header = el('header', ''), integrity = el('details', ''), pre = el('article', '', 'draft-body markdown-body');
+    if (typeof data.body_html === 'string') pre.innerHTML = data.body_html;
+    else pre.textContent = front ? raw.slice(front[0].length).trim() : raw;
+    if (typeof data.evidence_html === 'string') {
+      const evidence = el('details'), reading = el('article', '', 'markdown-body'); reading.innerHTML = data.evidence_html;
+      evidence.append(el('summary', '查看本次依据'), reading); pre.append(evidence);
+    }
     header.append(el('h2', title || '待审核草稿'));
-    integrity.append(el('summary', '完整原文与来源校验'), el('p', data.path), el('code', data.sha256), el('pre',data.text));
-    $('draftPreview').replaceChildren(header, pre, integrity);
-    setStatus('draftStatus', '草稿已完整读取。请检查内容和来源，再勾选确认。');
-    $('confirmReview').disabled = !canWrite();
+    if(rejected){header.append(el('p','这条建议已拒绝，原稿保留供追溯。'));setStatus('capabilityStatus','本条已拒绝，仅供查看。');if(draftParam){document.querySelector('.intro h1').textContent='已拒绝的建议';document.querySelector('.intro>p:last-of-type').textContent='已拒绝的建议保留原文与依据；新内容需另行提出。';}}
+    if(reviewed){
+      header.append(el('p','已人工审核 · '+(data.reviewed_at ? new Date(data.reviewed_at).toLocaleString('zh-CN') : '时间未记录')));
+      const link=el('a','阅读已入库的知识');link.href='/#wiki-reader&path='+encodeURIComponent(data.wiki_path);header.append(link);
+      if(draftParam){document.title='审核记录 · OKS';document.querySelector('.intro h1').textContent='审核记录';document.querySelector('.intro>p:last-of-type').textContent='批准状态来自审核记录；原始提案中的待审措辞属于历史内容。';}
+      setStatus('capabilityStatus','本条已审核，仅供查看。','ready');
+    }
+    if (data.workflow_context) {
+      const source = data.workflow_context;
+      if(source.task_id){const link=el('a','返回本次任务');link.href='/tasks?id='+encodeURIComponent(source.task_id);header.append(link);}
+      header.append(el('p',reviewed || rejected?'以下链接追溯任务与产物，后续变化不改写原审核决定。':source.source_status==='current'?'任务依据与产物版本一致。':source.warning||'来源已变化，请重新整理候选。'));
+      if(!reviewed && source.source_status!=='current'){draft=null;}
+      if(Array.isArray(source.artifacts))for(const item of source.artifacts){if(typeof item.path!=='string')continue;const artifact=el('a',item.path.split('/').pop(),'review-output');artifact.href='/tasks?'+new URLSearchParams({id:source.task_id,artifact:item.path});header.append(artifact);}
+    }
+    integrity.append(el('summary', reviewed && !data.original_available ? '当前知识原文与校验信息' : '完整原文与来源校验'), el('p', data.path), el('code', data.sha256), el('pre',data.text));
+    if(reviewed){
+      const history=el('details');history.append(el('summary',data.original_available?'查看审核时的完整提案':'查看当前知识正文（非原始审核稿）'),pre);
+      const notice=el('p',data.original_available?'原始审核稿已保存，字节校验一致。':'原始审核稿未保存或无法校验；当前知识正文不能代替当时的审核原文。','scope-help');
+      $('draftPreview').replaceChildren(header,notice,history,integrity);
+    }else $('draftPreview').replaceChildren(header, pre, integrity);
+    setStatus('draftStatus', reviewed ? '已加入知识库；此页仅查看审核历史。' : rejected ? '已拒绝；同一提案重试不会恢复为待审。' : !draft ? '依据已变化，当前不能加入知识库。请核对后重新提出建议。' : '草稿已完整读取。请检查内容和来源，再勾选确认。');
+    $('confirmReview').disabled = !canWrite() || !draft;
   } catch (error) { if (ticket === draftSequence) setStatus('draftStatus', error.message, 'error'); }
   updateDraftControls();
 }
@@ -266,20 +295,19 @@ $('draftForm').addEventListener('submit', event => { event.preventDefault(); loa
 $('confirmReview').addEventListener('change', updateDraftControls);
 $('promote').addEventListener('click', async () => {
   if (!canWrite() || !draft || !$('confirmReview').checked) return;
+  const reviewedPath = draft.path;
   $('promote').disabled = true; setStatus('promoteStatus', '正在加入知识库…');
   try {
     const result = await jsonPost('/api/learning/promote', {path:draft.path,expected_sha256:draft.sha256,confirm_review:true});
     setStatus('promoteStatus', `已加入知识库：${result.path || draft.path}`);
     $('promoteHandoff').replaceChildren();
     if (result.path) {
-      const command = `oks task start <new-task-id> --goal profiles/goals/<goal>.md --wiki ${result.path}`;
       const link = el('a', result.path); link.href = '/#wiki-reader&path=' + encodeURIComponent(result.path); link.className = 'source-link';
-      const code = el('code', command), copy = el('button', '复制来源参数'); copy.type = 'button';
-      copy.addEventListener('click', async () => { try { await navigator.clipboard.writeText('--wiki ' + result.path); copy.textContent = '已复制'; } catch { copy.textContent = '--wiki ' + result.path; } });
-      $('promoteHandoff').append(el('p', '新任务需要时，可显式加入这条 Wiki 来源：'), link, code, copy);
+      $('promoteHandoff').append(el('p', '后续任务可通过普通查询找到这条经验。'), link);
       $('promoteHandoff').hidden = false;
     }
     $('confirmReview').checked = false; draft = null; updateDraftControls();
+    await loadDraft(reviewedPath);
   } catch (error) { setStatus('promoteStatus', error.message, 'error'); updateDraftControls(); }
 });
 loadCapability();
@@ -310,7 +338,10 @@ if (draftParam) {
   document.title = '审核共享草稿 · OKS';
   document.querySelector('.intro .eyebrow').textContent = '学习 / 共享知识';
   document.querySelector('.intro h1').textContent = '审核共享草稿';
-  document.querySelector('.intro>p:last-of-type').textContent = '阅读全文并核对来源，确认后加入知识库。这里不需要填写私人建议的范围。';
+  document.querySelector('.intro>p:last-of-type').textContent = '阅读建议与依据，确认后供后续查询复用。';
+  $('draftForm').hidden = true;
+  document.querySelector('#draftPanel > .scope-help').hidden = true;
+  document.querySelector('#draftPanel > summary').textContent = '待审核的内容';
   for (const selector of ['.scope-section','.suggestions-section','.event-section']) document.querySelector(selector).hidden = true;
   document.querySelector('.page-footer p').textContent = '加入后可被当前知识库的后续查询使用，请核对内容与来源。';
   const back = document.querySelector('.page-footer a'); back.href = '/#wiki'; back.textContent = '返回知识库 ↗';

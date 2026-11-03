@@ -202,9 +202,42 @@ def checkpoint(root, task_id, expected_revision, progress, next_action, artifact
                              'loaded_at': load['at'] if load else None, 'artifacts': refs,
                              'verification': 'caller_reported', 'execution_verified': False})
         _archive(value)
-        value.update(progress=progress, next_action=next_action, artifacts=refs, uses=uses)
+        value.update(progress=progress, next_action=next_action, artifacts=refs, uses=uses, progress_origin='caller')
         _save(path, value)
     return show(root, task_id)
+
+
+def capture_outputs(root, task_id, agreement_sha256, event_id, artifacts, *, host, run_id):
+    """Register observed host writes, preserving manual state and review gates."""
+    path = _path(root, task_id)
+    with store._file_lock(path.with_suffix('.lock')):
+        value = _load(root, task_id)
+        if event_id in value.get('capture_events', []):
+            return {'task_id': task_id, 'revision': value['revision'], 'duplicate': True}
+        require_active_scope(root, task_id)
+        if value['agreement']['sha256'] != agreement_sha256 or handoff.check(root, value['agreement'], task_id)['status'] != 'current':
+            raise ValueError('Task sources changed; automatic capture cannot accept new requirements')
+        if len(artifacts) > 16:
+            raise ValueError('At most16 captured outputs per run')
+        for ref in artifacts:
+            if set(ref) != {'path', 'sha256'} or _artifact(root, ref['path']) != ref:
+                raise ValueError('An observed output changed; inspect it before recording progress')
+        merged = {item['path']: item for item in value['artifacts']}
+        merged.update({item['path']: item for item in artifacts})
+        if len(merged) > 16:
+            raise ValueError('Task output capacity reached; preserve existing outputs')
+        _archive(value)
+        value['artifacts'] = list(merged.values())
+        if not value.get('progress') or value.get('progress_origin') == 'host':
+            value['progress'] = f'宿主已返回，已收集{len(merged)}个产物；内容待确认。'
+            value['progress_origin'] = 'host'
+        if not value.get('next_action'):
+            value['next_action'] = '阅读产物与学习建议，确认后继续或结束任务。'
+        value.setdefault('capture_events', []).append(event_id)
+        value.setdefault('host_returns', []).append({'host': host, 'run_id': run_id, 'revision': value['revision'],
+                                                     'artifacts': artifacts, 'verification': 'host_write_observed'})
+        _save(path, value)
+    return {'task_id': task_id, 'revision': value['revision'], 'duplicate': False}
 
 
 def refresh(root, task_id, expected_revision):

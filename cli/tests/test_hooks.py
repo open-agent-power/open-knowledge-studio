@@ -42,6 +42,19 @@ def _codex_commands(hooks, event):
     ]
 
 
+def _collaboration_handlers(target, editor, event):
+    rel = ".claude/settings.json" if editor == "claude" else ".codex/hooks.json"
+    hooks = json.loads((target / rel).read_text(encoding="utf-8"))
+    return [
+        handler
+        for group in hooks.get("hooks", {}).get(event, [])
+        for handler in group.get("hooks", [])
+        if cli_module._hook_handler_matches_script(
+            handler, "subagent-collaboration.py"
+        )
+    ]
+
+
 def _bash_command():
     r"""Resolve a working bash on Windows.
 
@@ -202,6 +215,132 @@ def test_hook_install_wires_codex_prompt_recall(tmp_path):
         # POSIX wiring uses the .sh wrapper, so its interpreter must be baked.
         assert f'${{OKS_PYTHON:-{sys.executable}}}' in wrapper.read_text(encoding="utf-8")
     assert "/hooks" in result.output
+
+
+@pytest.mark.parametrize("editor", ["claude", "codex"])
+def test_subagent_collaboration_install_is_opt_in_and_idempotent(tmp_path, editor):
+    target = _init_instance(tmp_path)
+    settings_path = target / (
+        ".claude/settings.json" if editor == "claude" else ".codex/hooks.json"
+    )
+
+    # Ordinary hook installation must not widen event collection.
+    result = runner.invoke(app, ["hook", "install", "--editor", editor, "--path", str(target)])
+    assert result.exit_code == 0, result.output
+    assert not _collaboration_handlers(target, editor, "SubagentStart")
+    assert not _collaboration_handlers(target, editor, "SubagentStop")
+
+    # Preserve user permissions and event handlers while adding the opt-in hook.
+    current = json.loads(settings_path.read_text(encoding="utf-8"))
+    current["permissions"] = {"allow": ["Bash(git status *)"]}
+    current.setdefault("hooks", {}).setdefault("SubagentStart", []).append(
+        {"matcher": "Explore", "hooks": [{"type": "command", "command": "user-start-hook"}]}
+    )
+    settings_path.write_text(json.dumps(current, indent=2) + "\n", encoding="utf-8")
+
+    args = ["hook", "install", "--collaboration", "--editor", editor, "--path", str(target)]
+    first = runner.invoke(app, args)
+    second = runner.invoke(app, args)
+    assert first.exit_code == 0, first.output
+    assert second.exit_code == 0, second.output
+
+    installed = json.loads(settings_path.read_text(encoding="utf-8"))
+    assert installed["permissions"] == {"allow": ["Bash(git status *)"]}
+    assert any(
+        handler.get("command") == "user-start-hook"
+        for group in installed["hooks"]["SubagentStart"]
+        for handler in group["hooks"]
+    )
+    for event in ("SubagentStart", "SubagentStop"):
+        handlers = _collaboration_handlers(target, editor, event)
+        assert len(handlers) == 1
+        assert "subagent-collaboration.py" in " ".join(
+            [handlers[0].get("command", ""), *handlers[0].get("args", [])]
+        )
+        if editor == "codex" and os.name == "nt":
+            assert "2>NUL" not in handlers[0].get("command", "")
+        # No matcher: all actual agent types are observed.
+        assert all(
+            "matcher" not in group
+            for group in installed["hooks"][event]
+            if any(
+                cli_module._hook_handler_matches_script(
+                    handler, "subagent-collaboration.py"
+                )
+                for handler in group.get("hooks", [])
+            )
+        )
+
+    status = runner.invoke(app, ["hook", "status", "--path", str(target)])
+    assert status.exit_code == 0, status.output
+    assert f"{editor} collaboration SubagentStart: wired" in status.output
+    assert f"{editor} collaboration SubagentStop: wired" in status.output
+    assert "captured" not in status.output.lower()
+    assert "triggered" not in status.output.lower()
+
+    # Run the installed Python asset directly with an event lacking a child ID;
+    # the handler should import cleanly and leave unknown identity unclaimed.
+    script = target / (".claude/hooks" if editor == "claude" else ".codex/hooks") / "subagent-collaboration.py"
+    probe = _run_hook(
+        script,
+        {"hook_event_name": "SubagentStart", "session_id": "parent-session", "cwd": str(target)},
+        target,
+    )
+    assert probe.returncode == 0, probe.stderr
+
+
+@pytest.mark.parametrize("editor", ["qoder", "both"])
+def test_collaboration_install_rejects_unsupported_editor_without_mutation(tmp_path, editor):
+    target = _init_instance(tmp_path)
+    before = {
+        str(path.relative_to(target)): path.read_bytes()
+        for directory in (".claude", ".codex", ".qoder")
+        for path in (target / directory).rglob("*")
+        if path.is_file()
+    }
+
+    result = runner.invoke(
+        app,
+        ["hook", "install", "--collaboration", "--editor", editor, "--path", str(target)],
+    )
+
+    assert result.exit_code == 1
+    assert "--collaboration" in result.output
+    assert "exactly one supported editor" in result.output
+    after = {
+        str(path.relative_to(target)): path.read_bytes()
+        for directory in (".claude", ".codex", ".qoder")
+        for path in (target / directory).rglob("*")
+        if path.is_file()
+    }
+    assert after == before
+
+
+@pytest.mark.parametrize("editor", ["claude", "codex"])
+def test_collaboration_opt_in_survives_instance_upgrade(tmp_path, editor):
+    target = _init_instance(tmp_path)
+    result = runner.invoke(
+        app,
+        ["hook", "install", "--collaboration", "--editor", editor, "--path", str(target)],
+    )
+    assert result.exit_code == 0, result.output
+
+    settings_path = target / (
+        ".claude/settings.json" if editor == "claude" else ".codex/hooks.json"
+    )
+    before = json.loads(settings_path.read_text(encoding="utf-8"))
+    script_path = target / (".claude/hooks" if editor == "claude" else ".codex/hooks") / "subagent-collaboration.py"
+    assert script_path.is_file()
+
+    upgraded = runner.invoke(app, ["init", str(target), "--upgrade", "--no-git", "--no-set-default"])
+
+    assert upgraded.exit_code == 0, upgraded.output
+    after = json.loads(settings_path.read_text(encoding="utf-8"))
+    assert after == before
+    bundled = cli_module._asset_source() / "hooks" / "subagent-collaboration.py"
+    assert script_path.read_bytes() == bundled.read_bytes()
+    for event in ("SubagentStart", "SubagentStop"):
+        assert len(_collaboration_handlers(target, editor, event)) == 1
 
 
 def test_hook_install_codex_is_idempotent_and_status_reports_wired(tmp_path):

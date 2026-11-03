@@ -297,6 +297,9 @@ def memory_status(root):
 
     raw = files_under("raw", exclude={"executions", ".logs"})
     drafts = files_under("drafts")
+    from .task_workflow import candidate_disposition, _promotions, _rejections
+    promotions, rejections = _promotions(root), _rejections(root)
+    drafts = [path for path in drafts if not candidate_disposition(root, path.relative_to(root).as_posix(), promotions=promotions, rejections=rejections)]
     wiki = files_under("wiki")
     knowledge = wiki + drafts
     visible = []
@@ -478,7 +481,15 @@ def _memory_item(root: Path, relative: str, *, full: bool = False) -> dict:
         raise ValueError("memory path must be a relative wiki/ or drafts/ path")
     candidate = (root / relative).resolve()
     allowed = [(root / "wiki").resolve(), (root / "drafts").resolve()]
-    if not candidate.exists() and relative.startswith("drafts/"):
+    from .task_workflow import candidate_disposition
+    retained = relative.startswith('drafts/') and candidate.exists() and candidate_disposition(root, relative) == 'promoted'
+    if retained:
+        from .task_workflow import reviewed_candidate
+        exact = reviewed_candidate(root, relative, sha256=hashlib.sha256(candidate.read_bytes()).hexdigest())
+        if exact:
+            candidate = (root / exact['wiki_path']).resolve()
+            retained = False
+    if (not candidate.exists() or retained) and relative.startswith("drafts/"):
         from knowledge_studio.ingest_workflow import _inside
         import os
         _inside(root.resolve(), relative, "drafts")
@@ -517,6 +528,19 @@ def _memory_item(root: Path, relative: str, *, full: bool = False) -> dict:
     body_limit = 1_000_000 if full else 12000
     summary["body"] = body[:body_limit]
     summary["body_html"] = mail_media.render_body(root, summary["path"], meta, summary["body"], md_to_html)
+    origins = meta.get('source_candidates')
+    if meta.get('human_reviewed_at') and isinstance(origins, list):
+        managed = next((value for value in origins if isinstance(value, str) and re.fullmatch(r'drafts/task-learning-[0-9a-f]{28}\.md', value)), None)
+        if managed:
+            from .task_workflow import reviewed_candidate
+            revision = (meta.get('reviewed_source') or {}).get('sha256') if isinstance(meta.get('reviewed_source'), dict) else None
+            reviewed = reviewed_candidate(root, managed, sha256=revision)
+            if reviewed:
+                summary['learning_review'] = {key: reviewed.get(key) for key in ('review_status', 'reviewed_at', 'original_available', 'snapshot_status')}
+                summary['learning_review']['candidate_path'] = managed
+                summary['learning_review']['revision'] = revision
+                source = reviewed.get('workflow_source')
+                summary['learning_review']['task_id'] = source.get('task_id') if isinstance(source, dict) else None
     original = candidate.read_text(encoding="utf-8")
     summary["markdown"] = original[:body_limit]
     summary["markdown_truncated"] = len(original) > body_limit
@@ -867,13 +891,16 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(403, {"error": "loopback Host required"})
             return
         route = self.path.split("?", 1)[0]
-        if route in {'/api/workspace', '/api/tasks/artifact', '/api/tasks/options', '/api/tasks/goal', '/api/tasks/reminders', '/api/tasks/overview', '/api/tasks/review', '/api/tasks/handoff', '/api/tasks/sources', '/api/learning/draft', '/api/skills/versions', '/api/skills/diff', '/api/skills/bundled-diff'}:
+        if route in {'/api/workspace', '/api/tasks/workflow', '/api/tasks/source', '/api/tasks/artifact', '/api/tasks/options', '/api/tasks/goal', '/api/tasks/reminders', '/api/tasks/overview', '/api/tasks/review', '/api/tasks/handoff', '/api/tasks/sources', '/api/learning/draft', '/api/skills/versions', '/api/skills/diff', '/api/skills/bundled-diff'}:
             from . import workspace
             query = parse_qs(urlsplit(self.path).query)
             try:
                 if route == '/api/workspace':
                     result = workspace.diagnostics(self.server.kb_root, port=self.server.server_port,
                         local_review=self.server.local_review, local_edit=self.server.local_edit)
+                elif route == '/api/tasks/workflow':
+                    from .task_workflow import overview
+                    result = overview(self.server.kb_root, query.get('id', [''])[0])
                 elif route == '/api/tasks/options':
                     result = workspace.task_options(self.server.kb_root)
                 elif route == '/api/tasks/goal':
@@ -890,12 +917,25 @@ class Handler(BaseHTTPRequestHandler):
                     result = workspace.task_handoff(self.server.kb_root, query.get('id', [''])[0], int(query.get('revision', ['0'])[0]))
                 elif route == '/api/tasks/sources':
                     result = workspace.task_sources(self.server.kb_root, query.get('id', [''])[0], int(query.get('revision', ['0'])[0]))
+                elif route == '/api/tasks/source':
+                    result = workspace.artifact_source(self.server.kb_root, query.get('id', [''])[0], query.get('path', [''])[0],
+                        int(query.get('revision', ['0'])[0]), query.get('source', [''])[0])
+                    reading = re.sub(r'^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)', '', result['text'], count=1)
+                    result['body_html'] = md_to_html(reading) if result['format'] == 'markdown' else '<pre>' + html.escape(result['text']) + '</pre>'
                 elif route == '/api/tasks/artifact':
                     result = workspace.artifact(self.server.kb_root, query.get('id', [''])[0],
                                                 query.get('path', [''])[0], int(query.get('revision', ['0'])[0]))
+                    result['source_links'] = workspace.artifact_source_links(self.server.kb_root, result['path'], result['text'])
                     result['body_html'] = md_to_html(result['text']) if result['format'] == 'markdown' else '<pre>' + html.escape(result['text']) + '</pre>'
                 elif route == '/api/learning/draft':
-                    result = workspace.draft(self.server.kb_root, query.get('path', [''])[0])
+                    result = workspace.draft(self.server.kb_root, query.get('path', [''])[0], query.get('revision', [None])[0])
+                    raw = result['text'].lstrip('\ufeff')
+                    front = re.match(r'^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)', raw)
+                    body = raw[front.end():] if front else raw
+                    if result.get('workflow_context') and '\n## 本次依据\n' in body.replace('\r\n', '\n'):
+                        body, evidence = body.replace('\r\n', '\n').rsplit('\n## 本次依据\n', 1)
+                        result['evidence_html'] = md_to_html(evidence)
+                    result['body_html'] = md_to_html(body)
                 else:
                     operation = 'bundled-diff' if route.endswith('/bundled-diff') else 'diff' if route.endswith('/diff') else 'versions'
                     result = workspace.invoke(self.server.kb_root, operation,

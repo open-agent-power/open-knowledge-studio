@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import sqlite3
 import subprocess
@@ -310,13 +311,17 @@ def create_task(root, request):
             store._atomic_write(target, source.encode('utf-8'))
             expected[relative] = hashlib.sha256(source.encode('utf-8')).hexdigest()
         try:
-            return tasks.start(root, task_id, relative, paths, expected_sources=expected)
+            value = tasks.start(root, task_id, relative, paths, expected_sources=expected)
+            if request.get('start_now') is True:
+                tasks.select(root, root, task_id)
+                value['selected'] = True
+            return value
         except (ValueError, OSError):
             raise ValueError('Task not created; Goal preserved. Reload and select that Goal before retrying') from None
 
 
 def _text_file(root, relative, suffixes):
-    if not isinstance(relative, str) or not relative or '\\' in relative or ':' in relative or any(s in ('', '.', '..') for s in relative.split('/')):
+    if not isinstance(relative, str) or not relative or '\\' in relative or ':' in relative or any(not s or s.startswith('.') for s in relative.split('/')):
         raise ValueError('Choose a canonical relative file path')
     target = tasks._inside(root, relative)
     if target.suffix.lower() not in suffixes:
@@ -348,11 +353,97 @@ def artifact(root, task_id, relative, revision):
             'historical_bytes_available': ref['sha256'] == result['sha256']}
 
 
-def draft(root, relative):
+def artifact_source_links(root, relative, text):
+    """Resolve links for reading; preserve the exact archived output bytes."""
+    import posixpath
+    import re
+    from urllib.parse import urlsplit, unquote
+    origin = None
+    parts = relative.split('/')
+    if len(parts) > 2 and parts[0] == 'outputs' and re.fullmatch(r'(claude|codex)-[0-9a-f]{40}', parts[1]):
+        try:
+            run = tasks._read(tasks._inside(root, '.oks/workflow-runs/' + parts[1] + '.json'))
+            if any(ref.get('path') == relative for ref in run.get('artifacts', [])) and run.get('workspace'):
+                origin = Path(run['workspace']).joinpath(*parts[2:]).parent
+        except (OSError, ValueError, TypeError):
+            pass
+    links = {}
+    for target in re.findall(r'\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)', text):
+        parsed = urlsplit(target)
+        if parsed.scheme or parsed.netloc:
+            continue
+        value = unquote(parsed.path)
+        resolved = posixpath.normpath(value.lstrip('/') if value.startswith('/') else posixpath.join(posixpath.dirname(relative), value))
+        if origin and not value.startswith('/'):
+            original = (origin / value).resolve()
+            if original.is_relative_to(root.resolve()):
+                resolved = original.relative_to(root.resolve()).as_posix()
+        if resolved.split('/')[0] in {'raw', 'wiki', 'reports', 'outputs', 'artifacts'} and not any(part.startswith('.') for part in resolved.split('/')):
+            try:
+                local = tasks._inside(root, resolved)
+                if local.suffix.lower() in {'.md', '.txt'} and local.is_file():
+                    links[target] = resolved
+            except (OSError, ValueError):
+                continue
+    return links
+
+
+def artifact_source(root, task_id, relative, revision, source):
+    """Read only a local source actually linked by a registered task output."""
+    output = artifact(root, task_id, relative, revision)
+    if source not in artifact_source_links(root, relative, output['text']).values():
+        raise ValueError('Source must be linked from this registered output')
+    result = _text_file(root, source, {'.md', '.txt'})
+    return {**result, 'status': 'current_source', 'notice': '当前引用原文；没有保存该来源的历史正文。'}
+
+
+def draft(root, relative, review_sha256=None):
     handoff._relative(relative, 'drafts')
     if len(relative.split('/')) != 2:
         raise ValueError('Review a Draft directly under drafts/; nested Draft promotion is unsupported')
-    return _text_file(root, relative, {'.md'})
+    from .task_workflow import draft_context, reviewed_candidate, candidate_disposition
+    try:
+        result = _text_file(root, relative, {'.md'})
+    except FileNotFoundError:
+        result = None
+    disposition = candidate_disposition(root, relative, sha256=result['sha256']) if result is not None else None
+    if review_sha256 is not None and not re.fullmatch(r'[0-9a-f]{64}', review_sha256):
+        raise ValueError('Choose an exact review revision')
+    reviewed = reviewed_candidate(root, relative, sha256=review_sha256 or (result['sha256'] if disposition == 'promoted' else None))
+    if review_sha256 is not None and not reviewed:
+        raise ValueError('Reviewed revision unavailable; current Draft is not that review')
+    if reviewed and (review_sha256 is not None or result is None or disposition == 'promoted'):
+        if disposition == 'promoted' and not reviewed['original_available'] and (review_sha256 is None or result['sha256'] == review_sha256):
+            reviewed.update(original_available=True, text=result['text'], sha256=result['sha256'], snapshot_status='retained_original')
+        if reviewed['original_available']:
+            result = {'path': relative, 'text': reviewed['text'], 'sha256': reviewed['sha256'], 'format': 'markdown', 'text_role': 'reviewed_draft'}
+        else:
+            result = {**_text_file(root, reviewed['wiki_path'], {'.md'}), 'path': relative, 'text_role': 'current_wiki'}
+        result.update({key: reviewed.get(key) for key in ('review_status', 'wiki_path', 'reviewed_at', 'snapshot_status', 'original_available')})
+        context = reviewed.get('workflow_source')
+        if not context:
+            # Legacy records link to their actual Task but cannot recover a
+            # deleted Draft. Never label the current Wiki as that original.
+            for path in islice(tasks._inside(root, '.oks/workflow-runs').glob('*.json'), 100):
+                try:
+                    run = tasks._read(tasks._inside(root, path.relative_to(root).as_posix()))
+                    if relative in run.get('draft_paths', []):
+                        context = {key: run[key] for key in ('task_id', 'agreement_sha256', 'run_id', 'artifacts')}
+                        break
+                except (OSError, ValueError, KeyError):
+                    continue
+        if isinstance(context, dict):
+            result['workflow_context'] = {**context, 'source_status': 'historical'}
+        return result
+    if result is None:
+        raise FileNotFoundError('Draft or unambiguous reviewed Wiki not found')
+    result['review_status'] = 'rejected' if disposition == 'rejected' else 'draft'
+    context = draft_context(root, result['text'])
+    if context is None and relative.startswith('drafts/task-learning-'):
+        context = {'task_id': '', 'source_status': 'changed', 'warning': '任务来源标记缺失，请重新整理候选。'}
+    if context:
+        result['workflow_context'] = context
+    return result
 
 
 def invoke(root, operation, payload):
