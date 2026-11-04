@@ -1,0 +1,19 @@
+{
+  "schema_version": "handoff-acceptance/v1",
+  "dataset_id": "synthetic-report-handoff-12",
+  "kind": "synthetic contract cases, not agent task-performance results",
+  "cases": [
+    {"id": "keep-goal", "operation": "none", "status": "current"},
+    {"id": "changed-goal", "operation": "change_goal", "status": "needs_review", "issue": "source_changed"},
+    {"id": "rejected-option", "operation": "assert_rejected", "status": "current"},
+    {"id": "changed-conditions-new-snapshot", "operation": "refresh_goal", "status": "current"},
+    {"id": "unresolved-option", "operation": "assert_unresolved", "status": "current"},
+    {"id": "resolved-new-snapshot", "operation": "resolve_refresh", "status": "current"},
+    {"id": "source-version-present", "operation": "none", "status": "current"},
+    {"id": "source-missing", "operation": "delete_source", "status": "needs_review", "issue": "source_missing"},
+    {"id": "same-project", "operation": "none", "status": "current"},
+    {"id": "other-project", "operation": "wrong_scope", "status": "needs_review", "issue": "scope_mismatch"},
+    {"id": "reviewed-card", "operation": "none", "status": "current"},
+    {"id": "withdrawn-card", "operation": "withdraw", "status": "needs_review", "issue": "source_not_reviewed_active"}
+  ]
+}

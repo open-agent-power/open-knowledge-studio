@@ -42,6 +42,19 @@ def _codex_commands(hooks, event):
     ]
 
 
+def _collaboration_handlers(target, editor, event):
+    rel = ".claude/settings.json" if editor == "claude" else ".codex/hooks.json"
+    hooks = json.loads((target / rel).read_text(encoding="utf-8"))
+    return [
+        handler
+        for group in hooks.get("hooks", {}).get(event, [])
+        for handler in group.get("hooks", [])
+        if cli_module._hook_handler_matches_script(
+            handler, "subagent-collaboration.py"
+        )
+    ]
+
+
 def _bash_command():
     r"""Resolve a working bash on Windows.
 
@@ -202,6 +215,132 @@ def test_hook_install_wires_codex_prompt_recall(tmp_path):
         # POSIX wiring uses the .sh wrapper, so its interpreter must be baked.
         assert f'${{OKS_PYTHON:-{sys.executable}}}' in wrapper.read_text(encoding="utf-8")
     assert "/hooks" in result.output
+
+
+@pytest.mark.parametrize("editor", ["claude", "codex"])
+def test_subagent_collaboration_install_is_opt_in_and_idempotent(tmp_path, editor):
+    target = _init_instance(tmp_path)
+    settings_path = target / (
+        ".claude/settings.json" if editor == "claude" else ".codex/hooks.json"
+    )
+
+    # Ordinary hook installation must not widen event collection.
+    result = runner.invoke(app, ["hook", "install", "--editor", editor, "--path", str(target)])
+    assert result.exit_code == 0, result.output
+    assert not _collaboration_handlers(target, editor, "SubagentStart")
+    assert not _collaboration_handlers(target, editor, "SubagentStop")
+
+    # Preserve user permissions and event handlers while adding the opt-in hook.
+    current = json.loads(settings_path.read_text(encoding="utf-8"))
+    current["permissions"] = {"allow": ["Bash(git status *)"]}
+    current.setdefault("hooks", {}).setdefault("SubagentStart", []).append(
+        {"matcher": "Explore", "hooks": [{"type": "command", "command": "user-start-hook"}]}
+    )
+    settings_path.write_text(json.dumps(current, indent=2) + "\n", encoding="utf-8")
+
+    args = ["hook", "install", "--collaboration", "--editor", editor, "--path", str(target)]
+    first = runner.invoke(app, args)
+    second = runner.invoke(app, args)
+    assert first.exit_code == 0, first.output
+    assert second.exit_code == 0, second.output
+
+    installed = json.loads(settings_path.read_text(encoding="utf-8"))
+    assert installed["permissions"] == {"allow": ["Bash(git status *)"]}
+    assert any(
+        handler.get("command") == "user-start-hook"
+        for group in installed["hooks"]["SubagentStart"]
+        for handler in group["hooks"]
+    )
+    for event in ("SubagentStart", "SubagentStop"):
+        handlers = _collaboration_handlers(target, editor, event)
+        assert len(handlers) == 1
+        assert "subagent-collaboration.py" in " ".join(
+            [handlers[0].get("command", ""), *handlers[0].get("args", [])]
+        )
+        if editor == "codex" and os.name == "nt":
+            assert "2>NUL" not in handlers[0].get("command", "")
+        # No matcher: all actual agent types are observed.
+        assert all(
+            "matcher" not in group
+            for group in installed["hooks"][event]
+            if any(
+                cli_module._hook_handler_matches_script(
+                    handler, "subagent-collaboration.py"
+                )
+                for handler in group.get("hooks", [])
+            )
+        )
+
+    status = runner.invoke(app, ["hook", "status", "--path", str(target)])
+    assert status.exit_code == 0, status.output
+    assert f"{editor} collaboration SubagentStart: wired" in status.output
+    assert f"{editor} collaboration SubagentStop: wired" in status.output
+    assert "captured" not in status.output.lower()
+    assert "triggered" not in status.output.lower()
+
+    # Run the installed Python asset directly with an event lacking a child ID;
+    # the handler should import cleanly and leave unknown identity unclaimed.
+    script = target / (".claude/hooks" if editor == "claude" else ".codex/hooks") / "subagent-collaboration.py"
+    probe = _run_hook(
+        script,
+        {"hook_event_name": "SubagentStart", "session_id": "parent-session", "cwd": str(target)},
+        target,
+    )
+    assert probe.returncode == 0, probe.stderr
+
+
+@pytest.mark.parametrize("editor", ["qoder", "both"])
+def test_collaboration_install_rejects_unsupported_editor_without_mutation(tmp_path, editor):
+    target = _init_instance(tmp_path)
+    before = {
+        str(path.relative_to(target)): path.read_bytes()
+        for directory in (".claude", ".codex", ".qoder")
+        for path in (target / directory).rglob("*")
+        if path.is_file()
+    }
+
+    result = runner.invoke(
+        app,
+        ["hook", "install", "--collaboration", "--editor", editor, "--path", str(target)],
+    )
+
+    assert result.exit_code == 1
+    assert "--collaboration" in result.output
+    assert "exactly one supported editor" in result.output
+    after = {
+        str(path.relative_to(target)): path.read_bytes()
+        for directory in (".claude", ".codex", ".qoder")
+        for path in (target / directory).rglob("*")
+        if path.is_file()
+    }
+    assert after == before
+
+
+@pytest.mark.parametrize("editor", ["claude", "codex"])
+def test_collaboration_opt_in_survives_instance_upgrade(tmp_path, editor):
+    target = _init_instance(tmp_path)
+    result = runner.invoke(
+        app,
+        ["hook", "install", "--collaboration", "--editor", editor, "--path", str(target)],
+    )
+    assert result.exit_code == 0, result.output
+
+    settings_path = target / (
+        ".claude/settings.json" if editor == "claude" else ".codex/hooks.json"
+    )
+    before = json.loads(settings_path.read_text(encoding="utf-8"))
+    script_path = target / (".claude/hooks" if editor == "claude" else ".codex/hooks") / "subagent-collaboration.py"
+    assert script_path.is_file()
+
+    upgraded = runner.invoke(app, ["init", str(target), "--upgrade", "--no-git", "--no-set-default"])
+
+    assert upgraded.exit_code == 0, upgraded.output
+    after = json.loads(settings_path.read_text(encoding="utf-8"))
+    assert after == before
+    bundled = cli_module._asset_source() / "hooks" / "subagent-collaboration.py"
+    assert script_path.read_bytes() == bundled.read_bytes()
+    for event in ("SubagentStart", "SubagentStop"):
+        assert len(_collaboration_handlers(target, editor, event)) == 1
 
 
 def test_hook_install_codex_is_idempotent_and_status_reports_wired(tmp_path):
@@ -707,6 +846,132 @@ def test_hook_recall_diagnostics_are_opt_in(tmp_path, monkeypatch):
     assert with_diagnostics["diagnostic"] == (
         "RuntimeError: hook exited 7: child hook failed: import error"
     )
+
+
+def _selected_task_for_continue(target, workspace, monkeypatch, *, feedback_scope=None):
+    from knowledge_studio import tasks
+
+    monkeypatch.setenv("OKS_TASK_HOME", str(target.parent / "task-bindings"))
+    tasks.start(target, "continue-report", "profiles/goals/report.md", [])
+    if feedback_scope:
+        tasks.select(target, workspace, "continue-report", feedback_scope["subject"], feedback_scope["project"])
+    else:
+        tasks.select(target, workspace, "continue-report")
+
+
+def _private_feedback_for_continue(target, monkeypatch, *, operation):
+    from knowledge_studio import feedback, handoff
+
+    scope = {"subject": "reviewer-a", "project": "reporting", "task": "continue-report"}
+    asset = target / "wiki/computing/strategies/continue-policy.md"
+    asset.parent.mkdir(parents=True, exist_ok=True)
+    asset.write_text(
+        "---\ntitle: Continue policy\ntype: strategy\narea: computing\nstatus: active\n"
+        "human_reviewed_at: '2026-10-27'\noptions: []\n---\nPolicy body.\n",
+        encoding="utf-8",
+    )
+    agreement = handoff.prepare(target, "profiles/goals/report.md", [], scope["task"])
+    monkeypatch.setenv("OKS_FEEDBACK_HOME", str(target.parent / "private-feedback"))
+    request = {"scope": scope, "event_id": "adopted-1", "action": "adopted",
+               "reason": "Private rationale", "agreement": agreement,
+               "asset_path": "wiki/computing/strategies/continue-policy.md"}
+    feedback.record(target, request)
+    candidate = feedback.propose(target, {"scope": scope, "candidate_id": "candidate-1",
+        "event_ids": ["adopted-1"], "title": "Private candidate title",
+        "summary": "PRIVATE_REQUIREMENT_BODY"})
+    feedback.review(target, {"scope": scope, "candidate_id": "candidate-1", "decision": "approve",
+        "expected_revision": candidate["revision"], "comment": "Reviewed"})
+    if operation == "withdraw":
+        feedback.withdraw(target, {"scope": scope, "event_id": "adopted-1"})
+    elif operation == "conflict":
+        feedback.record(target, {**request, "event_id": "rejected-1", "action": "rejected",
+                                  "reason": "Opposite choice"})
+    return scope
+
+
+def _continue_hook(target, monkeypatch, *, session, extra_env=None):
+    config = target / "settings/recall.yaml"
+    config.write_text(config.read_text(encoding="utf-8") + "\ndebug_record: true\n", encoding="utf-8")
+    monkeypatch.delenv("OKS_FEEDBACK_SUBJECT", raising=False)
+    monkeypatch.delenv("OKS_FEEDBACK_PROJECT", raising=False)
+    monkeypatch.delenv("OKS_TASK_AGREEMENT", raising=False)
+    monkeypatch.delenv("OKS_TASK_SCOPE", raising=False)
+    env = {"OKS_HOOK_OUTPUT": "json", "OKS_HOOK_DIAGNOSTICS": "1",
+           "OKS_TASK_HOME": os.environ["OKS_TASK_HOME"], "PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"}
+    if extra_env:
+        env.update(extra_env)
+    result = _run_hook(target / ".codex/hooks/user-prompt-recall.py",
+        {"prompt": "继续", "session_id": session, "cwd": str(target)}, target, env)
+    assert result.returncode == 0, result.stderr
+    debug_path = target / ".oks/retrieval-debug.json"
+    assert debug_path.is_file(), result.stdout + result.stderr
+    return json.loads(result.stdout), json.loads(debug_path.read_text(encoding="utf-8"))
+
+
+def test_short_continue_warns_on_stale_task_without_old_goal_or_private_text(tmp_path, monkeypatch):
+    from knowledge_studio import tasks
+
+    target = _init_instance(tmp_path)
+    (target / "profiles/goals/report.md").write_text(
+        "---\ntype: goal\ntitle: Private old goal\nstatus: active\n---\nPRIVATE_OLD_GOAL_BODY\n",
+        encoding="utf-8",
+    )
+    _selected_task_for_continue(target, target, monkeypatch)
+    goal = target / "profiles/goals/report.md"
+    goal.write_text(goal.read_text(encoding="utf-8") + "Changed requirement.\n", encoding="utf-8")
+
+    response, records = _continue_hook(target, monkeypatch, session="stale-continue")
+
+    assert response["status"] == "injected"
+    assert "needs_review" in response["context"]
+    assert "source_changed" in response["context"]
+    assert "profiles/goals/report.md" in response["context"]
+    assert "oks task show --task-id continue-report" in response["context"]
+    assert "PRIVATE_OLD_GOAL_BODY" not in response["context"]
+    assert "Private old goal" not in response["context"]
+    assert tasks.show(target, "continue-report")["revision"] == 1
+    diagnostic = records[-1]["diagnostics"]["task_warning"]
+    assert diagnostic["status"] == "needs_review"
+    assert diagnostic["issues"] == [{"code": "source_changed", "path": "profiles/goals/report.md"}]
+
+
+@pytest.mark.parametrize("operation,expected", [("withdraw", "invalidated"), ("conflict", "conflicting_feedback")])
+def test_short_continue_aggregates_withdrawn_or_conflicting_feedback(tmp_path, monkeypatch, operation, expected):
+    target = _init_instance(tmp_path)
+    (target / "profiles/goals/report.md").write_text(
+        "---\ntype: goal\ntitle: Report\nstatus: active\n---\nKeep citations.\n", encoding="utf-8")
+    scope = _private_feedback_for_continue(target, monkeypatch, operation=operation)
+    _selected_task_for_continue(target, target, monkeypatch, feedback_scope=scope)
+
+    response, records = _continue_hook(target, monkeypatch, session=f"feedback-{operation}", extra_env={
+        "OKS_FEEDBACK_HOME": os.environ["OKS_FEEDBACK_HOME"]})
+
+    assert response["status"] == "injected"
+    assert "本任务反馈提示" in response["context"]
+    assert "PRIVATE_REQUIREMENT_BODY" not in response["context"]
+    assert "Private candidate title" not in response["context"]
+    assert expected in records[-1]["diagnostics"]["task_context"]["excluded_counts"]
+    assert records[-1]["diagnostics"]["task_warning"]["status"] == "feedback_excluded"
+    assert scope["subject"] not in response["context"]
+    assert scope["project"] not in response["context"]
+
+
+def test_short_continue_without_feedback_selection_emits_no_private_warning(tmp_path, monkeypatch):
+    target = _init_instance(tmp_path)
+    (target / "profiles/goals/report.md").write_text(
+        "---\ntype: goal\ntitle: Report\nstatus: active\n---\nKeep citations.\n", encoding="utf-8")
+    _private_feedback_for_continue(target, monkeypatch, operation="withdraw")
+    _selected_task_for_continue(target, target, monkeypatch)
+    monkeypatch.delenv("OKS_FEEDBACK_HOME", raising=False)
+
+    response, records = _continue_hook(target, monkeypatch, session="unselected-feedback")
+
+    assert response["status"] == "injected"
+    assert "本任务反馈提示" not in response["context"]
+    assert "PRIVATE_REQUIREMENT_BODY" not in response["context"]
+    diagnostics = records[-1]["diagnostics"]
+    assert diagnostics["task_context"]["status"] == "not_requested"
+    assert "task_warning" not in diagnostics
 
 
 @pytest.mark.skipif(os.name == "nt", reason="native Windows wires the .py engine; the .sh wrapper bake contract is POSIX-scoped")

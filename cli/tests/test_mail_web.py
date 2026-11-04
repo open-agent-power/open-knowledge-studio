@@ -36,11 +36,11 @@ def test_web_reads_real_threads_and_rejects_unsafe_requests(kb):
 
     try:
         with request("/") as response:
-            # Phase 1 panel: read-only observation surface (rail nav + timeline + wiki graph).
+            # Studio has exactly three primary views; writes remain separately
+            # gated by the same local capability checks below.
             body = response.read()
-            assert "协作主线".encode() in body
-            assert "知识工作区".encode() in body
-            assert b"<form" not in body
+            assert re.findall(rb'data-tab="([^"]+)"', body) == [b'discuss', b'goals', b'learning']
+            assert b'/studio.js' in body
         with request("/api/mail/send", {"to": "custom-agent,reviewer", "title": "Hi", "body": "hello"}) as response:
             result = json.load(response)
         assert len(mail.snapshot_data(kb, "custom-agent")["threads"]) == 1
@@ -206,12 +206,12 @@ def test_frontend_serves_modular_graph_assets(kb):
     base = f"http://127.0.0.1:{server.server_port}"
     try:
         for name in ("force-layout.js", "tag-graph.js", "mail-view-model.js",
-                     "knowledge-browser.js", "knowledge-navigation.js"):
+                     "knowledge-browser.js", "knowledge-navigation.js", "workspace-shell.js", "knowledge-heatmap.js"):
             with urlopen(base + "/" + name, timeout=5) as response:
                 assert response.status == 200
                 assert "javascript" in response.headers["Content-Type"]
                 assert response.read()
-        for name in ("tag-graph.css", "knowledge-browser.css", "knowledge-reading.css", "knowledge-workspace.css"):
+        for name in ("tag-graph.css", "knowledge-browser.css", "knowledge-reading.css", "knowledge-workspace.css", "workspace-shell.css"):
             with urlopen(base + "/" + name, timeout=5) as response:
                 assert response.status == 200
                 assert "text/css" in response.headers["Content-Type"]

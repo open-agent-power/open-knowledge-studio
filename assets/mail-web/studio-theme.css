@@ -1,0 +1,123 @@
+/* Shared palette for the shell and reused feature pages. Load after page CSS. */
+:root {
+  color-scheme: light;
+  --canvas: #f8f9fc;
+  --bg: #f8f9fc;
+  --surface: #ffffff;
+  --white: #ffffff;
+  --chrome: #ffffff;
+  --ink: #465775;
+  --muted: #8e9db5;
+  --secondary: #7c8da7;
+  --line: #e5eaf3;
+  --blue: #7189c5;
+  --accent: #7189c5;
+  --soft: #eff3fb;
+  --amber: #a48760;
+  --amberbg: #faf7f1;
+}
+body {
+  background: var(--canvas);
+  color: var(--ink);
+}
+button,
+input,
+select,
+textarea {
+  border-radius: 5px;
+}
+.list-pane,
+.wiki-tree,
+.task-workspace > #workbench,
+.review-workspace > .review-inbox,
+.domain-section,
+.readable-domain,
+.tag-graph-stage,
+.local-graph,
+.flow,
+.measurements,
+.skill-source,
+.diff-text,
+.merge-comparison pre,
+.merge-preview,
+.draft-preview header,
+.version-card,
+.check-action {
+  background: var(--surface);
+}
+.tree-item.active,
+.rail nav button.active,
+.collab-row:hover,
+.tag-card:hover,
+.knowledge-node:hover,
+.task-row[aria-current="true"],
+.review-inbox-item[aria-current="true"],
+.page-heading button,
+#scopeForm button,
+.query-section form button {
+  background: var(--soft);
+}
+.article p,
+.article ul,
+.article .lead,
+.article blockquote {
+  color: var(--ink);
+}
+.article h2 {
+  font-family: inherit;
+}
+.article blockquote {
+  border-color: #b8c8e5;
+}
+.measured-bar {
+  background: #8fa6d4;
+}
+.heatmap-cell:disabled {
+  background: #f0f3f8;
+}
+.heatmap-cell[data-level="1"],
+.heatmap-legend i[data-level="1"] {
+  background: #e5ecf9;
+}
+.heatmap-cell[data-level="2"],
+.heatmap-legend i[data-level="2"] {
+  background: #c1d0ed;
+}
+.heatmap-cell[data-level="3"],
+.heatmap-legend i[data-level="3"] {
+  background: #94acda;
+}
+.heatmap-cell[data-level="4"],
+.heatmap-legend i[data-level="4"] {
+  background: #6d88bd;
+}
+.studio-panel .knowledge-source.unconfigured,
+.studio-panel .workspace-hint,
+.studio-panel .tag-hub-note,
+.studio-panel .intro > .eyebrow,
+.studio-panel .intro > p:not([role]):not([id]),
+.studio-panel .intro > div > .meta,
+.studio-panel .daily-home > .intro > h1,
+.studio-panel .daily-home > .intro > p,
+.studio-panel .work-path,
+.studio-panel .concept-guide,
+.studio-panel .section-heading > div > p,
+.studio-panel .local-legend {
+  display: none;
+}
+/* Keep errors, partial-state notices, provenance badges and review consent visible. */
+.studio-panel .tag-hub-head h2,
+.studio-panel .knowledge-workspace:has(.tag-hub) .knowledge-workspace-bar {
+  display: none;
+}
+
+.review-detail-only .review-inbox { display: none; }
+.review-detail-only.workspace-page .review-workspace { display: block; }
+.review-detail-only .review-stage { width: 100%; padding: 12px; }
+.review-detail-only .review-stage .intro { display: none; }
+
+.review-detail-only #reviewBack { display: none; }
+.review-detail-only #draftPanel { margin: 0; padding: 0; }
+.review-detail-only .draft-preview > header h2 { display: none; }
+.review-detail-only .draft-preview > .draft-body { padding: 0; }
+.review-detail-only .review-stage { background: white; }

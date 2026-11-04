@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-agent-power.github.io/open-knowledge-studio/schemas/recall-case-v2.schema.json",
+  "title": "OKS recall evaluation dataset v2 (label audit, not runtime access control)",
+  "type": "object",
+  "required": ["schema_version", "dataset_id", "version", "provenance", "assets", "cases"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {"const": "recall-case/v2"},
+    "dataset_id": {"$ref": "#/$defs/text"},
+    "version": {"$ref": "#/$defs/text"},
+    "description": {"type": "string"},
+    "provenance": {
+      "type": "object", "additionalProperties": false,
+      "required": ["origin", "license", "annotation"],
+      "properties": {
+        "origin": {"$ref": "#/$defs/text"},
+        "license": {"$ref": "#/$defs/text"},
+        "annotation": {"$ref": "#/$defs/text"}
+      }
+    },
+    "assets": {
+      "type": "object", "minProperties": 1,
+      "propertyNames": {"$ref": "#/$defs/text"},
+      "additionalProperties": {
+        "type": "object", "additionalProperties": false,
+        "required": ["asset_id", "version", "source_group", "user_scope", "available_at"],
+        "properties": {
+          "asset_id": {"$ref": "#/$defs/text"},
+          "version": {"$ref": "#/$defs/text"},
+          "source_group": {"$ref": "#/$defs/text"},
+          "user_scope": {"$ref": "#/$defs/text"},
+          "available_at": {"type": "string", "format": "date-time"}
+        }
+      }
+    },
+    "cases": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["case_id", "query", "answerability", "relevant", "user_scope", "as_of", "split", "source_group", "expected_versions"],
+        "properties": {
+          "case_id": {"$ref": "#/$defs/text"},
+          "query": {"$ref": "#/$defs/text"},
+          "answerability": {"enum": ["answerable", "unanswerable"]},
+          "relevant": {"$ref": "#/$defs/slugs"},
+          "forbidden": {"$ref": "#/$defs/slugs"},
+          "user_scope": {"$ref": "#/$defs/text"},
+          "as_of": {"type": "string", "format": "date-time"},
+          "split": {"enum": ["train", "validation", "test"]},
+          "source_group": {"$ref": "#/$defs/text"},
+          "expected_versions": {
+            "type": "object", "propertyNames": {"$ref": "#/$defs/text"},
+            "additionalProperties": {"$ref": "#/$defs/text"}
+          },
+          "goal": {"type": "string"},
+          "scope": {"type": ["string", "null"]},
+          "type_filter": {"type": ["string", "null"]}
+        },
+        "allOf": [{
+          "if": {"properties": {"answerability": {"const": "answerable"}}},
+          "then": {"properties": {"relevant": {"minItems": 1}}},
+          "else": {"properties": {"relevant": {"maxItems": 0}}}
+        }]
+      }
+    }
+  },
+  "$defs": {
+    "text": {"type": "string", "minLength": 1, "pattern": "\\S"},
+    "slugs": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/text"}}
+  }
+}

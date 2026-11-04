@@ -33,6 +33,8 @@ _MAINTAINER_SKILLS = _REPO_ROOT / ".claude" / "skills"
 # package, a declared dependency — not vendored here.)
 _REQUIRED_MODULES = (
     "knowledge_studio/cli.py",
+    "knowledge_studio/evaluation.py",
+    "knowledge_studio/evaluation_dataset.py",
 )
 
 
@@ -69,7 +71,7 @@ def check_wheel(names: list[str]) -> list[str]:
 
     for module in _REQUIRED_MODULES:
         if module not in names:
-            problems.append(f"wheel is missing {module} — its console script cannot run")
+            problems.append(f"wheel is missing required module {module}")
 
     # Every asset file in the single source must reach the wheel.
     for path in sorted(_ASSETS.rglob("*")):
@@ -102,6 +104,14 @@ def check_sdist(names: list[str]) -> list[str]:
     # sdist — a source install pulls it via pip from pyproject dependencies.
     if not any(n.startswith("knowledge_studio/_assets/") for n in names):
         problems.append("sdist carries no knowledge_studio/_assets/ — `oks init` would be empty")
+    for module in _REQUIRED_MODULES:
+        if module not in names:
+            problems.append(f"sdist is missing required module {module}")
+    for path in sorted(_ASSETS.rglob("*")):
+        if path.is_file() and "__pycache__" not in path.parts:
+            expected = "knowledge_studio/_assets/" + path.relative_to(_ASSETS).as_posix()
+            if expected not in names:
+                problems.append(f"sdist is missing asset {expected}")
     return problems
 
 

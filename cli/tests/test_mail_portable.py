@@ -90,7 +90,7 @@ def test_web_generic_recipient_and_origin(kb):
         # Phase 1 面板：收件人概念依旧通用 —— 身份一律由 API 投影提供，页面里不写死任何收件人。
         # （旧断言 `b"recipient" in page` 依赖旧版英文文案，随 Phase 1 重做作废；
         #   这里守的是同一个不变量，换成对当前实现的断言。）
-        assert "协作主线".encode() in page
+        assert "讨论".encode() in page and "主导航".encode() in page
         assert b"reviewer" not in page
         assert b"custom-agent" not in page
         with request("/favicon.svg") as response:

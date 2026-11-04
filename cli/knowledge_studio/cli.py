@@ -11,6 +11,7 @@ import math
 import os
 from pathlib import Path
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -38,6 +39,9 @@ from knowledge_studio.recall import (
 from knowledge_studio.vfs import FS_RESPONSE_SCHEMA, VfsError, VfsService
 from knowledge_studio.workbuddy import inspect_workbuddy_adapter
 from knowledge_studio.skills_cli import app as skills_app
+from knowledge_studio.handoff_cli import app as handoff_app
+from knowledge_studio.feedback_cli import app as feedback_app
+from knowledge_studio.tasks_cli import app as tasks_app
 
 # ── ingest: connector is a regular PyPI dependency (oks-connector>=0.2.0) ──
 from oks_connector.raw_bundle_adapter import (
@@ -182,7 +186,7 @@ def _main(
 wiki_app = typer.Typer(help="Wiki page management.")
 drafts_app = typer.Typer(help="Draft proposal management.")
 config_app = typer.Typer(help="Global configuration (~/.oks/config.json).")
-hook_app = typer.Typer(help="Optional editor hooks (opt-in auto-recall injection).")
+hook_app = typer.Typer(help="Optional editor hooks for recall, conflict detection, collaboration, and workflow.")
 mail_app = typer.Typer(help="Agent-to-agent mail (inbox/sent).")
 registry_app = typer.Typer(help="Terminal registry (agent+cwd -> profile/goal).")
 eval_app = typer.Typer(help="Offline recall evaluation and run comparison.")
@@ -224,12 +228,17 @@ ingest_app = typer.Typer(
     no_args_is_help=True,
     cls=_LegacyIngestGroup,
 )
+from .daily_cli import app as capture_app
+app.add_typer(capture_app, name="capture")
 app.add_typer(wiki_app, name="wiki")
 app.add_typer(skills_app, name="skills")
 app.add_typer(drafts_app, name="drafts")
 app.add_typer(config_app, name="config")
 app.add_typer(hook_app, name="hook")
 app.add_typer(mail_app, name="mail")
+app.add_typer(handoff_app, name="handoff")
+app.add_typer(feedback_app, name="feedback")
+app.add_typer(tasks_app, name="task")
 app.add_typer(registry_app, name="registry")
 app.add_typer(eval_app, name="eval")
 app.add_typer(trace_app, name="trace")
@@ -797,6 +806,13 @@ def recall_cmd(
     type_filter: Optional[str] = typer.Option(None, "--type", "-t", help="Restrict the knowledge path to one wiki type"),
     knowledge_only: bool = typer.Option(False, "--knowledge-only", help="Skip the episodic path — only wiki/ results, no raw/ source material"),
     search_backend: str = typer.Option(None, "--search-backend", help="Search backend: native | fts5 | fusion | <connector-name> (默认读 settings/recall.yaml，显式传值优先)"),
+    agreement: Optional[Path] = typer.Option(None, "--agreement", envvar="OKS_TASK_AGREEMENT", help="Reviewed task agreement JSON"),
+    task_scope: Optional[str] = typer.Option(None, "--task-scope", envvar="OKS_TASK_SCOPE", help="Exact agreement scope label"),
+    feedback_subject: Optional[str] = typer.Option(None, "--feedback-subject", envvar="OKS_FEEDBACK_SUBJECT", help="Explicit private feedback subject (routing label, not authentication)"),
+    feedback_project: Optional[str] = typer.Option(None, "--feedback-project", envvar="OKS_FEEDBACK_PROJECT", help="Explicit private feedback project; requires current agreement and scope"),
+    no_task: bool = typer.Option(False, "--no-task", help="Ignore this workspace's selected task for this query"),
+    compact: bool = typer.Option(False, "--compact", help="Compact JSON context; preserve requirements and source references, omit diagnostic detail unless --explain"),
+    debug_record: bool = typer.Option(False, "--debug-record", help="Store local bounded retrieval evidence"),
     floor_override: Optional[float] = typer.Option(None, "--floor", help="临时调 floor（不改 settings/recall.yaml，一次性）"),
 ):
     """Two-path recall: episodic (raw/) + knowledge (wiki/).
@@ -807,8 +823,15 @@ def recall_cmd(
     from knowledge_studio.recall import load_recall_params
     load_recall_params()  # 触发 env 迁移警告（env 已废弃）
     output_format = _validate_output_format(output_format)
+    if compact and output_format != 'json':
+        raise typer.BadParameter('--compact requires --format json')
     try:
+        from knowledge_studio.handoff_cli import load_agreement
+        task = load_agreement(agreement) if agreement else None
         result = recall(
+            agreement=task, task_scope=task_scope, debug_record=debug_record,
+            feedback_subject=feedback_subject, feedback_project=feedback_project,
+            use_task=not no_task,
             query=query,
             topic_id=topic_id,
             limit=limit,
@@ -836,7 +859,11 @@ def recall_cmd(
         ]
 
     if output_format == "json":
-        _emit_json(result)
+        if compact:
+            from knowledge_studio.recall import compact_context
+            typer.echo(json.dumps(compact_context(result, explain=explain), ensure_ascii=False, separators=(',', ':')))
+        else:
+            _emit_json(result)
         return
 
     if result["episodic"]:
@@ -855,6 +882,8 @@ def recall_cmd(
             preview = item.get("body_preview", "")[:200]
             if explain and item.get("reasons"):
                 preview += "\n\nwhy: " + ", ".join(item["reasons"])
+            if item.get("load_command"):
+                preview += "\n\n按需加载（尚未执行）：" + item["load_command"]
             console.print(Panel(
                 preview,
                 title=f"[{item.get('type', '')}] {item.get('title', '')} ({item.get('slug', '')})",
@@ -863,6 +892,15 @@ def recall_cmd(
                 expand=False,
             ))
 
+    if result.get("continuation"):
+        saved = result["continuation"]
+        console.print(f"\n当前任务：{saved['task_id']}（修订 {saved['revision']}）", markup=False)
+        console.print("已完成：" + saved['progress'] + "\n下一步：" + saved['next_action'], markup=False)
+    task_context = result.get("task_context", {})
+    if task_context.get("status") != "not_requested":
+        console.print("\n本任务要求：" + str(task_context.get("status")), markup=False)
+        for candidate in task_context.get("candidates", []):
+            console.print(candidate["title"] + ": " + candidate["summary"], markup=False)
     if not result["episodic"] and not result["knowledge"]:
         console.print("[dim]No results from either path.[/dim]")
 
@@ -875,16 +913,20 @@ def eval_recall(
     output: Path = typer.Option(..., "--output", "-o", help="Output run JSON"),
     limit: int = typer.Option(5, "--limit", "-n", min=5, help="Retrieved items per case (>=5 keeps recall@5 meaningful)"),
     search_backend: Optional[str] = typer.Option(None, "--search-backend", help="Override recall.yaml (fts5/native/fusion) for ablation"),
+    split: Optional[str] = typer.Option(None, "--split", help="v2 dataset split: train, validation or test; required for mixed datasets"),
 ):
-    """Run a deterministic, read-only recall evaluation."""
+    """Run a read-only Wiki recall evaluation; v2 adds fixture-label audits."""
     from knowledge_studio.evaluation import run_evaluation
 
     try:
-        result = run_evaluation(dataset, output, limit=limit, search_backend=search_backend)
+        result = run_evaluation(dataset, output, limit=limit, search_backend=search_backend, split=split)
     except (OSError, ValueError, RuntimeError) as e:
         console.print(f"[red]{e}[/red]")
         raise typer.Exit(1)
-    _emit_json({"output": str(output.resolve()), "metrics": result["metrics"]})
+    summary = {"output": str(output.resolve()), "metrics": result["metrics"]}
+    if "evaluation_mode" in result["manifest"]:
+        summary.update(evaluation_mode=result["manifest"]["evaluation_mode"], split=result["manifest"]["split"])
+    _emit_json(summary)
 
 
 @eval_app.command("compare")
@@ -892,12 +934,13 @@ def eval_compare(
     baseline: Path = typer.Argument(help="Baseline run JSON"),
     candidate: Path = typer.Argument(help="Candidate run JSON"),
     output: Optional[Path] = typer.Option(None, "--output", "-o", help="Optional comparison JSON"),
+    vary: Optional[list[str]] = typer.Option(None, "--vary", help="Intentional variable: code, backend, settings or parameters; repeat as needed"),
 ):
-    """Compare two runs produced from the same dataset snapshot."""
+    """Compare runs with matching dataset, knowledge and configuration snapshots."""
     from knowledge_studio.evaluation import compare_runs
 
     try:
-        result = compare_runs(baseline, candidate, output)
+        result = compare_runs(baseline, candidate, output, vary=vary or ())
     except (OSError, ValueError, KeyError) as e:
         console.print(f"[red]{e}[/red]")
         raise typer.Exit(1)
@@ -1934,6 +1977,9 @@ _RECALL_YAML_KEYS = {
 }
 
 _INSTANCE_DIRS = [
+    "goal",
+    "discuss",
+    "skill",
     "profiles/users",
     "profiles/projects",
     "profiles/recipes",
@@ -2240,7 +2286,7 @@ def init(
         try:
             subprocess.run(
                 ["git", "init"], cwd=str(root),
-                check=True, capture_output=True, text=True,
+                check=True, capture_output=True, text=True, encoding="utf-8", errors="replace",
             )
             console.print(f"[green]git init[/green] {root}")
         except (subprocess.CalledProcessError, FileNotFoundError) as e:
@@ -2500,12 +2546,16 @@ def _bake_codex_lifecycle_hooks(root: Path) -> None:
 def _hook_command_matches_script(
     command: str, script_name: str | tuple[str, ...]
 ) -> bool:
-    """Match bare, quoted, or stale absolute hook commands by script name."""
+    """Match bare, quoted, or runner-wrapped hook commands by script name."""
     names = (script_name,) if isinstance(script_name, str) else tuple(script_name)
     command = str(command or "").strip().rstrip("\"' ")
     # Native Windows commands may include ``2>NUL`` to keep hook stdout clean.
     command = command.split(" 2>", 1)[0].rstrip()
-    return any(command.endswith(name) for name in names)
+    return any(
+        command.endswith(name)
+        or re.search(rf"(?:^|[\\/]){re.escape(name)}(?=$|[\"'\s])", command)
+        for name in names
+    )
 
 
 def _codex_python_hook_command(
@@ -2513,20 +2563,22 @@ def _codex_python_hook_command(
     python_script_name: str,
     *,
     native_windows: bool | None = None,
+    suppress_stderr: bool = True,
 ) -> str:
     """Return a Codex command that works without Bash on native Windows."""
     if native_windows is None:
         native_windows = os.name == "nt"
     script = (hooks_dir / python_script_name).resolve()
     if native_windows:
-        # Keep dependency warnings off Codex's hook stdout contract.  The
-        # Python hook itself is fail-open, so stderr suppression is safe here.
+        # Existing recall hooks suppress dependency chatter by default. Hooks
+        # that report diagnostics can opt out and keep stderr visible.
         # Use native separators even when tests simulate Windows on POSIX.
         # Preserve the host's directory spelling while using a Windows
         # separator between the directory and script name. This also makes
         # native-Windows formatting deterministic in cross-platform tests.
         script_text = str(script.parent) + "\\" + script.name
-        return subprocess.list2cmdline([sys.executable, script_text]) + " 2>NUL"
+        command = subprocess.list2cmdline([sys.executable, script_text])
+        return command + " 2>NUL" if suppress_stderr else command
     return script.as_posix()
 
 
@@ -2536,6 +2588,21 @@ def _windows_python_hook_exec(hooks_dir: Path, python_script_name: str) -> tuple
     script = (hooks_dir / python_script_name).resolve()
     package_root = str(Path(__file__).resolve().parents[1])
     return sys.executable, [str(runner), str(script), package_root]
+
+
+def _workflow_hook_command(
+    hooks_dir: Path, script_name: str, kb_root: Path, host: str
+) -> tuple[str, list[str] | None]:
+    """Run a copied hook through the Python runner with an explicit KB root."""
+    runner = (hooks_dir / "_hook_runner.py").resolve()
+    script = (hooks_dir / script_name).resolve()
+    package_root = str(Path(__file__).resolve().parents[1])
+    argv = [sys.executable, str(runner), str(script), package_root, "--kb", str(kb_root)]
+    if os.name == "nt" and host == "claude":
+        return argv[0], argv[1:]
+    if os.name == "nt":
+        return subprocess.list2cmdline(argv), None
+    return shlex.join(argv), None
 
 
 def _hook_handler_matches_script(
@@ -2842,6 +2909,7 @@ def mail_delegate(
     title: str = typer.Option("", "--title", "-t", help="Handoff title"),
     context: str = typer.Option("", "--context", help="Relevant context, files, or prior decisions"),
     acceptance: str = typer.Option("", "--acceptance", help="Observable acceptance criteria"),
+    agreement: Optional[Path] = typer.Option(None, "--agreement", help="JSON snapshot from oks handoff prepare"),
     session_id: str = typer.Option("", "--session-id", help="Originating Agent session ID"),
     notify: bool = typer.Option(False, "--notify/--no-notify", help="Request host notification; safe queued fallback when unsupported"),
     sender_kind: str = typer.Option("agent", "--sender-kind", help="Message provenance: human | agent | unknown"),
@@ -2867,6 +2935,8 @@ def mail_delegate(
     if sid:
         mail_domain.register_session(root, sid, sender, os.getcwd(), machine_id=mid)
     try:
+        from knowledge_studio.handoff_cli import load_agreement
+        snapshot = load_agreement(agreement) if agreement is not None else None
         result = mail_domain.delegate_message(
             root,
             task=task,
@@ -2880,8 +2950,9 @@ def mail_delegate(
             origin_machine_id=mid,
             evidence_refs=refs,
             notify=notify,
+            agreement=snapshot,
         )
-    except ValueError as exc:
+    except (OSError, ValueError, UnicodeError) as exc:
         console.print(f"[red]{exc}[/red]")
         raise typer.Exit(2)
     _emit_mail_action(
@@ -3181,6 +3252,8 @@ def mail_serve(
     path: Optional[str] = typer.Option(None, "--path", help="Knowledge base root"),
     port: int = typer.Option(3182, "--port", min=1, max=65535),
     mode: str = typer.Option("reader", "--mode", help="reader (read-only) or collaboration (legacy write API)"),
+    local_review: bool = typer.Option(False, '--local-review', help='Allow local candidate review/export and inspected Draft promotion; Mail remains read-only in reader mode'),
+    local_edit: bool = typer.Option(False, '--local-edit', help='Allow local Goal/task creation, bundled Skill draft import and review; Mail remains read-only'),
     background: bool = typer.Option(False, "--background", help="Run independently of this terminal or host session"),
     status: bool = typer.Option(False, "--status", help="Probe the managed server without writing files"),
     stop: bool = typer.Option(False, "--stop", help="Stop only this instance's managed background server"),
@@ -3190,6 +3263,8 @@ def mail_serve(
 
     if sum((background, status, stop)) > 1:
         raise typer.BadParameter("Choose only one of --background, --status or --stop")
+    if (local_review or local_edit) and (background or status or stop):
+        raise typer.BadParameter('--local-review / --local-edit are foreground options; run serve without --background, --status or --stop')
     if background or status or stop:
         from knowledge_studio.mail_server import start_background, server_status, stop_background
 
@@ -3203,7 +3278,7 @@ def mail_serve(
         return
 
     try:
-        server = create_server(_instance_root(path), port, mode=mode)
+        server = create_server(_instance_root(path), port, mode=mode, local_review=local_review, local_edit=local_edit)
     except (ValueError, OSError) as exc:
         console.print(f"[red]{exc}[/red]")
         raise typer.Exit(2)
@@ -3570,6 +3645,107 @@ def _wire_posttooluse(
     return "wired"
 
 
+_SUBAGENT_COLLABORATION_SCRIPT = "subagent-collaboration.py"
+_WORKFLOW_CONFIG_RELATIVE_PATH = Path("settings") / "task-workflow.json"
+_WORKFLOW_EVENTS = (
+    "SessionStart",
+    "UserPromptSubmit",
+    "PostToolUse",
+    "Stop",
+    "SubagentStart",
+    "SubagentStop",
+)
+
+
+def _read_task_workflow_config(path: Path) -> dict:
+    """Read the opt-in workflow config without masking malformed user state."""
+    if not path.exists():
+        return {"schema_version": "task-workflow/v1", "enabled": True, "hosts": []}
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise ValueError(f"{path} cannot be read as valid JSON: {error}") from error
+    if not isinstance(value, dict):
+        raise ValueError(f"{path} must contain a JSON object")
+    if value.get("schema_version") != "task-workflow/v1":
+        raise ValueError(f"{path} has an unsupported schema_version")
+    if not isinstance(value.get("enabled"), bool):
+        raise ValueError(f"{path} must contain a boolean enabled field")
+    if not isinstance(value.get("hosts"), list) or any(
+        not isinstance(host, str) for host in value["hosts"]
+    ):
+        raise ValueError(f"{path} must contain a string-list hosts field")
+    return value
+
+
+def _enable_task_workflow(path: Path, host: str) -> None:
+    """Atomically enable workflow and union its host without dropping settings."""
+    config = _read_task_workflow_config(path)
+    config["enabled"] = True
+    hosts = config["hosts"]
+    if host not in hosts:
+        hosts.append(host)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    store._atomic_write(path, json.dumps(config, indent=2, ensure_ascii=False) + "\n")
+
+
+def _wire_subagent_collaboration(
+    settings_path: Path, event: str, command: str, args: list[str] | None = None
+) -> str:
+    """Idempotently wire one owned Claude/Codex subagent lifecycle hook."""
+    data: dict = {}
+    if settings_path.exists():
+        try:
+            data = json.loads(settings_path.read_text(encoding="utf-8")) or {}
+        except json.JSONDecodeError as e:
+            raise ValueError(f"{settings_path} is not valid JSON: {e}") from e
+    hooks = data.setdefault("hooks", {})
+    groups = hooks.setdefault(event, [])
+    stale: dict | None = None
+    for group in groups:
+        for handler in group.get("hooks", []):
+            if handler.get("type") != "command":
+                continue
+            if handler.get("command") == command and handler.get("args") == args:
+                return "exists"
+            if _hook_handler_matches_script(handler, _SUBAGENT_COLLABORATION_SCRIPT):
+                stale = handler
+    if stale is not None:
+        _write_hook_handler(stale, command, args)
+    else:
+        handler = {"type": "command", "command": command}
+        _write_hook_handler(handler, command, args)
+        # No matcher: capture all subagent types, including custom agents.
+        groups.append({"hooks": [handler]})
+    settings_path.parent.mkdir(parents=True, exist_ok=True)
+    if settings_path.is_file():
+        shutil.copy2(settings_path, settings_path.with_suffix(".json.oks-bak"))
+    store._atomic_write(
+        settings_path, json.dumps(data, indent=2, ensure_ascii=False) + "\n"
+    )
+    return "wired"
+
+
+def _ensure_subagent_collaboration_script(hooks_dir: Path) -> bool:
+    """Install or refresh the opt-in collaboration event recorder asset."""
+    import stat
+
+    base = _asset_source()
+    source = base / "hooks" / _SUBAGENT_COLLABORATION_SCRIPT if base else None
+    if source is None or not source.is_file():
+        raise FileNotFoundError(
+            f"bundled hook script not found: {_SUBAGENT_COLLABORATION_SCRIPT}"
+        )
+    hooks_dir.mkdir(parents=True, exist_ok=True)
+    target = hooks_dir / _SUBAGENT_COLLABORATION_SCRIPT
+    source_bytes = source.read_bytes()
+    if target.is_file() and target.read_bytes() == source_bytes:
+        return False
+    shutil.copy2(source, target)
+    target.chmod(target.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+    return True
+
+
 def _hook_event_is_wired(
     settings_path: Path, event: str, script_name: str | tuple[str, ...]
 ) -> bool:
@@ -3795,20 +3971,51 @@ def hook_install(
     editor: str = typer.Option(
         "both", "--editor", "-e", help="Which editor(s) to wire: claude | qoder | codex | both"
     ),
+    collaboration: bool = typer.Option(
+        False, "--collaboration", help="Opt in to automatic subagent lifecycle Mail records (Claude or Codex only)"
+    ),
+    workflow: bool = typer.Option(
+        False, "--workflow", help="Enable opt-in automatic task archival and learning candidates (Claude or Codex only)"
+    ),
     path: Optional[str] = typer.Option(
         None, "--path", help="Instance root (default: active KB from ~/.oks/config.json)"
     ),
+    workspace: Optional[str] = typer.Option(
+        None, "--workspace", help="Workspace whose .claude/.codex hooks should be wired (only with --workflow; defaults to the KB root)"
+    ),
 ):
-    """Wire prompt recall and post-tool conflict hooks into editor settings (opt-in).
+    """Wire prompt recall and conflict hooks; optionally record collaboration/workflow events.
 
     Copies the hook scripts into the chosen editor's hook directory (if missing)
-    and adds UserPromptSubmit + PostToolUse entries. Idempotent and
-    non-destructive: existing settings and hooks are preserved.
+    and adds UserPromptSubmit + PostToolUse entries. `--collaboration` opts in
+    to SubagentStart/SubagentStop Mail recording. `--workflow` enables archival
+    and learning-candidate events and implies `--collaboration`.
+    Idempotent and non-destructive: existing settings and hooks are preserved.
     """
     editor = editor.lower().strip()
     if editor not in ("claude", "qoder", "codex", "both"):
         console.print("[red]--editor must be one of: claude, qoder, codex, both[/red]")
         raise typer.Exit(1)
+    if (collaboration or workflow) and editor not in ("claude", "codex"):
+        console.print(
+            "[red]--collaboration and --workflow require exactly one supported editor: --editor claude or --editor codex[/red]"
+        )
+        raise typer.Exit(1)
+    if workspace is not None and not workflow:
+        console.print("[red]--workspace can only be used with --workflow[/red]")
+        raise typer.Exit(1)
+    if workspace is not None and not workspace.strip():
+        console.print("[red]--workspace must name an existing directory[/red]")
+        raise typer.Exit(1)
+    collaboration = collaboration or workflow
+    if collaboration:
+        base = _asset_source()
+        candidate = base / "hooks" / _SUBAGENT_COLLABORATION_SCRIPT if base else None
+        if candidate is None or not candidate.is_file():
+            console.print(
+                f"[red]Bundled hook script not found: {_SUBAGENT_COLLABORATION_SCRIPT}[/red]"
+            )
+            raise typer.Exit(1)
 
     if os.name == "nt":
         if editor == "codex":
@@ -3828,8 +4035,48 @@ def hook_install(
         console.print(f"[red]Instance root not found:[/red] {root}")
         raise typer.Exit(1)
 
+    workspace_root = Path(workspace).expanduser().resolve() if workspace is not None else root.resolve()
+    if workflow and not workspace_root.is_dir():
+        console.print(f"[red]Workspace directory not found:[/red] {workspace_root}")
+        raise typer.Exit(1)
+    cross_workspace = workflow and workspace_root != root.resolve()
+
+    if workflow:
+        settings_path = workspace_root / _HOOK_EDITORS[editor]
+        workflow_path = root / _WORKFLOW_CONFIG_RELATIVE_PATH
+        try:
+            # Validate all state this command will touch before baking scripts,
+            # migrating Codex paths, or wiring any event.
+            if settings_path.exists():
+                settings_data = json.loads(settings_path.read_text(encoding="utf-8"))
+                if not isinstance(settings_data, dict):
+                    raise ValueError(f"{settings_path} must contain a JSON object")
+                hook_map = settings_data.get("hooks", {})
+                if not isinstance(hook_map, dict):
+                    raise ValueError(f"{settings_path} hooks field must be a JSON object")
+                for event in set(("UserPromptSubmit", "PostToolUse", *_WORKFLOW_EVENTS)):
+                    groups = hook_map.get(event, [])
+                    if not isinstance(groups, list) or any(
+                        not isinstance(group, dict)
+                        or not isinstance(group.get("hooks", []), list)
+                        or any(not isinstance(handler, dict) for handler in group.get("hooks", []))
+                        for group in groups
+                    ):
+                        raise ValueError(f"{settings_path} has an invalid hooks.{event} structure")
+            _read_task_workflow_config(workflow_path)
+            assets = _asset_source()
+            if assets is None:
+                raise FileNotFoundError("bundled hook assets are unavailable")
+            required_assets = (*_HOOK_SUPPORT_FILES, *_RECALL_HOOK_SCRIPTS, _SUBAGENT_COLLABORATION_SCRIPT)
+            missing_assets = [name for name in required_assets if not (assets / "hooks" / name).is_file()]
+            if missing_assets:
+                raise FileNotFoundError("missing bundled hook assets: " + ", ".join(missing_assets))
+        except (OSError, json.JSONDecodeError, ValueError) as error:
+            console.print(f"[red]Cannot enable workflow without changing files:[/red] {error}")
+            raise typer.Exit(1)
+
     if editor == "codex":
-        _bake_codex_lifecycle_hooks(root)
+        _bake_codex_lifecycle_hooks(workspace_root)
 
     editors = ("claude", "qoder") if editor == "both" else (editor,)
 
@@ -3838,12 +4085,21 @@ def hook_install(
     # are selected.
     hook_dirs = []
     for name in editors:
-        hooks_dir = root / _HOOK_SCRIPT_DIRS[name]
+        hooks_dir = workspace_root / _HOOK_SCRIPT_DIRS[name]
         if hooks_dir not in hook_dirs:
             hook_dirs.append(hooks_dir)
     for hooks_dir in hook_dirs:
         try:
             created = _ensure_recall_scripts(root, hooks_dir=hooks_dir)
+            if workflow and cross_workspace:
+                runner_source = _asset_source() / "hooks" / "_hook_runner.py"
+                runner_target = hooks_dir / "_hook_runner.py"
+                if runner_target.read_bytes() != runner_source.read_bytes():
+                    shutil.copy2(runner_source, runner_target)
+                    if "_hook_runner.py" not in created:
+                        created.append("_hook_runner.py")
+            if collaboration and _ensure_subagent_collaboration_script(hooks_dir):
+                created.append(_SUBAGENT_COLLABORATION_SCRIPT)
         except FileNotFoundError as e:
             console.print(
                 f"[red]Cannot install hook — bundled assets missing.[/red]\n"
@@ -3859,15 +4115,29 @@ def hook_install(
             )
 
     for name in editors:
-        settings_path = root / _HOOK_EDITORS[name]
-        script_dir = root / _HOOK_SCRIPT_DIRS[name]
+        settings_path = workspace_root / _HOOK_EDITORS[name]
+        script_dir = workspace_root / _HOOK_SCRIPT_DIRS[name]
         hook_args: list[str] | None = None
         post_args: list[str] | None = None
         if name == "codex":
-            _migrate_codex_hook_paths(settings_path, root)
-        if name == "codex" and os.name == "nt":
+            _migrate_codex_hook_paths(settings_path, workspace_root)
+        if workflow and cross_workspace:
+            hook_cmd, hook_args = _workflow_hook_command(
+                script_dir, "user-prompt-recall.py", root.resolve(), name
+            )
+            post_cmd, post_args = _workflow_hook_command(
+                script_dir, "post-tool-edit.py", root.resolve(), name
+            )
+            collaboration_cmd, collaboration_args = _workflow_hook_command(
+                script_dir, _SUBAGENT_COLLABORATION_SCRIPT, root.resolve(), name
+            )
+        elif name == "codex" and os.name == "nt":
             hook_cmd = _codex_python_hook_command(script_dir, "user-prompt-recall.py")
             post_cmd = _codex_python_hook_command(script_dir, "post-tool-edit.py")
+            collaboration_cmd = _codex_python_hook_command(
+                script_dir, _SUBAGENT_COLLABORATION_SCRIPT, suppress_stderr=False
+            ) if collaboration else ""
+            collaboration_args = None
         elif name == "claude" and os.name == "nt":
             hook_cmd, hook_args = _windows_python_hook_exec(
                 script_dir, "user-prompt-recall.py"
@@ -3875,16 +4145,55 @@ def hook_install(
             post_cmd, post_args = _windows_python_hook_exec(
                 script_dir, "post-tool-edit.py"
             )
+            if collaboration:
+                collaboration_cmd, collaboration_args = _windows_python_hook_exec(
+                    script_dir, _SUBAGENT_COLLABORATION_SCRIPT
+                )
+            else:
+                collaboration_cmd, collaboration_args = "", None
         else:
             hook_cmd = (script_dir / _RECALL_HOOK_SCRIPT_NAME).resolve().as_posix()
             post_cmd = (script_dir / _POST_TOOL_SCRIPT_NAME).resolve().as_posix()
+            collaboration_script = (
+                script_dir / _SUBAGENT_COLLABORATION_SCRIPT
+            ).resolve()
+            collaboration_cmd = (
+                f"{shlex.quote(sys.executable)} {shlex.quote(str(collaboration_script))}"
+                if collaboration
+                else ""
+            )
+            collaboration_args = None
         result = _wire_userpromptsubmit(settings_path, hook_cmd, hook_args)
         post_result = _wire_posttooluse(settings_path, post_cmd, post_args)
         label = "[green]wired[/green]" if result == "wired" else "[dim]already wired[/dim]"
         post_label = "[green]+conflict[/green]" if post_result == "wired" else "[dim]+conflict (exists)[/dim]"
         console.print(f"  {name}: {label} {post_label} → {settings_path}")
+        if collaboration:
+            events = _WORKFLOW_EVENTS if workflow else ("SubagentStart", "SubagentStop")
+            for event in events:
+                event_result = _wire_subagent_collaboration(
+                    settings_path, event, collaboration_cmd, collaboration_args
+                )
+                event_label = (
+                    "[green]wired[/green]"
+                    if event_result == "wired"
+                    else "[dim]already wired[/dim]"
+                )
+                scope_label = "workflow" if workflow else "collaboration"
+                console.print(f"  {name} {scope_label} {event}: {event_label}")
+
+    if workflow:
+        try:
+            _enable_task_workflow(root / _WORKFLOW_CONFIG_RELATIVE_PATH, editor)
+        except (OSError, ValueError) as error:
+            console.print(f"[red]Hook events were wired, but workflow settings could not be saved:[/red] {error}")
+            raise typer.Exit(1)
 
     features = ["auto-recall", "conflict detection"]
+    if collaboration:
+        features.append("opt-in subagent lifecycle hooks")
+    if workflow:
+        features.append("automatic workflow hooks (no model is started by install)")
     conflict_message = "File edits across agents trigger conflict mail.\n"
     trust_message = (
         "Codex: run `/hooks` in Codex to review and trust the current hook definitions.\n"
@@ -3905,10 +4214,19 @@ def hook_install(
 @hook_app.command("status")
 def hook_status(
     path: Optional[str] = typer.Option(None, "--path", help="Instance root (default: active KB)"),
+    workspace: Optional[str] = typer.Option(None, "--workspace", help="Workspace whose .claude/.codex hooks should be checked (defaults to the KB root)"),
 ):
-    """Show whether the auto-recall hook is installed for each editor."""
+    """Read the KB workflow setting and editor hook wiring without changing files."""
     root = _instance_root(path)
     console.print(f"[bold]Instance:[/bold] {root}")
+    if workspace is not None and not workspace.strip():
+        console.print("[red]--workspace must name an existing directory[/red]")
+        raise typer.Exit(1)
+    workspace_root = Path(workspace).expanduser().resolve() if workspace is not None else root.resolve()
+    if not workspace_root.is_dir():
+        console.print(f"[red]Workspace directory not found:[/red] {workspace_root}")
+        raise typer.Exit(1)
+    console.print(f"[bold]Hook workspace:[/bold] {workspace_root}")
     import os
     import re
     import subprocess
@@ -3918,17 +4236,17 @@ def hook_status(
     wiring: dict[str, tuple[bool, bool]] = {}
     active_hook_dirs: set[Path] = set()
     for name, rel in _HOOK_EDITORS.items():
-        settings_path = root / rel
+        settings_path = workspace_root / rel
         prompt_wired = _hook_is_wired(settings_path)
         post_wired = _hook_event_is_wired(
             settings_path, "PostToolUse", _POST_TOOL_SCRIPT_NAMES
         )
         wiring[name] = (prompt_wired, post_wired)
         if prompt_wired or post_wired:
-            active_hook_dirs.add(root / _HOOK_SCRIPT_DIRS[name])
+            active_hook_dirs.add(workspace_root / _HOOK_SCRIPT_DIRS[name])
     any_wired = bool(active_hook_dirs)
     for name in _HOOK_EDITORS:
-        hooks_dir = root / _HOOK_SCRIPT_DIRS[name]
+        hooks_dir = workspace_root / _HOOK_SCRIPT_DIRS[name]
         if hooks_dir in shown_dirs:
             continue
         shown_dirs.append(hooks_dir)
@@ -3980,6 +4298,38 @@ def hook_status(
         console.print(f"  {name}: {state}")
         post_state = "[green]wired[/green]" if post_wired else "[dim]not wired[/dim]"
         console.print(f"  {name} PostToolUse: {post_state}")
+        for event in ("SubagentStart", "SubagentStop"):
+            event_wired = _hook_event_is_wired(
+                workspace_root / rel, event, _SUBAGENT_COLLABORATION_SCRIPT
+            )
+            event_state = "[green]wired[/green]" if event_wired else "[dim]not wired[/dim]"
+            console.print(f"  {name} collaboration {event}: {event_state}")
+        if name in ("claude", "codex"):
+            workflow_path = root / _WORKFLOW_CONFIG_RELATIVE_PATH
+            try:
+                workflow_config = _read_task_workflow_config(workflow_path) if workflow_path.exists() else None
+                configured = bool(
+                    workflow_config
+                    and workflow_config.get("enabled") is True
+                    and name in workflow_config.get("hosts", [])
+                )
+                config_state = "enabled for this host" if configured else "not enabled for this host"
+            except (OSError, ValueError) as error:
+                workflow_config = None
+                configured = False
+                config_state = f"invalid settings ({error})"
+            setting_label = "已启用" if configured else "未启用"
+            if workflow_config is None and workflow_path.exists():
+                setting_label = config_state
+            console.print(f"  {name} workflow setting: {setting_label}")
+            states = []
+            for event in _WORKFLOW_EVENTS:
+                event_wired = _hook_event_is_wired(
+                    workspace_root / rel, event, _SUBAGENT_COLLABORATION_SCRIPT
+                )
+                states.append(f"{event}={'已配置' if event_wired else '未配置'}")
+            console.print(f"  {name} workflow hooks: " + ", ".join(states))
+            console.print("  这里只检查本地配置，不验证宿主是否实际触发。")
         if name == "codex":
             console.print("  codex trust: review with `/hooks`")
 

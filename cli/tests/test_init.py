@@ -14,12 +14,13 @@ runner = CliRunner()
 # Contract: what `oks init` must produce. Buckets come from _INSTANCE_DIRS; the
 # per-agent dirs and templates/_meta/settings/profiles are assembled from assets/.
 EXPECTED_BUCKETS = [
+    "goal", "discuss", "skill",
     "profiles/users", "profiles/projects", "profiles/recipes", "profiles/goals",
     "raw", "wiki", "drafts",
 ]
 EXPECTED_TOP_LEVEL = {
     ".claude", ".qoder", ".pi", ".codex", ".agents", ".codebuddy", ".workbuddy", "_meta", "settings", "templates",
-    "profiles", "raw", "wiki", "drafts", "mail", ".gitignore", "AGENTS.md",
+    "profiles", "raw", "wiki", "drafts", "mail", "goal", "discuss", "skill", ".gitignore", "AGENTS.md",
 }
 
 

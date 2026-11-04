@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import re
 from pathlib import Path
@@ -125,17 +126,26 @@ def _validate_result(root: Path, run_id: str, result: dict, *, collaboration: bo
     for relative in paths:
         path = _inside(root, relative, "drafts")
         meta = store.parse_wiki_file(path) if path.is_file() else None
-        if not meta:
-            matches = [page for page in wiki_pages if isinstance(page.get("source_candidates"), list)
-                       and relative in page["source_candidates"]
-                       and page.get("source_bundle_id") == bundle_id
-                       and page.get("human_reviewed_at") and page.get("status") == "active"
-                       and not page.get("archived")]
+        reviewed = None
+        if meta:
+            from . import draft_review
+            reviewed = draft_review.disposition(root, relative, hashlib.sha256(path.read_bytes()).hexdigest())
+        if reviewed and reviewed['decision'] == 'promoted':
+            matches = [page for page in wiki_pages if isinstance(page.get('source_candidates'), list)
+                       and relative in page['source_candidates']
+                       and page.get('source_bundle_id') == bundle_id
+                       and page.get('human_reviewed_at') and page.get('status') == 'active'
+                       and not page.get('archived')
+                       and Path(page['file_path']).relative_to(root).as_posix() == reviewed['wiki_path']]
             if len(matches) == 1:
-                wiki_path = _inside(root, Path(matches[0]["file_path"]).relative_to(root).as_posix(), "wiki")
-                promoted[relative] = wiki_path.relative_to(root).as_posix()
+                promoted[relative] = _inside(root, reviewed['wiki_path'], 'wiki').relative_to(root).as_posix()
             else:
-                errors.append(f"candidate_missing:{relative}")
+                errors.append(f'candidate_promotion_unproven:{relative}')
+            continue
+        if not meta:
+            # Retained originals are part of the review contract. Wiki labels
+            # alone cannot prove which missing Candidate revision was approved.
+            errors.append(f"candidate_missing:{relative}")
         elif (meta.get("human_reviewed_at") or not isinstance(meta.get("status"), str)
               or meta.get("status") not in {"pending", "draft"}):
             errors.append(f"candidate_not_pending:{relative}")

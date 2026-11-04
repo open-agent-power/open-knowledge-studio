@@ -38,6 +38,17 @@ _WRITE_PAGE_AT = (
     "store.write_wiki_page(sys.argv[2], sys.argv[3], area='computing')\n"
 )
 
+_REVIEW_AT = (
+    "import sys, time\n"
+    "from knowledge_studio import store\n"
+    "delay = float(sys.argv[1]) - time.time()\n"
+    "if delay > 0: time.sleep(delay)\n"
+    "try:\n"
+    "    (store.promote_draft if sys.argv[2] == 'promote' else store.reject_draft)(sys.argv[3])\n"
+    "except ValueError as exc:\n"
+    "    print('conflict:', exc)\n"
+)
+
 
 def _spawn(script, *args, root):
     env = dict(os.environ)
@@ -100,3 +111,25 @@ def test_concurrent_writes_keep_every_fingerprint_mapping(tmp_path, monkeypatch)
     index = json.loads(store._fingerprint_index_path().read_text(encoding="utf-8"))
     assert len(index) == len(bodies)
     assert len(set(index.values())) == len(bodies)
+
+
+def test_concurrent_promote_and_reject_cannot_decide_same_revision_twice(tmp_path, monkeypatch):
+    monkeypatch.setenv("OKS_ROOT", str(tmp_path))
+    draft = tmp_path / "drafts" / "same-revision.md"
+    draft.parent.mkdir()
+    original = b"---\ntitle: Same revision\ndraft_type: concept\ndraft_area: computing\n---\n\nKeep exact review evidence.\n"
+    draft.write_bytes(original)
+    start = time.time() + 3
+    procs = [
+        _spawn(_REVIEW_AT, str(start), action, "same-revision", root=tmp_path)
+        for action in ("promote", "reject")
+    ]
+    _run_all(procs)
+
+    from knowledge_studio import draft_review
+    digest = __import__("hashlib").sha256(original).hexdigest()
+    receipt = draft_review.read_receipt(tmp_path, "same-revision", digest)
+    assert receipt["decision"] in {"promoted", "rejected"}
+    assert draft.read_bytes() == original
+    assert draft_review.read_original(tmp_path, receipt) == original
+    assert "same-revision" not in {item["slug"] for item in store.list_drafts()}

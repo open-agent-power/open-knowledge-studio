@@ -33,7 +33,7 @@ function restoreKnowledgeNavigation(parts){if(!state.global){state.wikiOrigin=pa
 function renderKnowledgeWorkspaceBar(){
  const bar=e('header','knowledge-workspace-bar'),crumbs=e('nav','knowledge-location');crumbs.setAttribute('aria-label','知识位置');
  const item=wikiItems.find(p=>p.id===state.wiki)||(!state.wiki&&!state.global?wikiItems[0]:null);if(item&&!state.global){state.wiki=item.id;if(!state.wikiOrigin)state.wikiOrigin=KnowledgeNavigation.defaultOrigin(item);state.knowledgeMode=state.wikiOrigin.knowledgeMode;}let origin=state.global?(state.graphTag?knowledgeOrigin(item||{}):null):(state.wikiOrigin||KnowledgeNavigation.defaultOrigin(item||{}));
- crumbs.append(button(state.knowledgeMode==='materials'?'来源资料':state.knowledgeMode==='skills'?'Skills 插拔':'全部知识','text-button',()=>{if(!state.global||state.graphTag)goTagOverview();}));
+ crumbs.append(button(state.knowledgeMode==='materials'?'来源资料':state.knowledgeMode==='skills'?'可复用方法':'全部知识','text-button',()=>{if(!state.global||state.graphTag)goTagOverview();}));
  if(origin){if(origin.knowledgeMode!=='materials')crumbs.append(e('span','location-sep','/'),button(knowledgeScopeLabel(origin),'text-button',()=>{if(!state.global)returnKnowledgeGraph();}));if(!state.global&&item){const title=e('span','location-title',item.title);title.title=item.title;title.setAttribute('aria-current','page');crumbs.append(e('span','location-sep','/'),title);}}
  bar.append(crumbs);
  const filters=origin?Object.entries(origin.fieldFilters).filter(([,value])=>value).map(([key,value])=>(VM.fieldLabels[key]||key)+' '+(value==='__missing'?'未记录':value)):[];if(filters.length)bar.append(e('span','workspace-filter-note','筛选：'+filters.join(' · ')));

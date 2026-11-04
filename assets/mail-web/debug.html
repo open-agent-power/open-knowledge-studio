@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>知识使用 · OKS</title><link rel="icon" href="/favicon.svg"><link rel="stylesheet" href="/tasks.css"><link rel="stylesheet" href="/debug.css"><link rel="stylesheet" href="/workspace-shell.css"><script src="/workspace-shell.js" defer></script><script src="/knowledge-heatmap.js" defer></script><script src="/debug.js" defer></script><link rel="stylesheet" href="/studio-theme.css">
+</head>
+<body>
+<header class="topbar"><a class="brand" href="/">oks<span>.</span></a><button id="refresh" type="button">刷新</button></header>
+<main class="debug-workspace"><div class="debug-content">
+<div class="intro"><div><h1>知识使用</h1><p class="meta">从查到知识，到留下产物。</p></div><p id="debugTask" class="debug-task" hidden></p></div>
+<section id="heatmap" aria-labelledby="heatmapTitle"><div class="section-head"><h2 id="heatmapTitle">知识热力图</h2><label class="heat-search">查找知识<input id="heatSearch" type="search" placeholder="查找知识" aria-label="查找知识"></label></div><p id="heatmapStatus" class="meta" role="status" aria-live="polite">正在读取记录…</p><div id="heatmapGrid" class="heatmap-grid"></div><div class="heatmap-legend"><span>记录少</span><i data-level="1"></i><i data-level="2"></i><i data-level="3"></i><i data-level="4"></i><span>记录多</span><span class="heatmap-note">— 表示未记录。点击格子查看依据。</span></div><div id="heatmapDetail" class="heatmap-detail" aria-live="polite"><p class="meta">选择一个有记录的格子，查看来源和对应任务。</p></div><details class="heatmap-method"><summary>统计口径</summary><p>按来源文件及版本分别统计。查到、Hook 输出、CLI 返回或宿主读取、产物中的明确来源引用/调用者关联分别记数。颜色表示保留记录的数量；读取记录与产物关联不等同于内容验收。宿主读取独立保存，版本在记录时采样，不推断它来自哪一次查询。</p><p>当前最多保留200次查询、每次宿主运行最多100条读取。未开启采集及保留范围外的历史均显示未记录。模型 Token 与完整调用耗时尚未接入。</p></details></section>
+<details id="queryHistory" class="secondary"><summary>查询与上下文详情</summary>
+<section class="summary" aria-label="记录概览"><div><strong id="total">—</strong><span>次查询</span></div><div><strong id="emitted">—</strong><span>次 Hook 输出</span></div><div><strong id="degraded">—</strong><span>次降级 / 实验</span></div></section>
+<section aria-labelledby="recordsTitle"><div class="section-head"><h2 id="recordsTitle">最近查询</h2><span>命中与输出不代表实际执行</span></div>
+<div class="filters"><label>搜索<input id="filter" type="search" placeholder="标题或来源"></label><label>阶段<select id="stage"><option value="">全部阶段</option><option value="retrieved">检索命中</option><option value="hook_emitted">Hook 已输出</option><option value="hook_skipped">Hook 未输出</option></select></label><label>后端<select id="backend"><option value="">全部后端</option><option value="fts5">FTS5 / BM25</option><option value="like">LIKE 降级</option><option value="native">Native 对照</option><option value="fusion">Fusion 实验</option></select></label></div>
+<p id="status" role="status" aria-live="polite">读取中…</p><div id="records"></div></section></details>
+<details class="secondary"><summary>部署记录 <span id="deploymentsCount">—</span></summary><p class="meta">安装回执，不代表已加载或执行。</p><div id="deployments"></div></details>
+<details class="help"><summary>如何留下真实诊断记录</summary><p>单次查询：<code>oks recall "查询内容" --debug-record --format json</code>；Skill 查询：<code>oks skills search "任务" --debug-record</code>。</p><p>Hook：在知识库 <code>settings/recall.yaml</code> 顶层设置 <code>debug_record: true</code>，然后在已安装 Hook 的宿主发起任务。诊断保存在本地 <code>.oks/retrieval-debug.json</code>。记录包含命中标题、来源版本与历史判断，请按本地知识库的隐私要求保管。</p></details>
+<details id="feedback" class="secondary">
+<summary id="feedbackTitle">反馈与学习</summary>
+<p>填写范围后读取私人反馈。内容不会写入上方诊断记录。</p>
+<form id="feedbackForm" class="filters">
+<label>主体<input id="feedbackSubject" required maxlength="120" autocomplete="off" placeholder="例如：demo-user"></label>
+<label>项目<input id="feedbackProject" required maxlength="120" autocomplete="off" placeholder="例如：team-report"></label>
+<label>任务范围<input id="feedbackTask" required maxlength="120" autocomplete="off" placeholder="与任务约定 scope 一致"></label>
+<button type="submit" id="feedbackRead">读取此范围</button><button type="button" id="feedbackClear">清空显示</button>
+</form>
+<p id="feedbackStatus" role="status" aria-live="polite">尚未读取私人反馈。</p><div id="feedbackResults"></div>
+<details class="help"><summary>反馈如何进入学习</summary><p>采用、修改、拒绝和观察分开记录。候选需按准确修订审核；存在冲突、来源过期、反馈已修正或撤回时，不注入后续任务。明确导出后才会进入普通 Draft 审核。</p><p>使用 <code>oks feedback --help</code> 查看显式记录、提议、审核、撤回、导出和删除命令。该面板只读，不执行审核或删除。</p></details>
+</details>
+</div></main>
+</body></html>

@@ -1,0 +1,118 @@
+.doc-layout {
+  display: grid;
+  grid-template-columns: 210px minmax(0, 1fr);
+  gap: 20px;
+}
+.doc-list {
+  max-height: calc(100vh - 160px);
+  overflow: auto;
+}
+.doc-list button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 11px;
+  border-radius: 5px;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.doc-list button.active {
+  background: #eaf0fa;
+  color: #6880ba;
+}
+.document {
+  min-width: 0;
+}
+.paper {
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 13px 8px;
+}
+.outline-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding-top: 9px;
+  padding-bottom: 9px;
+  line-height: 1.8;
+  font-size: 12px;
+}
+.outline-row.heading {
+  font-weight: 600;
+  color: #6c7d9e;
+}
+.outline-row.done .outline-title {
+  color: #a8b2c2;
+  text-decoration: line-through;
+}
+.outline-row input {
+  margin-top: 4px;
+  accent-color: #7d94c9;
+}
+.outline-title {
+  flex: 1;
+  outline: none;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.outline-title:focus {
+  background: #f4f6fc;
+}
+.fold {
+  padding: 0;
+  width: 13px;
+  color: #a0adc1;
+  flex-shrink: 0;
+  font-size: 10px;
+}
+.outline-note {
+  font-size: 11px;
+  color: #98a5ba;
+  line-height: 1.9;
+  padding-top: 5px;
+  padding-bottom: 6px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.outline-note.metadata {
+  font-size: 10px;
+}
+.file-path {
+  font:
+    9px/1.7 ui-monospace,
+    monospace;
+  color: #aab3c4;
+  margin-top: 12px;
+  overflow-wrap: anywhere;
+}
+#editor {
+  width: 100%;
+  height: calc(100vh - 250px);
+  min-height: 280px;
+  resize: vertical;
+  border: 0;
+  outline: none;
+  background: white;
+  padding: 13px;
+  font:
+    12px/1.9 ui-monospace,
+    monospace;
+  color: #7486a2;
+}
+.add-task {
+  display: flex;
+  gap: 7px;
+  padding: 12px 10px;
+  border-top: 1px solid var(--line);
+  margin-top: 8px;
+}
+.add-task input {
+  width: 100%;
+  border: 0;
+  outline: none;
+  font-size: 11px;
+}
+.add-task button {
+  color: var(--accent);
+}

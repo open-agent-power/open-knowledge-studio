@@ -452,7 +452,18 @@ def write_message(
     notify: bool = False,
     session_policy: str = "next_prompt",
     evidence_refs: Any = None,
+    agreement: dict | None = None,
 ) -> dict[str, Any]:
+    encoded_agreement = None
+    if agreement is not None:
+        from knowledge_studio import handoff
+        if kind != "handoff":
+            raise ValueError("An agreement can only be attached to a handoff")
+        encoded_agreement = handoff.encode(agreement)
+        from knowledge_studio.tasks import require_active_scope
+        require_active_scope(root, agreement['scope'])
+        if handoff.check(root, agreement, agreement["scope"])["status"] != "current":
+            raise ValueError("Agreement sources changed; prepare a new reviewed snapshot before delegating")
     sender = str(sender or "human").strip() or "human"
     sender_kind = normalise_sender_kind(sender_kind, sender)
     resolved = resolve_recipients(root, recipients, sender)
@@ -482,6 +493,10 @@ def write_message(
         "session_policy": session_policy if session_policy in {"next_prompt", "wait", "notify"} else "next_prompt",
     }
     title_line = title.strip() or "(no title)"
+    if encoded_agreement is not None:
+        # Mail has a line-oriented frontmatter parser; base64 keeps embedded
+        # YAML delimiters and newlines from truncating the canonical message.
+        meta["handoff_agreement_b64"] = encoded_agreement
     content = _frontmatter(meta) + "\n\n# " + title_line + "\n\n" + str(body).rstrip() + "\n"
     path = canonical_path(root, message_id)
     store._atomic_write(path, content)
@@ -518,6 +533,7 @@ def delegate_message(
     origin_machine_id: str = "",
     notify: bool = False,
     evidence_refs: Any = None,
+    agreement: dict | None = None,
 ) -> dict[str, Any]:
     """Create a human/Agent-friendly handoff using the existing Mail contract.
 
@@ -533,6 +549,9 @@ def delegate_message(
         sections.append(f"## 上下文\n{str(context).strip()}")
     if str(acceptance or "").strip():
         sections.append(f"## 验收条件\n{str(acceptance).strip()}")
+    if agreement is not None:
+        from knowledge_studio.handoff import render
+        sections.append(render(agreement))
     return write_message(
         root,
         body="\n\n".join(sections),
@@ -548,6 +567,7 @@ def delegate_message(
         delivery_reason="handoff",
         notify=notify,
         session_policy="notify" if notify else "next_prompt",
+        agreement=agreement,
     )
 
 

@@ -100,11 +100,10 @@ def load_goals(*, active_only: bool = False) -> list[dict]:
     calls :func:`load_active_goals` and only sees active goals.
     """
     gd = goals_dir()
-    if not gd.exists():
-        return []
-
+    canonical = gd.parent.parent / "goal"
+    paths = sorted(set(gd.rglob("*.md")) | set(canonical.rglob("*.md")))
     goals: list[dict] = []
-    for path in sorted(gd.rglob("*.md")):
+    for path in paths:
         meta = parse_wiki_file(path)
         if not meta:
             continue
@@ -230,7 +229,7 @@ def _atomic_write(path: Path, content: str | bytes) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp = tempfile.mkstemp(dir=str(path.parent), suffix=".tmp", prefix=path.stem)
     try:
-        with os.fdopen(fd, "wb" if isinstance(content, bytes) else "w", **({} if isinstance(content, bytes) else {"encoding": "utf-8"})) as f:
+        with os.fdopen(fd, "wb" if isinstance(content, bytes) else "w", **({} if isinstance(content, bytes) else {"encoding": "utf-8", "newline": ""})) as f:
             f.write(content)
             f.flush()
             os.fsync(f.fileno())
@@ -290,6 +289,11 @@ def parse_wiki_file(path: Path) -> dict | None:
         text = path.read_text(encoding="utf-8")
     except OSError:
         return None
+
+    return _parse_wiki_text(text, path)
+
+
+def _parse_wiki_text(text: str, path: Path) -> dict | None:
 
     if not text.startswith("---"):
         return None
@@ -382,7 +386,8 @@ def compute_quality(meta: dict) -> int:
 
 
 def _fingerprint(content: str) -> str:
-    return hashlib.sha256(content.encode("utf-8")).hexdigest()[:16]
+    canonical = content.replace("\r\n", "\n").replace("\r", "\n")
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:16]
 
 
 def _fingerprint_index_path() -> Path:
@@ -581,7 +586,7 @@ def _merge_worker_records(file_path: Path, incoming: list[dict]) -> None:
 _CANDIDATE_EVIDENCE_FIELDS = (
     "source_url", "source_bundle_id", "source_raw_bundle", "source_article_date",
     "source_capture_id", "agent_observation", "claim_ids", "evidence_refs",
-    "source_candidates",
+    "source_candidates", "workflow_source", "reviewed_source", "workflow_reviews",
 )
 
 
@@ -594,10 +599,20 @@ def _merge_candidate_metadata(current: dict, incoming: dict) -> dict:
         if key == "summary":
             if not isinstance(value, str):
                 raise ValueError("Candidate summary must be a string; candidate retained")
-        elif key in {"claim_ids", "evidence_refs", "source_candidates"}:
+        elif key in {"claim_ids", "evidence_refs", "source_candidates", "workflow_reviews"}:
             if not isinstance(value, list) or not isinstance(current.get(key, []), list):
                 raise ValueError(f"Invalid {key}; candidate retained")
-            value = list(current.get(key, [])) + [item for item in value if item not in current.get(key, [])]
+            existing = list(current.get(key, []))
+            if key == 'workflow_reviews' and not existing and isinstance(current.get('reviewed_source'), dict):
+                existing.append({'workflow_source': current.get('workflow_source'), 'reviewed_source': current['reviewed_source'], 'reviewed_at': current.get('human_reviewed_at')})
+            value = existing + [item for item in value if item not in existing]
+        elif key in {'workflow_source', 'reviewed_source'}:
+            if not isinstance(value, dict):
+                raise ValueError(f'Matching content has conflicting {key}; Draft retained')
+            if current.get(key) not in (None, value):
+                if not isinstance(incoming.get('workflow_reviews'), list):
+                    raise ValueError(f'Matching content has conflicting {key}; Draft retained')
+                value = current[key]  # Old readers keep the first approved origin.
         elif current.get(key) not in (None, "", value):
             raise ValueError(f"Matching content has conflicting {key}; review its sources explicitly; candidate retained")
         merged[key] = value
@@ -629,6 +644,8 @@ def write_wiki_page(
     worker_records: list[dict] | None = None,
     candidate_metadata: dict | None = None,
 ) -> Path:
+    from knowledge_studio.decisions import validate_options
+    validate_options(options)
     candidate_metadata = _merge_candidate_metadata({}, candidate_metadata or {})
     for field, value in (("importance", importance), ("confidence", confidence)):
         if value is not None:
@@ -662,7 +679,7 @@ def write_wiki_page(
                 old = parse_wiki_file(existing) or {}
                 expected_dir = wiki_dir() / area / wiki_type / subdirectory
                 if existing.parent != expected_dir or any(old.get(key) != skill_metadata.get(key)
-                        for key in ("artifact_kind", "skill_id", "skill_version", "skill_category")):
+                        for key in ("artifact_kind", "skill_id", "skill_version", "skill_category", "skill_lineage")):
                     raise ValueError("Skill content matches another Wiki identity; keep classifications distinct")
             if enforce_classification:
                 from knowledge_studio.knowledge_policy import is_source_material, TYPE_DIRS
@@ -672,11 +689,15 @@ def write_wiki_page(
                     raise ValueError("Matching content has a different classification or is source material; candidate retained. Review the existing page explicitly.")
             # Reject conflicting provenance before changing review/score state.
             # Merge only explicit candidate fields, never arbitrary draft state.
-            if candidate_metadata:
+            if candidate_metadata or options is not None:
                 def merge_metadata(text):
                     parts = text.split("---", 2)
                     meta = yaml.safe_load(parts[1]) or {}
+                    if options is not None and meta.get("options") is not None and meta["options"] != options:
+                        raise ValueError("Matching content has conflicting options; candidate retained. Review the existing decisions explicitly.")
                     meta.update(_merge_candidate_metadata(meta, candidate_metadata))
+                    if options is not None:
+                        meta["options"] = options
                     return "---\n" + yaml.safe_dump(meta, allow_unicode=True, sort_keys=False) + "---\n" + parts[2]
                 _locked_atomic_update(existing, merge_metadata)
             # Dedup must not swallow what the caller newly established. A human
@@ -755,7 +776,7 @@ def write_wiki_page(
         "tags": ", ".join(tags) if tags else "",
         "fingerprint": fp,
     }
-    if options:
+    if options is not None:
         frontmatter["options"] = options
     frontmatter.update(candidate_metadata)
     if human_reviewed:
@@ -864,7 +885,18 @@ def list_drafts() -> list[dict]:
         return []
 
     drafts: list[dict] = []
+    from .task_workflow import _promotions, _rejections, candidate_disposition
+    from . import draft_review
+    promotions, rejections = _promotions(repo_root()), _rejections(repo_root())
     for f in sorted(dd.glob("*.md")):
+        relative = f.relative_to(repo_root()).as_posix()
+        try:
+            raw = f.read_bytes()
+        except OSError:
+            continue
+        if (candidate_disposition(repo_root(), relative, raw=raw, promotions=promotions, rejections=rejections)
+                or draft_review.disposition(repo_root(), relative, hashlib.sha256(raw).hexdigest())):
+            continue
         meta = parse_wiki_file(f)
         if not meta:
             continue
@@ -914,15 +946,36 @@ def promote_draft(
     area: str | None = None,
     tags: list[str] | None = None,
     slug_hint: str | None = None,
+    *,
+    expected_sha256: str | None = None,
 ) -> str:
-    # Serialize Skill review with import/load/compaction. Ordinary draft behavior
-    # is unchanged. Re-read the draft inside the lock before committing a review.
-    meta = parse_wiki_file(_draft_path(slug)) or {}
-    if meta.get("artifact_kind") == "skill":
-        from knowledge_studio.skills import _inside, _root
-        with _file_lock(_inside(_root(), ".oks/locks/skills.lock")):
-            return _promote_draft(slug, title, wiki_type, area, tags, slug_hint)
-    return _promote_draft(slug, title, wiki_type, area, tags, slug_hint)
+    from . import draft_review
+    draft_review._safe_slug(slug)
+    if expected_sha256 is not None and (not isinstance(expected_sha256, str)
+            or not re.fullmatch(r'[0-9a-f]{64}', expected_sha256)):
+        raise ValueError('Read the exact Draft revision before promotion')
+    # CLI and exact-revision reviews share one slug lock and immutable input.
+    with draft_review.review_lock(repo_root(), slug):
+        snapshot = draft_review.capture(repo_root(), slug)
+        if expected_sha256 is not None and snapshot['sha256'] != expected_sha256:
+            raise ValueError('Draft changed; read it again before promotion')
+        if draft_review.disposition(repo_root(), snapshot['relative'], snapshot['sha256']):
+            raise ValueError('Draft revision already reviewed; edit it before another decision')
+        return _reviewed_promotion(slug, title, wiki_type, area, tags, slug_hint,
+                                   snapshot['text'], snapshot['raw'])
+
+
+def _reviewed_promotion(slug, title, wiki_type, area, tags, slug_hint, reviewed_text=None, reviewed_bytes=None):
+    from knowledge_studio.feedback import export_guard
+    snapshot_meta = _parse_wiki_text(reviewed_text, _draft_path(slug)) if reviewed_text is not None else None
+    with export_guard(repo_root(), _draft_path(slug), reviewed_meta=snapshot_meta):
+        # Re-read under the feedback guard; Skill review keeps its existing lock.
+        meta = snapshot_meta if snapshot_meta is not None else parse_wiki_file(_draft_path(slug)) or {}
+        if meta.get("artifact_kind") == "skill":
+            from knowledge_studio.skills import _inside, _root
+            with _file_lock(_inside(_root(), ".oks/locks/skills.lock")):
+                return _promote_draft(slug, title, wiki_type, area, tags, slug_hint, reviewed_text=reviewed_text, reviewed_bytes=reviewed_bytes)
+        return _promote_draft(slug, title, wiki_type, area, tags, slug_hint, reviewed_text=reviewed_text, reviewed_bytes=reviewed_bytes)
 
 
 def _promote_draft(
@@ -932,12 +985,18 @@ def _promote_draft(
     area: str | None = None,
     tags: list[str] | None = None,
     slug_hint: str | None = None,
+    *,
+    reviewed_text: str | None = None,
+    reviewed_bytes: bytes | None = None,
 ) -> str:
     draft_path = _draft_path(slug)
     if not draft_path.exists():
         raise FileNotFoundError(f"Draft not found: {slug}")
 
-    meta = parse_wiki_file(draft_path)
+    if reviewed_text is None:
+        reviewed_bytes = draft_path.read_bytes()
+        reviewed_text = reviewed_bytes.decode('utf-8-sig')
+    meta = _parse_wiki_text(reviewed_text, draft_path)
     if not meta:
         raise ValueError(
             f"Draft '{slug}' has no valid YAML frontmatter. "
@@ -945,12 +1004,29 @@ def _promote_draft(
         )
     if meta.get("status") == "rejected":
         raise ValueError(f"Draft '{slug}' was explicitly rejected and cannot be promoted.")
+    if re.fullmatch(r'daily-learning-[0-9a-f]{28}', slug) and not meta.get('daily_sources'):
+        raise ValueError('Daily learning sources missing; Draft retained')
+    if meta.get('daily_sources'):
+        from .daily_learning import validate_sources
+        validate_sources(repo_root(), meta)
     body = meta.get("body", "")
     if not body.strip():
         raise ValueError(
             f"Draft '{slug}' has empty body. "
             f"Refusing to promote a draft with no content — check Candidate generation."
         )
+    if re.fullmatch(r'task-learning-[0-9a-f]{28}', slug) and not isinstance(meta.get('workflow_source'), dict):
+        raise ValueError('Task learning source markers missing; Draft retained')
+    if meta.get('workflow_source'):
+        from knowledge_studio.task_workflow import require_current_draft, preserve_review, candidate_disposition
+        disposition = candidate_disposition(repo_root(), draft_path.relative_to(repo_root()).as_posix(), reviewed_bytes)
+        if disposition == 'not_proposed':
+            raise ValueError('No proposed learning content; original record retained')
+        if disposition is not None:
+            raise ValueError('Draft already reviewed; original evidence retained')
+        require_current_draft(repo_root(), reviewed_text)
+        meta['reviewed_source'] = preserve_review(repo_root(), draft_path.relative_to(repo_root()).as_posix(), reviewed_bytes if reviewed_bytes is not None else reviewed_text.encode('utf-8'))
+        meta['workflow_reviews'] = [{'workflow_source': meta['workflow_source'], 'reviewed_source': meta['reviewed_source'], 'reviewed_at': datetime.now(UTC).isoformat()}]
 
     final_title = title or meta.get("title", slug)
     from knowledge_studio.knowledge_policy import is_source_material, validate_classification
@@ -967,7 +1043,12 @@ def _promote_draft(
     if meta.get("artifact_kind") == "skill":
         if final_area != "skills":
             raise ValueError("Skill knowledge belongs under the independent skills area")
-        from knowledge_studio.skills import entries
+        from knowledge_studio.skills import entries, validate_skill_instruction_body
+        validate_skill_instruction_body(meta, body, root=repo_root())
+        lineage = meta.get("skill_lineage")
+        if isinstance(lineage, dict) and isinstance(lineage.get("parents"), list) and len(lineage["parents"]) == 2:
+            from knowledge_studio.skills import validate_skill_merge_parents
+            validate_skill_merge_parents(repo_root(), lineage)
         # Several candidates may have been imported against the same old version.
         # Link to the active reviewed baseline at approval time, not import time.
         canonical_type = {"concepts": "concept", "strategies": "strategy", "anti-patterns": "anti-pattern"}[final_type]
@@ -993,6 +1074,20 @@ def _promote_draft(
     if not isinstance(draft_tags, list):
         draft_tags = []
 
+    if not meta.get('workflow_source'):
+        # Preserve exact review evidence before writing Wiki. If the canonical
+        # Draft decision receipt later fails, the reviewed Wiki metadata and
+        # this content-addressed original together recover the decision.
+        from . import draft_review
+        raw_for_review = reviewed_bytes if reviewed_bytes is not None else reviewed_text.encode('utf-8')
+        review_proof = draft_review.preserve_original(
+            repo_root(), draft_path.relative_to(repo_root()).as_posix(), raw_for_review)
+        meta['workflow_reviews'] = [{
+            'workflow_source': None,
+            'reviewed_source': review_proof,
+            'reviewed_at': datetime.now(UTC).isoformat(),
+        }]
+
     path = write_wiki_page(
         title=final_title,
         content=body,
@@ -1003,6 +1098,7 @@ def _promote_draft(
         confidence=meta.get("confidence"),
         default_importance=0.7,
         tags=tags if tags is not None else draft_tags,
+        options=meta.get("options"),
         traces=meta.get("traces") if isinstance(meta.get("traces"), list) else None,
         review=meta.get("review") if isinstance(meta.get("review"), dict) else None,
         human_note=human_note,
@@ -1023,35 +1119,75 @@ def _promote_draft(
                             "source_candidates": [draft_path.relative_to(repo_root()).as_posix()]},
     )
 
-    draft_path.unlink()
+    if meta.get('workflow_source'):
+        # An external editor need not honor our lock. Do not unlink a shared
+        # path after checking it: a concurrent edit could otherwise be lost.
+        # Exact reviewed bytes are excluded from pending projections; any new
+        # bytes at this path remain a separate, unapproved revision.
+        return path.stem
+    from . import draft_review
+    raw = reviewed_bytes if reviewed_bytes is not None else reviewed_text.encode('utf-8')
+    draft_review.record_decision(repo_root(), slug, raw, 'promoted',
+                                 wiki_path=path.relative_to(repo_root()).as_posix())
     return path.stem
 
 
-def reject_draft(slug: str) -> Path:
-    dd = drafts_dir()
-    draft_path = _draft_path(slug)
-    if not draft_path.exists():
-        raise FileNotFoundError(f"Draft not found: {slug}")
-
-    draft_content = draft_path.read_text(encoding="utf-8")
-    draft_meta = parse_wiki_file(draft_path) or {}
-    decided_at = datetime.now(UTC).isoformat()
-    receipt = {
-        "decision": "rejected",
-        "decided_at": decided_at,
-        "draft_slug": slug,
-        "draft_title": draft_meta.get("title", slug),
-        "draft_path": str(draft_path.relative_to(repo_root())),
-        "draft_sha256": hashlib.sha256(draft_content.encode("utf-8")).hexdigest(),
-    }
-    receipt_name = (
-        f"{datetime.now(UTC).strftime('%Y%m%dT%H%M%S%fZ')}-"
-        f"{slug}-{uuid.uuid4().hex[:12]}.json"
-    )
-    receipt_path = dd / "rejected" / receipt_name
-    _atomic_write(receipt_path, json.dumps(receipt, ensure_ascii=False, indent=2) + "\n")
-    draft_path.unlink()
-    return receipt_path
+def reject_draft(slug: str, *, expected_sha256: str | None = None) -> Path:
+    from . import draft_review
+    draft_review._safe_slug(slug)
+    if expected_sha256 is not None and (not isinstance(expected_sha256, str)
+            or not re.fullmatch(r'[0-9a-f]{64}', expected_sha256)):
+        raise ValueError('Read the exact Draft revision before rejection')
+    root = repo_root()
+    with draft_review.review_lock(root, slug):
+        snapshot = draft_review.capture(root, slug)
+        if expected_sha256 is not None and snapshot['sha256'] != expected_sha256:
+            raise ValueError('Draft changed; read it again before rejection')
+        is_task_learning = bool(re.fullmatch(r'task-learning-[0-9a-f]{28}', slug))
+        if is_task_learning:
+            from .task_workflow import candidate_disposition
+            disposition = candidate_disposition(root, snapshot['relative'], snapshot['raw'])
+            if disposition == 'not_proposed':
+                raise ValueError('No proposed learning content; original record retained')
+            if disposition:
+                raise ValueError('Draft already reviewed; original evidence retained')
+            draft_meta = _parse_wiki_text(snapshot['text'], snapshot['path']) or {}
+            task_receipt = {
+                "decision": "rejected",
+                "decided_at": datetime.now(UTC).isoformat(),
+                "draft_slug": slug,
+                "draft_title": draft_meta.get("title", slug),
+                "draft_path": snapshot['relative'],
+                "draft_sha256": hashlib.sha256(snapshot['text'].replace('\r\n', '\n').replace('\r', '\n').encode('utf-8')).hexdigest(),
+                "draft_bytes_sha256": snapshot['sha256'],
+            }
+            receipt_name = (f"{datetime.now(UTC).strftime('%Y%m%dT%H%M%S%fZ')}-"
+                            f"{slug}-{uuid.uuid4().hex[:12]}.json")
+            receipt_path = drafts_dir() / "rejected" / receipt_name
+            _atomic_write(receipt_path, json.dumps(task_receipt, ensure_ascii=False, indent=2) + "\n")
+            return receipt_path
+        if draft_review.disposition(root, snapshot['relative'], snapshot['sha256']):
+            raise ValueError('Draft revision already reviewed; edit it before another decision')
+        draft_meta = _parse_wiki_text(snapshot['text'], snapshot['path']) or {}
+        original = draft_review.preserve_original(root, snapshot['relative'], snapshot['raw'])
+        draft_content = snapshot['text'].replace('\r\n', '\n').replace('\r', '\n')
+        receipt = {
+            "decision": "rejected",
+            "decided_at": datetime.now(UTC).isoformat(),
+            "draft_slug": slug,
+            "draft_title": draft_meta.get("title", slug),
+            "draft_path": snapshot['relative'],
+            "draft_sha256": hashlib.sha256(draft_content.encode('utf-8')).hexdigest(),
+            "draft_bytes_sha256": snapshot['sha256'],
+            "original": original,
+        }
+        receipt_name = (f"{datetime.now(UTC).strftime('%Y%m%dT%H%M%S%fZ')}-"
+                        f"{slug}-{uuid.uuid4().hex[:12]}.json")
+        receipt_path = drafts_dir() / "rejected" / receipt_name
+        record = draft_review.record_decision(root, slug, snapshot['raw'], 'rejected')
+        receipt["decided_at"] = record["decided_at"]
+        _atomic_write(receipt_path, json.dumps(receipt, ensure_ascii=False, indent=2) + "\n")
+        return receipt_path
 
 
 def wiki_digest(config: dict | None = None) -> dict:

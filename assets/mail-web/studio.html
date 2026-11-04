@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>OKS</title>
+    <link rel="icon" href="/favicon.svg" />
+    <link rel="stylesheet" href="/studio.css" />
+    <link rel="stylesheet" href="/studio/graph.css" />
+    <link rel="stylesheet" href="/studio/goals.css" />
+    <link rel="stylesheet" href="/studio/learning.css" />
+    <link rel="stylesheet" href="/studio/evaluation.css" />
+    <link rel="stylesheet" href="/vendor/katex/katex.min.css" />
+    <script src="/vendor/katex/katex.min.js" defer></script>
+    <script src="/graph-labels.js" defer></script>
+<script src="/force-layout.js" defer></script>
+    <script src="/studio-model.js" defer></script>
+    <script src="/workspace-ui.js" defer></script>
+    <script type="module" src="/studio.js"></script>
+    <link rel="stylesheet" href="/studio-theme.css" />
+  </head>
+  <body>
+    <a class="skip" href="#content">跳到内容</a>
+    <header class="studio-header">
+      <a class="brand" href="/">oks.</a>
+      <nav aria-label="主导航">
+        <button data-tab="discuss" aria-current="page">讨论</button
+        ><button data-tab="goals">目标</button
+        ><button data-tab="learning">学习</button>
+      </nav>
+      <span id="instance"></span>
+    </header>
+    <main>
+      <div id="scopeBar">
+        <label for="scope">日期</label
+        ><select id="scope" aria-label="目标文件范围">
+          <option value="">选择文件或文件夹</option></select
+        ><button
+          id="newGoal"
+          title="新增目标 Markdown"
+          aria-label="新增目标 Markdown"
+        >
+          ＋</button
+        ><span id="status" role="status" aria-live="polite"></span>
+      </div>
+      <section id="content" tabindex="-1"></section>
+    </main>
+    <dialog id="fileDialog">
+      <header>
+        <span id="fileTitle"></span
+        ><button id="closeFile" aria-label="关闭文件">×</button>
+      </header>
+      <pre id="fileText"></pre>
+    </dialog>
+    <dialog id="newDialog">
+      <form id="newForm">
+        <header>
+          新增文档<button type="button" id="closeNew" aria-label="关闭">
+            ×
+          </button>
+        </header>
+        <label for="newPath">文件路径</label
+        ><input
+          id="newPath"
+          required
+          placeholder="goal/项目/目标.md"
+          maxlength="300"
+        /><label for="newText">Markdown</label
+        ><textarea id="newText" required rows="9"></textarea>
+        <p id="newError" role="alert"></p>
+        <button type="submit">创建</button>
+      </form>
+    </dialog>
+  </body>
+</html>

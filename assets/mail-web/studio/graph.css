@@ -1,0 +1,104 @@
+.graph-stage {
+  height: calc(100vh - 183px);
+  min-height: 360px;
+  position: relative;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  overflow: hidden;
+  background: radial-gradient(#e0e5ef 0.6px, transparent 0.6px);
+  background-size: 19px 19px;
+}
+.graph-stage svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+}
+.studio-node {
+  cursor: grab;
+  outline: none;
+}
+.studio-node:focus circle {
+  stroke: #506cac;
+  stroke-width: 2;
+}
+.studio-node text {
+  fill: #8795ac;
+  font-size: 10px;
+  pointer-events: auto;
+  cursor: pointer;
+}
+.edge-label {
+  fill: #aeb9ca;
+  font-size: 8px;
+  pointer-events: none;
+}
+.graph-tools,
+.replay-tools {
+  position: absolute;
+  bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  background: #ffffffed;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 7px 10px;
+  color: #91a0bb;
+  font-size: 10px;
+}
+.graph-tools {
+  right: 12px;
+}
+.replay-tools {
+  left: 12px;
+}
+.replay-tools input {
+  width: 95px;
+  accent-color: #8a9dcc;
+}
+.replay-tools select {
+  background: none;
+  border: 0;
+  font-size: 10px;
+}
+.graph-note {
+  position: absolute;
+  top: 13px;
+  left: 15px;
+  color: #a6b1c2;
+  font-size: 9px;
+}
+.graph-detail {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  background: #fffffff2;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 13px;
+  max-width: 320px;
+  line-height: 1.8;
+}
+.graph-detail p {
+  margin: 5px 0;
+  font-size: 12px;
+}
+.graph-detail code {
+  display: block;
+  font-size: 9px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.graph-detail button {
+  margin-top: 7px;
+  font-size: 10px;
+  color: var(--accent);
+}
+.legend {
+  display: flex;
+  gap: 17px;
+  margin-top: 11px;
+  font-size: 10px;
+  color: #9ba8bd;
+}

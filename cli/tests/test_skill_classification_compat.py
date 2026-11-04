@@ -1,7 +1,8 @@
 """Strict knowledge classification must retain reviewed Skill promotion."""
 import pytest
+import hashlib
 
-from knowledge_studio import skills, store
+from knowledge_studio import skills, store, draft_review
 from knowledge_studio.knowledge_policy import validate_classification
 
 
@@ -28,9 +29,14 @@ def test_imported_skill_keeps_review_and_independent_classification(tmp_path, mo
     imported = skills.import_skill(source, category="knowledge/retrieval")
     candidate = imported["entry"]["slug"]
     assert not list((root / "wiki").rglob("*.md"))
+    candidate_path = root / "drafts" / f"{candidate}.md"
+    original = candidate_path.read_bytes()
     slug = store.promote_draft(candidate)
     page = store.get_wiki_page(slug)
     assert page["area"] == "skills"
     assert page["artifact_kind"] == "skill"
     assert page["human_reviewed_at"]
-    assert not (root / "drafts" / f"{candidate}.md").exists()
+    assert candidate_path.read_bytes() == original
+    receipt = draft_review.read_receipt(root, candidate, hashlib.sha256(original).hexdigest())
+    assert receipt["decision"] == "promoted"
+    assert draft_review.read_original(root, receipt) == original
