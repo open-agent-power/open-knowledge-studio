@@ -1,284 +1,125 @@
-// ===== 内容区左对齐、紧贴导航、占满右侧（参考 nowledge）=====
-@media (min-width: 66.5rem) {
-  .side-bar {
-    width: $nav-width !important;
-  }
-  .side-bar + .main {
-    margin-left: $nav-width !important;
-  }
-  .main {
-    max-width: none !important;
-    margin: 0 !important;
-  }
-}
-
-// ===== side-bar 子项撑满宽度（默认 align-items:flex-end 会导致搜索框缩小、按钮溢出）=====
-@media (min-width: 66.5rem) {
-  .side-bar .site-header,
-  .side-bar .search,
-  .side-bar .site-nav,
-  .side-bar .site-footer {
-    width: 100% !important;
-    max-width: 100% !important;
-    align-self: stretch !important;
-  }
-}
-.side-bar .site-header {
-  justify-content: space-between !important;
-  padding: 0 0.75rem !important;
-  min-height: 3rem !important;
-}
-
-// ===== 导航分组可独立展开；展开状态会跨页面保留 =====
-.nav-list > .nav-list-item > .nav-list-link {
-  color: #2c2c2c !important;
-  font-weight: 700 !important;
-}
-.nav-list .nav-list .nav-list-link {
-  color: #7a7a7a !important;
-}
-
-.site-title {
-  white-space: nowrap !important;
-  font-size: 1rem !important;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.breadcrumb-nav {
-  display: none !important;
-}
-.main-header {
-  display: none !important;
-}
-
-// ===== 正文排版（参考 nowledge）=====
-body,
-.main-content {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-    "PingFang SC", "Microsoft YaHei", "Noto Sans SC", "Helvetica Neue", Arial,
-    sans-serif;
+// Reading layout: native Just the Docs navigation and search, with a quiet blue accent.
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Microsoft YaHei", "Noto Sans SC", sans-serif;
   color: #334155;
-  font-size: 1rem;
-  line-height: 1.75;
-}
-h1, h2, h3, h4, h5, h6 { color: #0f172a; }
-h1 { font-size: 2rem; font-weight: 600; }
-h2 { font-size: 1.5rem; font-weight: 500; }
-h3 { font-size: 1.25rem; font-weight: 500; }
-h4 { font-weight: 500; }
-.main-content a { color: #1d4ed8; }
-.main-content a:hover { color: #1e3a8a; }
-
-// ===== Mermaid diagrams =====
-.oks-mermaid {
-  max-width: 100%;
-  overflow-x: auto;
-  padding: 0.75rem 0;
-  text-align: center;
-}
-.oks-mermaid svg {
-  max-width: 100%;
-  height: auto;
 }
 
-.main-content-wrap {
-  padding-top: 1rem !important;
+.side-bar .site-title { font-size: 1rem !important; font-weight: 600; }
+.site-nav .nav-list .nav-list-item .nav-list-link { color: #475569; }
+.site-nav .nav-list .nav-list-item .nav-list-link.active { color: #1759a8; }
+.site-nav .nav-list .nav-list-expander { color: #1759a8; }
+.aux-nav .site-button, .site-footer a { color: #1759a8; }
+.site-footer { color: #64748b; }
+.main-content-wrap { padding: 2rem 2rem 3rem; max-width: 54rem; }
+.main-content { font-size: 1rem; line-height: 1.85; }
+.main-content h1, .main-content h2, .main-content h3 { color: #172b43; }
+.main-content h1 { font-size: 2rem; line-height: 1.4; font-weight: 650; }
+.main-content h2 { margin-top: 2.5rem; font-size: 1.35rem; font-weight: 600; }
+.main-content h3 { font-size: 1.1rem; font-weight: 600; }
+.main-content a { color: #1759a8; text-underline-offset: 0.2em; }
+.main-content .btn-primary { color: #fff; background: #1759a8; box-shadow: none; }
+.main-content .btn-primary:hover { background: #104884; }
+.main-content table { box-shadow: none; font-size: 0.9rem; }
+.main-content th { background: #f4f6f9; }
+.main-content blockquote { border-left-width: 1px; }
+.main-content .note, .main-content .important, .main-content .warning {
+  border-left-width: 1px;
+  box-shadow: none;
 }
+.main-content details { margin: 1.5rem 0; }
+.main-content summary { color: #1759a8; cursor: pointer; }
+.main-content figure { margin: 1.5rem 0; }
+.main-content figcaption { margin-top: 0.65rem; color: #475569; font-size: 0.875rem; }
+.main-content img { max-width: 100%; height: auto; }
+.main-content .oks-intro { padding: 0.5rem 0 2rem; border-bottom: 1px solid #dde4ed; }
+.main-content .oks-intro h1 { margin: 0 0 1.25rem; font-size: clamp(1.8rem, 3vw, 2.7rem); line-height: 1.4; letter-spacing: -0.025em; }
+.oks-lead { max-width: 43rem; color: #475569; font-size: 1.1rem; }
+.oks-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 1rem 1.5rem; margin-top: 1.75rem; }
+.oks-actions .btn { min-height: 2.75rem; display: inline-flex; align-items: center; padding: 0.5rem 1.25rem; }
+.oks-actions > a:not(.btn) { font-size: 0.9rem; }
 
-// ===== Task-first landing page =====
-.main-content {
-  max-width: 72rem;
-}
-
-.oks-hero {
-  margin: 0 0 3rem;
-  padding: 3.5rem 3.25rem;
-  border: 1px solid #dbe4f0;
-  border-radius: 1rem;
-  background:
-    radial-gradient(circle at 88% 12%, rgba(37, 99, 235, 0.14), transparent 34%),
-    linear-gradient(145deg, #f8fbff 0%, #ffffff 68%);
-}
-
-.oks-hero h1 {
-  max-width: 12ch;
-  margin: 0 0 1rem;
-  font-size: clamp(2.4rem, 6vw, 4.5rem);
-  line-height: 1.04;
-  letter-spacing: -0.04em;
-  font-weight: 700;
-}
-
-.oks-eyebrow {
-  margin-bottom: 1rem;
-  color: #2563eb;
-  font-size: 0.76rem;
-  font-weight: 700;
-  letter-spacing: 0.16em;
-}
-
-.oks-lead {
-  max-width: 42rem;
-  color: #475569;
-  font-size: 1.2rem;
-  line-height: 1.75;
-}
-
-.oks-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-  margin-top: 1.75rem;
-}
-
-.oks-actions .btn {
-  min-height: 2.75rem;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.oks-card-grid {
+// A text diagram reflows at phone widths, so its labels never scale down.
+.main-content .oks-cycle {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 1rem;
-  margin: 1.5rem 0 2.5rem;
-}
-
-.oks-card {
-  padding: 1.25rem 1.35rem;
-  border: 1px solid #e2e8f0;
-  border-radius: 0.75rem;
-  background: #ffffff;
-}
-
-.oks-card h3 {
-  margin-top: 0;
-  font-size: 1.05rem;
-  font-weight: 650;
-}
-
-.oks-card p {
-  margin-bottom: 0;
-  color: #64748b;
-  font-size: 0.94rem;
-}
-
-.oks-proof-strip {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 0.75rem;
-  margin: -1.5rem 0 2.5rem;
-  padding: 0.85rem 1rem;
-  border: 1px solid #dbe4f0;
-  border-radius: 0.75rem;
-  background: #f8fafc;
+  padding: 0;
+  margin: 1.75rem 0;
+  list-style: none;
 }
-
-.oks-proof-strip div {
-  display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
-  padding: 0.2rem 0.75rem;
-  border-left: 2px solid #2563eb;
+.main-content .oks-cycle > li {
+  position: relative;
+  margin: 0;
+  padding: 0.85rem 0.65rem;
+  border-top: 2px solid #cbd5e1;
+  background: #f3f6fa;
 }
-
-.oks-proof-strip strong {
-  color: #0f172a;
-  font-size: 0.94rem;
+.main-content .oks-cycle > li::before { display: none; }
+.oks-cycle strong { display: block; color: #172b43; font-size: 0.95rem; }
+.oks-cycle span { display: block; margin-top: 0.35rem; color: #475569; font-size: 0.8125rem; line-height: 1.6; }
+.main-content .oks-cycle > .oks-cycle-review { border-top-color: #1759a8; background: #eaf2fc; }
+.oks-cycle > li + li::after {
+  content: "";
+  position: absolute;
+  top: 1.2rem;
+  left: -0.65rem;
+  width: 0.35rem;
+  height: 0.35rem;
+  border-top: 1px solid #64748b;
+  border-right: 1px solid #64748b;
+  transform: rotate(45deg);
 }
+.oks-architecture { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1.5rem; margin: 1.5rem 0; }
+.oks-architecture > div { padding-top: 0.75rem; border-top: 1px solid #cbd5e1; }
+.main-content .oks-architecture h3 { margin-top: 0; }
+.oks-architecture p { margin-bottom: 0; color: #475569; font-size: 0.9rem; }
 
-.oks-proof-strip span {
-  color: #64748b;
-  font-size: 0.84rem;
-  line-height: 1.45;
+// Show the relevant panel in existing evidence; the original remains one click away.
+.oks-evidence-viewport { overflow: hidden; border: 1px solid #dde4ed; }
+.oks-evidence-panel .oks-evidence-viewport { max-width: 30rem; }
+.oks-evidence-panel .oks-evidence-viewport img { display: block; width: 280%; max-width: none; margin-left: -180%; }
+.oks-mermaid { overflow-x: auto; padding: 1rem 0; }
+.oks-mermaid svg { min-width: 38rem; max-width: 100%; height: auto; }
+.toc-right { display: none; }
+.oks-footer { color: #64748b; font-size: 0.8rem; }
+
+@media (min-width: 66.5rem) {
+  .side-bar { width: 16rem; min-width: 16rem; }
+  .side-bar + .main { margin-left: 16rem; max-width: none; }
+  .side-bar .site-header, .side-bar .site-nav, .side-bar .site-footer { width: 100%; }
 }
-
-.main-content img {
-  border: 1px solid #e2e8f0;
-  border-radius: 0.6rem;
+@media (min-width: 84rem) {
+  .main-content-wrap { margin-right: 14rem; }
+  .toc-right {
+    display: block;
+    position: fixed;
+    top: 6rem;
+    right: 1.5rem;
+    width: 12rem;
+    max-height: calc(100vh - 8rem);
+    overflow-y: auto;
+    border-left: 1px solid #dde4ed;
+    padding-left: 1rem;
+    font-size: 0.8rem;
+    line-height: 1.7;
+  }
+  .toc-right-title { margin-bottom: 0.65rem; color: #334155; font-weight: 600; }
+  .toc-right ul { padding: 0; margin: 0; list-style: none; }
+  .toc-right li { margin: 0.4rem 0; }
+  .toc-right a { color: #475569; text-decoration: none; }
+  .toc-right a:hover { color: #1759a8; text-decoration: underline; }
 }
-
 @media (max-width: 50rem) {
-  .oks-hero {
-    padding: 2.25rem 1.35rem;
-    border-radius: 0.75rem;
-  }
-
-  .oks-lead {
-    font-size: 1.05rem;
-  }
-
-  .oks-actions {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .oks-actions .btn {
-    width: 100%;
-  }
-
-  .oks-card-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .oks-proof-strip {
-    grid-template-columns: 1fr;
-    margin-top: -1rem;
-  }
-}
-
-// ===== side-bar 内搜索框（修正默认 flex-grow:1/height:4rem + box-sizing）=====
-.side-bar .search {
-  flex-grow: 0 !important;
-  height: auto !important;
-  width: 100% !important;
-  box-sizing: border-box !important;
-  padding: 0.4rem 1.25rem !important;
-  margin: 0 !important;
-}
-.side-bar .search-input-wrap {
-  box-sizing: border-box !important;
-  height: 2.125rem !important;
-  box-shadow: none !important;
-  border: 1px solid #e2e8f0 !important;
-  background: #f8fafc;
-  border-radius: 0.375rem;
-}
-
-// ===== Just the Docs 原生 Menu 按钮负责移动端导航 =====
-.side-bar {
-  transition: transform 0.2s ease;
-}
-
-// ===== 右侧 "On this page" TOC =====
-.toc-right {
-  display: none;
-  position: fixed;
-  top: 5rem;
-  right: 1.5rem;
-  width: 13rem;
-  max-height: calc(100vh - 8rem);
-  overflow-y: auto;
-  font-size: 0.8rem;
-  color: #64748b;
-  border-left: 2px solid #e2e8f0;
-  padding-left: 0.75rem;
-}
-.toc-right-title {
-  font-weight: 600;
-  color: #334155;
-  margin-bottom: 0.5rem;
-  font-size: 0.72rem;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-.toc-right ul { list-style: none; padding: 0; margin: 0; }
-.toc-right li { margin: 0.2rem 0; }
-.toc-right a { color: #64748b; text-decoration: none; display: block; }
-.toc-right a:hover { color: #1d4ed8; }
-@media (min-width: 75rem) {
-  .toc-right { display: block; }
-  .main-content { padding-right: 15rem; }
+  .main-content-wrap { padding: 1.5rem 1.25rem 2rem; }
+  .main-content h1 { font-size: 1.75rem; }
+  .main-content .oks-intro h1 { font-size: 1.8rem; }
+  .oks-lead { font-size: 1rem; }
+  .oks-actions { align-items: flex-start; flex-direction: column; }
+  .main-content .oks-cycle { grid-template-columns: 1fr; gap: 0.75rem; }
+  .main-content .oks-cycle > li { display: flex; align-items: center; gap: 1rem; padding: 0.75rem 1rem; }
+  .oks-cycle strong { flex: 0 0 5rem; }
+  .oks-cycle span { margin: 0; font-size: 0.875rem; }
+  .oks-cycle > li + li::after { top: -0.65rem; left: 2rem; transform: rotate(135deg); }
+  .oks-architecture { grid-template-columns: 1fr; gap: 1rem; }
 }

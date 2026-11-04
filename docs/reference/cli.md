@@ -1,7 +1,7 @@
 ---
 title: CLI
 nav_order: 1
-parent: 参考
+parent: 参考手册
 ---
 # CLI 参考
 

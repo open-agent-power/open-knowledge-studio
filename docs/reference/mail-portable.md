@@ -1,7 +1,7 @@
 ---
 title: 通用 Mail 接入
 nav_order: 6
-parent: 参考
+parent: 参考手册
 ---
 
 # 通用 Mail 接入

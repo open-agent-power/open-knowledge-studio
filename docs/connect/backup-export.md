@@ -1,13 +1,13 @@
 ---
 title: 备份与导出
-nav_order: 4
-parent: 参考
+nav_order: 6
+parent: 日常任务
 ---
 # 备份与导出
 
 ## git（主机制）
 
-OKS 实例用 git 跟踪记忆——`git push` / `git pull` 就是多设备同步 + 备份 + 版本。没有数据库，git 是迁移。
+独立知识库实例用 Git 保存材料、知识和修改历史。先检查本地变更并提交，需要远端备份或多设备交换时，再按你的仓库流程同步。知识库没有需要单独迁移的核心数据库，召回索引可从知识文件重建。
 
 ## OKF 导出
 
@@ -23,4 +23,4 @@ oks wiki export --format markdown --output <dir>  # Obsidian [[wikilink]]
 
 A4 关系（`relates_to` + `relationship`）改写成正文链接。生成 per-type `index.md` + 顶层 `index.md` + `log.md`（OKF reserved files）。
 
-这是快照，不是双向同步——外部工具的改动不会流回。
+导出结果是快照。外部工具的改动不会自动写回 OKS。

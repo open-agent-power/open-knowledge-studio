@@ -1,10 +1,10 @@
 ---
-title: 导入已有对话
+title: 导入对话
 nav_order: 4
-parent: 从这里开始
+parent: 日常任务
 ---
 
-# 导入已有对话
+# 导入对话
 
 不要把全部聊天记录一次性转成长期知识。先保存原文，再让 AI 提出 Candidate，最后由人决定哪些内容值得复用。
 
@@ -52,4 +52,4 @@ parent: 从这里开始
 - 删除凭据前保留必要的来源位置，不保留秘密本身；
 - 相同主题优先补充现有知识，不创建平行页面。
 
-导入后进入[审核候选](usage/review.html)，再通过[召回与注入](usage/recall.html)验证结果。
+导入后进入[审核知识](usage/review.html)，再通过[召回知识](usage/recall.html)验证结果。

@@ -1,31 +1,29 @@
 ---
-title: Goal 与 Profile
-nav_order: 6
-parent: 指南
+title: 背景与目标
+nav_order: 5
+parent: 日常任务
 ---
 
-# Goal 与 Profile
+# 背景与目标
 
-知识越多，不代表 Agent 越懂你。Profile 说明稳定背景，Goal 说明当前方向；两者共同限制 Agent 应该关注什么。
+Profile 保存稳定背景，Goal 保存当前工作方向。先告诉 Agent 你在做什么，再补充确实需要长期保留的约束。
 
-## Profile 保存什么
+## 设置稳定背景
 
-- `profiles/team.md`：团队身份、职责和协作方式；
-- `profiles/users/`：用户偏好与长期约束；
-- `profiles/projects/`：项目背景和不随单次任务变化的事实；
-- `profiles/recipes/`：重复工作的方法；
-- `profiles/goals/`：当前目标和验收边界。
-- `profiles/agents/<id>.md`：团队共享的 Agent 角色档案（职责、范围、输入输出约定）。
-- `profiles/agents/registry.jsonl`：本机 Agent 与知识库的 binding/运行登记，不是团队成员名册，
-  不应因为本机观察到 heartbeat 就改成“在线”。
+向 Agent 说明用户偏好、项目事实和重复工作方法，并要求保存前展示拟写内容。
 
-不要把临时聊天、未经验证的推断或密钥放进 Profile。
+| 内容 | 位置 |
+|---|---|
+| 团队身份与职责 | `profiles/team.md` |
+| 用户偏好与长期约束 | `profiles/users/` |
+| 项目背景 | `profiles/projects/` |
+| 重复工作的方法 | `profiles/recipes/` |
 
-## Goal 的作用
+临时聊天、未经确认的推断和密钥不属于 Profile。团队资料模板需要成员确认后才能视为事实。
 
-Goal 不是口号。Active Goal 会给匹配领域的 Wiki 页面增加召回相关性，但不会改变知识的审核状态。
+## 设置当前目标
 
-一个有用的 Goal 至少包含：
+把要解决的问题、完成标准和范围交给 Agent，整理成 `profiles/goals/` 下的目标：
 
 ```markdown
 # 目标
@@ -37,13 +35,10 @@ Goal 不是口号。Active Goal 会给匹配领域的 Wiki 页面增加召回相
 必须由人类决定的动作：
 ```
 
-## 团队初始化
+Active Goal 会提升相关领域知识的召回优先级，不改变知识的审核状态。任务结束或方向变化时，让 Agent 更新目标，避免旧目标影响新任务。
 
-把团队名称、知识库位置和负责人告诉 Agent，让它创建团队实例并展示团队资料与目标模板。团队成员确认之前，这些模板只是待填写结构，不能直接视为团队事实。
+## 检查是否有效
 
-## 从 Mail 提交成员建档申请
+请 Agent 说明当前使用了哪些背景、哪个目标，以及它们怎样影响这次知识选择。错误的背景先修正，过时的目标先停用。
 
-Web 的「成员与来源」页可以填写负责 Agent、稳定 ID、显示名称、职责和工作范围，发送一条
-`record_kind=handoff` 的建档申请。申请只是协作事实；负责 Agent 审核后再创建或更新
-`profiles/agents/<id>.md`，随后通过同一 Thread 回复结果。这样成员档案进入 Git 共享的
-知识库，机器本地的 binding 仍保持私有。
+团队 Agent 档案、机器本地 binding 和成员建档申请见 [Mail 接入](../reference/mail-portable.html)。它们与用户背景、当前目标分别维护。

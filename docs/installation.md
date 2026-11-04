@@ -1,35 +1,50 @@
 ---
-title: 交给 Agent 安装
+title: 安装与创建知识库
 nav_order: 1
-parent: 从这里开始
+parent: 开始使用
 ---
 
-# 交给 Agent 安装
+# 安装与创建知识库
 
-OKS 是 Agent 的知识工作空间，不应该先变成用户需要背诵的一组命令。把安装任务直接交给你正在使用的编码 Agent：
+本页完成环境准备，并创建一个保存个人知识的独立目录。已有知识库时，先让 Agent 检查并连接它。
 
-> 请先阅读并按照 [OKS 上游安装 Skill](https://raw.githubusercontent.com/open-agent-power/open-knowledge-studio/main/SKILL.md) 操作，然后为我安装 Open Knowledge Studio，并为个人知识创建一个独立实例。不要把个人知识写进 OKS 源码仓库。完成后检查当前实例、可用能力和审核流程，再用自然语言向我报告结果与任何失败项。
+## 准备什么
 
-## Agent 应该完成什么
+- Python 3.12 或更新版本、Git；推荐通过 `pipx` 隔离安装。
+- 能阅读文件、访问安装说明并执行本机命令的 Agent，例如编码 Agent。只有聊天能力的界面无法自行完成安装。
+- 一个知识库目录，与 OKS 源码仓库分开。已有资料不要直接放进源码仓库。
 
-1. 检查本机环境是否满足当前版本要求。
-2. 安装或更新 OKS，并创建独立知识库实例。
-3. 确认 Agent 能找到这个实例，而不是误用源码仓库。
-4. 检查收集、候选审核和召回能力是否可用。
-5. 把失败、缺失和降级状态如实告诉你。
+## 交给 Agent
 
-如果是团队使用，再补充团队名称、成员边界和负责人。Agent 可以创建团队资料模板，但模板内容必须由团队成员确认后才能视为事实。
+将下面这段话交给你正在使用的 Agent：
 
-## 安装完成后你应该看到什么
+> 请阅读并按照 [OKS 安装 Skill](https://raw.githubusercontent.com/open-agent-power/open-knowledge-studio/main/SKILL.md) 操作。先检查本机环境和已有知识库；没有实例时，为我的个人知识创建独立目录。完成后报告实例位置、已安装的 Skill、可用能力和失败项。不要为了验收创建或批准知识。
 
-Agent 的报告至少应包括：
+安装完成后，让 Agent 确认它正在使用哪个实例，并报告 `oks status` 与 `oks capability status` 的结果。新实例的长期知识为空是正常状态。
 
-- 知识库实例保存在哪里；
-- 当前是否存在待审核知识；
-- 哪些来源类型可以处理，哪些能力尚未安装；
-- 自动召回是否启用；
-- 下一步如何完成第一条知识闭环。
+自动召回 Hook 按需开启；首次教程可以直接要求 Agent 查询，无需先配置 Hook。
 
-需要手工安装、CI 配置或排错时，再查看[命令参考](reference/cli.html)和[故障排除](reference/troubleshooting.html)。普通使用不从命令行开始。
+<details markdown="1">
+<summary>手工安装</summary>
 
-下一步：[完成第一次学习循环](first-knowledge-loop.html)。
+先确认 Python 版本，并准备好 `pipx`。新安装使用：
+
+```bash
+pipx install open-knowledge-studio
+pipx ensurepath
+```
+
+重新打开终端，在你准备保存知识的上级目录执行：
+
+```bash
+oks init my-knowledge-base
+cd my-knowledge-base
+oks status
+oks capability status
+```
+
+初始化会同时提供 Agent Skill。让 Agent 读取实例内的 `.agents/skills/`；不要立即重复运行 `skills-install`。更新已有实例请遵循安装 Skill，先检查本地修改。
+
+</details>
+
+命令无法运行时，查看[故障排除](reference/troubleshooting.html)。准备好后，进入[第一次知识循环](first-knowledge-loop.html)。

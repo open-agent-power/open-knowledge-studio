@@ -1,10 +1,10 @@
 ---
-title: 收集来源
+title: 收录材料
 nav_order: 1
-parent: 日常使用
+parent: 日常任务
 ---
 
-# 收集来源
+# 收录材料
 
 收集的目标是保存可以复核的 Evidence，而不是让 AI 尽快写出答案。
 

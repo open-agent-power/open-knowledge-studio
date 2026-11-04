@@ -1,10 +1,11 @@
 ---
-title: Agent-Native Ingest 操作手册
+title: 摄入操作手册
 nav_order: 1
 parent: 摄入协议
+grand_parent: 参考手册
 ---
 
-# Agent-Native Ingest 操作手册
+# 摄入操作手册
 
 从一条 URL 或本地文件出发，走完 Recall → Source → Evidence → Commit → Grade → Review 的
 完整链路。本手册按你实际会遇到的顺序写，每个步骤标出常见错误和解决方法。

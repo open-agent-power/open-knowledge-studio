@@ -1,10 +1,10 @@
 ---
-title: 召回与注入
+title: 召回知识
 nav_order: 3
-parent: 日常使用
+parent: 日常任务
 ---
 
-# 召回与注入
+# 召回知识
 
 Recall 的作用是把与当前问题有关的知识带回任务上下文，不是替 Agent 判断答案。
 

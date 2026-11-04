@@ -1,7 +1,7 @@
 ---
 title: 故障排除
 nav_order: 3
-parent: 参考
+parent: 参考手册
 ---
 # 故障排除
 
@@ -17,7 +17,7 @@ pipx upgrade open-knowledge-studio
 
 ## `oks recall` 返回空
 
-`wiki/` 空是正常的——新实例没有知识。先 `oks ingest run <file>` 存材料到 `raw/`，或写一个 wiki 页（`oks wiki create`），再 recall。
+新实例的 `wiki/` 为空是正常的。先确认当前知识库路径正确，再按[第一次知识循环](../first-knowledge-loop.html)收录材料、提出候选并由人审核。保存到 Raw 不等于已经形成可复用知识。
 
 ## hook 不注入会话
 

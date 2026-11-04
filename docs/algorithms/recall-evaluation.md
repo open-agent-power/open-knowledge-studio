@@ -2,6 +2,8 @@
 title: 召回评估
 nav_order: 5
 parent: 维护者
+nav_exclude: true
+search_exclude: true
 ---
 # 召回评估（OKS Triple-Layer Recall 消融实验）
 

@@ -2,6 +2,8 @@
 title: 维护者
 nav_order: 7
 has_children: true
+nav_exclude: true
+search_exclude: true
 ---
 
 # 维护者

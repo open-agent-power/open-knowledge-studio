@@ -2,6 +2,7 @@
 title: 协议对象关系
 nav_order: 2
 parent: 摄入协议
+grand_parent: 参考手册
 ---
 
 # 协议对象关系
