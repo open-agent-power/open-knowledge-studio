@@ -1,34 +1,71 @@
+<p class="oks-footer">Open Knowledge Studio · <a href="https://github.com/open-agent-power/open-knowledge-studio/blob/main/LICENSE">MIT License</a></p>
 <script>
 (function () {
   function init() {
-    var main = document.querySelector('.main-content');
-    if (main && !main.getAttribute('data-oks-toc')) {
-      main.setAttribute('data-oks-toc', '1');
-      var heads = main.querySelectorAll('h2');
-      if (heads.length >= 2) {
-        var aside = document.createElement('aside');
-        aside.className = 'toc-right';
-        var title = document.createElement('div');
-        title.className = 'toc-right-title';
-        title.textContent = 'On this page';
-        aside.appendChild(title);
-        var ul = document.createElement('ul');
-        heads.forEach(function (h) {
-          var li = document.createElement('li');
-          var a = document.createElement('a');
-          a.href = '#' + (h.id || '');
-          a.textContent = h.textContent;
-          li.appendChild(a);
-          ul.appendChild(li);
-        });
-        aside.appendChild(ul);
-        var mainEl = document.querySelector('.main');
-        if (mainEl) mainEl.appendChild(aside);
-      }
+    var search = document.getElementById('search-input');
+    if (search) {
+      search.setAttribute('placeholder', '搜索文档');
+      search.setAttribute('aria-label', '搜索文档');
     }
+    var menu = document.getElementById('menu-button');
+    if (menu) menu.setAttribute('aria-label', '文档导航');
+    document.querySelectorAll('div.highlighter-rouge > button').forEach(function (button) {
+      button.setAttribute('aria-label', '复制内容');
+      button.setAttribute('title', '复制内容');
+    });
+
+    var main = document.querySelector('.main-content');
+    var heads = main ? main.querySelectorAll('h2[id]') : [];
+    if (heads.length >= 2) {
+      var aside = document.createElement('nav');
+      aside.className = 'toc-right';
+      aside.setAttribute('aria-label', '本页内容');
+      var title = document.createElement('div');
+      title.className = 'toc-right-title';
+      title.textContent = '本页内容';
+      aside.appendChild(title);
+      var list = document.createElement('ul');
+      heads.forEach(function (heading) {
+        var item = document.createElement('li');
+        var link = document.createElement('a');
+        link.href = '#' + heading.id;
+        link.textContent = heading.textContent;
+        item.appendChild(link);
+        list.appendChild(item);
+      });
+      aside.appendChild(list);
+      document.querySelector('.main').appendChild(aside);
+    }
+
+    var siteNav = document.getElementById('site-nav');
+    if (!siteNav) return;
+    var key = 'oks-open-nav-sections';
+    var sections = siteNav.querySelectorAll(':scope > .nav-list > .nav-list-item');
+    function sectionUrl(item) {
+      var link = item.querySelector(':scope > .nav-list-link');
+      return link ? link.getAttribute('href') : '';
+    }
+    try {
+      var open = JSON.parse(localStorage.getItem(key) || '[]');
+      sections.forEach(function (item) {
+        if (open.indexOf(sectionUrl(item)) < 0) return;
+        item.classList.add('active');
+        var expander = item.querySelector(':scope > .nav-list-expander');
+        if (expander) expander.setAttribute('aria-expanded', 'true');
+      });
+    } catch (error) { /* Navigation remains usable without browser storage. */ }
+    siteNav.addEventListener('click', function (event) {
+      if (!event.target.closest('.nav-list-expander')) return;
+      window.setTimeout(function () {
+        var open = Array.from(sections).filter(function (item) {
+          return item.classList.contains('active');
+        }).map(sectionUrl);
+        try { localStorage.setItem(key, JSON.stringify(open)); } catch (error) { }
+      }, 0);
+    });
   }
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
+    document.addEventListener('DOMContentLoaded', init, { once: true });
   } else {
     init();
   }

@@ -1,26 +1,28 @@
 ---
 title: 备份与导出
-nav_order: 4
-parent: 参考
+nav_order: 6
+parent: 日常任务
 ---
 # 备份与导出
 
-## git（主机制）
-
-OKS 实例用 git 跟踪记忆——`git push` / `git pull` 就是多设备同步 + 备份 + 版本。没有数据库，git 是迁移。
-
-## OKF 导出
-
-把 `wiki/` 导出成可移植的知识包，给其他工具读（Obsidian / Logseq / 任何 markdown reader）：
-
-```bash
-oks wiki export --format okf --output <dir>        # 开放标准，标准 markdown 链接
-oks wiki export --format markdown --output <dir>  # Obsidian [[wikilink]]
+```text
+请检查当前知识库的未保存变更，并根据我的用途准备本地备份或知识导出；先确认保存位置，不覆盖已有文件。需要远端同步时，先向我确认仓库地址、权限和上传范围。
 ```
 
-- `okf` — 标准 markdown 链接 + OKF frontmatter（`type`, `concept-id`）
-- `markdown` — Obsidian `[[wikilink]]` + 原始 frontmatter
+告诉 Agent 你想保留完整历史，还是把知识交给其他工具阅读：
 
-A4 关系（`relates_to` + `relationship`）改写成正文链接。生成 per-type `index.md` + 顶层 `index.md` + `log.md`（OKF reserved files）。
+| 用途 | Agent 应准备什么 |
+|---|---|
+| 备份或换电脑继续工作 | 用 Git 保存独立知识库的文件与修改历史，并报告尚未保存的变更 |
+| 交给支持标准 Markdown 的工具 | 导出带标准链接的 OKF 知识包 |
+| 在 Obsidian 等工具中阅读 | 导出使用双向链接写法的 Markdown，并说明适用范围 |
 
-这是快照，不是双向同步——外部工具的改动不会流回。
+## 看什么结果
+
+让 Agent 给出保存位置、备份或导出范围，以及失败或跳过的项目。导出会生成知识索引、链接和日志；打开几个条目，确认内容与链接符合预期。
+
+导出只包含知识快照，不能替代整个实例的历史备份。外部工具中的改动不会自动写回 OKS。知识库没有需要单独迁移的核心数据库，召回索引可从知识文件重建。
+
+本地备份不等于远端同步。上传资料前需确认目的地、访问权限和可上传内容，并取得明确的同步授权。
+
+下一句可以说：“请打开导出索引，说明哪些内容已经导出、哪些没有包含。”格式参数见[CLI 参考](../reference/cli.html)。

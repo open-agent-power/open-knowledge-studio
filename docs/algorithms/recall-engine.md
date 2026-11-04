@@ -2,6 +2,8 @@
 title: 召回引擎
 nav_order: 3
 parent: 维护者
+nav_exclude: true
+search_exclude: true
 ---
 # 召回引擎（OKS Triple-Layer Recall）
 

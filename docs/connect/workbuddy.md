@@ -1,47 +1,29 @@
 ---
-title: WorkBuddy Agent workflow
-nav_order: 5
-parent: 参考
+title: WorkBuddy 接入
+nav_order: 7
+parent: 参考手册
 ---
 
-# WorkBuddy Agent workflow
-
-WorkBuddy can consume reviewed OKS Wiki knowledge as a local Agent. The
-project-local Skill uses the same read-only recall boundary as other OKS hosts:
+# WorkBuddy 接入
 
 ```text
-WorkBuddy local task
-  -> oks recall --knowledge-only
-  -> oks fs read <oks-uri>
-  -> answer with reviewed OKS knowledge and the canonical URI
+请检查 WorkBuddy 是否已连接我现有的 OKS 知识库并发现项目 Skill，再只读查询当前任务相关的已审核知识，读取原文并带引用回答；缺少接入条件时先告诉我缺什么。
 ```
 
-## Install the project Skill
+将已有知识库的位置和你的具体问题一并交给 Agent。它会确认目标实例、检查 Skill 是否能被宿主发现，并核对本地查询工具是否可用。
 
-`oks init` materializes both `.codebuddy/` and `.workbuddy/` in a new instance.
-WorkBuddy discovers its project Skill from `.codebuddy/`; `.workbuddy/` is
-retained as a compatibility directory. Existing instances can add the missing
-dedicated Skill without overwriting existing files:
+## 看什么结果
 
-```powershell
-oks skills-install
-```
+- 当前连接的是哪个知识库，项目 Skill 是否已经被发现。
+- 查询是否找到经过人审的知识，以及原文能否打开。
+- 回答是否引用了实际读取的条目；未找到时，如实说明缺口。
 
-The WorkBuddy host Skill is `.codebuddy/skills/oks-knowledge/SKILL.md`. In a
-local task with `oks` on `PATH` and `OKS_ROOT` (or the active OKS config)
-pointing to the intended instance, it requires reviewed-Wiki recall first and a
-canonical URI read before answering.
+仅位于知识区的条目也可能尚未审核，Agent 需要检查审核状态，不能只按存放位置判断。查询通过本地工具完成，无需导入 WorkBuddy 原生 KnowledgeBase 或新增 MCP Server。
 
-`--knowledge-only` excludes Raw and episodic material, but can return
-provisional Wiki pages. The Skill therefore selects only recall hits with a
-non-empty `human_reviewed_at` field before reading their `uri`.
+## 接入边界
 
-## Safety boundary
+这份查询 Skill 只读，不授权写入已审核知识、原始材料、候选、配置、Hook 或 Mail。安装或修复接入条件是另一项操作，不能由一次查询请求自动扩大授权。
 
-The Skill does not authorize Wiki, Raw, Draft, configuration, hook, or mail
-writes. It treats Raw material and drafts as non-authoritative, and reports an
-absent `oks` command or an empty recall result instead of guessing.
+下一句可以说：“请把缺失项和建议处理方式列出来，先不要覆盖文件或修改配置。”
 
-This integration deliberately uses the installed local CLI rather than adding
-an MCP server. WorkBuddy-native KnowledgeBase import is not required for Agent
-retrieval.
+命令与接入检查选项见[CLI 参考](../reference/cli.html)。

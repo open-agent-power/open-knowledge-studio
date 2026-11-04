@@ -1,122 +1,83 @@
 ---
-title: 托管你的学习
+title: oh-my-study · 学习研究
 nav_order: 1
-parent: 案例
+parent: Oh My OKS
 ---
 
-# 托管你的学习
+# oh-my-study · 学习研究
 
-{: .important }
-> **状态：部分验证。** 本案例的两个来源已经形成 Raw Bundle，并生成待审核 Candidate；正式实例尚未把这些 Candidate 晋升为 Wiki。页面展示的是学习流程和审核边界，不是对 Kimi 产品主张的背书。
+收集几篇文章或视频后，希望留下有来源、可修正的判断，供下一次研究继续使用。
 
-## 研究命题
-
-Agent 如何在**人机协同**中持续学习，并保证**长任务执行**的稳定？
-
-本案例选择一个具体问题作为载体：
-
-> Kimi 是否适合长文档分析？哪些结论来自视频，哪些仍需要官方资料或真实 benchmark 验证？
-
-目标不是让 Agent 看完视频后立即给出结论，而是把一次研究变成可以继续修正的知识训练循环。
-
-## 人和 AI 的分工
-
-| 阶段 | 人类 | AI / OKS |
-|---|---|---|
-| 设题 | 确定问题、用途和证据标准 | 读取 Goal，先召回已有知识 |
-| 收集 | 提供来源或授权处理方式 | 提取字幕、ASR、关键帧，保存 Evidence |
-| 判断 | 区分事实、作者观点与待核验主张 | 生成 Candidate，标明来源和缺口 |
-| 入库 | 接受、修改或拒绝 Candidate | 仅把人审通过的内容写入 Wiki |
-| 复用 | 判断回答是否帮助了任务 | Recall 已审核知识，记录反馈与冲突 |
-
-## 1. 学习前：先看已有状态
-
-开始前先确认 Agent 现在知道什么，避免把演示环境已有页面误当成本轮新知识。
-
-![学习前的 OKS 状态，Wiki、Draft 和 Raw 计数清晰分开](../assets/hosted-learning/01-before-learning.png)
-
-图 1：DSH 连接到一个本地 OKS 实例。Wiki、Draft、Raw 是不同状态，计数不能相互替代。
-
-## 2. 收集：保留来源，而不是先写答案
-
-本轮使用了两个用户提供的来源：
-
-- [B 站 Kimi 视频 BV1CDNd65EDc](https://www.bilibili.com/video/BV1CDNd65EDc/)
-- [YouTube 视频 Q4LoxsIwriA](https://www.youtube.com/watch?v=Q4LoxsIwriA&t=45s)
-
-B 站没有提供可直接使用的平台字幕，因此实际路径是本地媒体 → 音频 → 本地 ASR → 关键帧 → Raw Bundle。YouTube 来源使用了用户提供的转写文本。ASR 中的同音词、专有名词错误保留在 Raw；人工修正只能作为带说明的 Candidate 提议。
-
-![两个来源形成 Raw Bundle 后的列表](../assets/hosted-learning/02-evidence-raw.png)
-
-图 2：Raw Bundle 证明来源和提取结果被保存，但不证明其中的主张为真。
-
-## 3. 提议：AI 只能生成 Candidate
-
-Candidate 需要明确区分：
-
-- 视频作者展示或声称了什么；
-- 机械证据可以支持什么；
-- 哪些事实需要 Moonshot 官方资料复核；
-- 哪些能力判断需要固定数据集 benchmark；
-- 哪些 ASR 内容需要人工听校。
-
-![待审核 Candidate 保留证据范围和待核验主张](../assets/hosted-learning/03-candidate-review.png)
-
-图 3：页面顶部明确提示“AI 生成候选，等待人工审核，不会自动晋升为正式召回知识”。
-
-## 4. 审核：人类决定知识边界
-
-正式实例的 Candidate 仍待审核，因此本页不会给出“Kimi 适合长文档分析”的最终结论。审核者至少需要：
-
-1. 对照视频和转写，修正 ASR 错误；
-2. 将模型参数、价格和上下文长度逐项对照官方资料；
-3. 把视频演示与客观 benchmark 分开；
-4. 决定新材料是 `enriches`、`confirms`、`challenges` 还是新知识；
-5. 只晋升足以支持后续决策的部分。
-
-审核时，人只需要告诉 Agent：“把待审核的知识提议逐条展示给我，同时显示来源、证据范围和仍未核验的内容。”人确认接受、修改或拒绝后，Agent 再执行对应操作，并保留这次决定的记录。
-
-## 5. Recall：没有审核知识时就说没有
-
-隔离验收副本曾用于测试 Promote 与 Recall 的界面流转，但它不替代正式实例的人审。下面的召回结果反而展示了正确边界：已有 Kimi 页面只覆盖视频中的模型介绍，不足以支持“智能文档分析系统”的设计结论；其余命中是噪声，不应采信。
-
-![召回结果明确指出已审核知识不足，并排除无关命中](../assets/hosted-learning/04-recall-boundary.png)
-
-图 4：稳定的 Agent 不是永远给出答案，而是在证据不足时停止外推。
-
-## 6. 长任务如何持续学习
-
-这次研究可以跨多轮继续，而不需要每次重新解释：
+## 一句话开始
 
 ```text
-Goal 保存研究问题和验收标准
-Raw 保存视频、转写、ASR 与关键帧
-Trace 保存每次提取和判断发生了什么
-Candidate 保存 AI 的结构化提议
-Human Review 决定哪些内容成为知识
-Wiki 为下一轮研究提供稳定上下文
+围绕我的研究问题，先查已有知识，再收录这些材料。
+把来源主张和你的推断分开，整理成待审核提议，
+附上证据与待核验的部分，等我确认后再保存为知识。
 ```
 
-后续加入官方技术报告或真实 benchmark 时，不覆盖旧页面，而是通过 `enriches`、`confirms` 或 `challenges` 记录知识演化。
+处理后看来源与待审核提议；下一句可以说：“逐条给我看提议和来源，我来决定接受、修改或暂缓。”完成审核后，再用一个新问题检查引用结果。
 
-## 已验证与未验证
+## 已有记录：Kimi 视频研究
+
+研究问题是：**Kimi 是否适合长文档分析？哪些结论来自视频，哪些还需要官方资料或 benchmark 验证？**
+
+本案例的两个来源已形成 Raw Bundle，并生成待审核候选（Candidate）。正式实例尚未将候选晋升为 Wiki；下面保留这一进度，不给出产品能力结论。
+
+## 收录来源
+
+使用的材料：
+
+- [B 站视频 BV1CDNd65EDc](https://www.bilibili.com/video/BV1CDNd65EDc/)
+- [YouTube 视频 Q4LoxsIwriA](https://www.youtube.com/watch?v=Q4LoxsIwriA&t=45s)
+
+B 站来源没有可直接使用的平台字幕，实际路径为本地媒体 → 音频 → 本地 ASR → 关键帧 → Raw Bundle。YouTube 来源使用用户提供的转写文本。ASR 的同音词和专有名词错误保留在 Raw，修正意见另写候选。
+
+<figure class="oks-evidence oks-evidence-panel">
+  <div class="oks-evidence-viewport">
+    <img src="../assets/hosted-learning/02-evidence-raw.png" alt="宿主 DSH 的 OKS 面板展示两个来源形成的 Raw Bundle 列表">
+  </div>
+  <figcaption>来源与提取结果已保存。Raw Bundle 记录材料，不证明材料中的主张为真。<a href="../assets/hosted-learning/02-evidence-raw.png">查看原图</a></figcaption>
+</figure>
+
+## 提出候选
+
+Agent 将视频作者主张、提取证据和自己的推断分开，列出还需核验的模型参数、上下文长度、价格、长文档分析效果及 ASR 内容。
+
+<figure class="oks-evidence oks-evidence-panel">
+  <div class="oks-evidence-viewport">
+    <img src="../assets/hosted-learning/03-candidate-review.png" alt="宿主 DSH 的 OKS 面板显示待审核候选、证据范围和待核验主张">
+  </div>
+  <figcaption>候选保留来源与不确定项，等待人工审核。<a href="../assets/hosted-learning/03-candidate-review.png">查看原图</a></figcaption>
+</figure>
+
+审核者需要对照原视频修正转写，将产品参数与官方资料核对，并用固定数据集检验能力判断。只有明确接受的内容才能进入 Wiki；与旧知识的关系由审核结果决定。
+
+## 检查召回边界
+
+隔离验收副本曾测试 Promote 与 Recall 的界面流转，不能替代正式实例的人审。下图中已有 Kimi 页面仅覆盖视频中的模型介绍，不足以支持“智能文档分析系统”的设计结论，其余无关命中也被排除。
+
+<figure class="oks-evidence">
+  <div class="oks-evidence-viewport">
+    <img src="../assets/hosted-learning/04-recall-boundary.png" alt="召回结果指出已审核知识不足以支持系统设计结论，并排除无关命中">
+  </div>
+  <figcaption>召回结果需要核对适用范围。证据不足时，Agent 应说明缺口。<a href="../assets/hosted-learning/04-recall-boundary.png">查看原图</a></figcaption>
+</figure>
+
+## 结果与限制
 
 | 项目 | 状态 |
 |---|---|
 | 本地视频、ASR、关键帧进入 Raw Bundle | 已记录 |
 | 用户提供的 YouTube 转写进入 Raw Bundle | 已记录 |
-| 两个来源生成 Candidate | 已记录，待人审 |
-| Candidate 自动进入 Wiki | 不允许，也未发生 |
+| 两个来源生成候选 | 已记录，待人审 |
+| 候选自动进入 Wiki | 不允许，也未发生 |
 | Kimi 参数、价格和能力主张 | 待官方资料复核 |
 | 长文档分析效果 | 待固定数据集 benchmark |
 | DSH Promote / Recall 界面流转 | 在隔离副本中验证，不代表正式实例完成审核 |
 
-## 用自己的问题重新运行
+## 继续这项研究
 
-1. 写一句真正需要回答的研究问题。
-2. 定义什么证据足以改变你的判断。
-3. 提供一到三个来源，先完成 Evidence 与 Raw。
-4. 审核 Candidate，不接受来源无法支持的句子。
-5. 在下一个真实任务里 Recall，并把使用结果反馈回来。
+下一步补充官方技术报告或 benchmark，围绕同一问题提出新候选，说明它如何补充、印证或质疑已有内容，再由人审核。
 
-这就是“托管你的学习”：不是替你收藏更多内容，而是让人类反馈持续训练一套 Agent 可以复用的知识模型。
+用自己的问题尝试时，从一份短材料开始，按[第一次知识循环](../first-knowledge-loop.html)完成收录、审核和后续引用。

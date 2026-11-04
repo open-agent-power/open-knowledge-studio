@@ -521,7 +521,7 @@ treat `native` 6+1 as the default — `settings/recall.yaml` defaults to
 **Scale spectrum** (not an invariant yet — design direction): the same three
 layers scale from a personal mini machine (local FTS5 db + local boost + local
 cron decay) to a cluster (distributed index + multi-agent collaborative
-boost + distributed decay). See `docs/architecture/scale-spectrum.md`. The
+boost + distributed decay). See `docs/concepts/architecture.md` for the current architecture. The
 three layers do not become four; retrieval widens to multi-route recall
 (CF / I2I / dual-tower / sequence as new backends alongside fts5), injection
 widens to multi-agent collaborative boost — the layer count stays three.

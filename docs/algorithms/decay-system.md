@@ -2,6 +2,8 @@
 title: 衰减系统
 nav_order: 4
 parent: 维护者
+nav_exclude: true
+search_exclude: true
 ---
 # 衰减系统（记忆曲线）
 

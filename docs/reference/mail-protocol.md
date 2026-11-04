@@ -1,7 +1,7 @@
 ---
 title: Mail 协议
 nav_order: 5
-parent: 参考
+parent: 参考手册
 ---
 # Mail 协议
 

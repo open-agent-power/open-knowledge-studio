@@ -1,95 +1,21 @@
-<!-- Render kramdown's Mermaid code fences on GitHub Pages. -->
 <script type="module">
-  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
-
-  const renderOksMermaid = async () => {
+  async function renderOksDiagrams() {
     const blocks = document.querySelectorAll("pre > code.language-mermaid");
     if (!blocks.length) return;
-
-    const nodes = [];
-    blocks.forEach((block) => {
-      const container = document.createElement("div");
-      container.className = "mermaid oks-mermaid";
-      container.textContent = block.textContent;
-      block.parentElement.replaceWith(container);
-      nodes.push(container);
+    const { default: mermaid } = await import("https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs");
+    const nodes = Array.from(blocks, (block) => {
+      const node = document.createElement("div");
+      node.className = "mermaid oks-mermaid";
+      node.textContent = block.textContent;
+      block.parentElement.replaceWith(node);
+      return node;
     });
-
-    mermaid.initialize({
-      startOnLoad: false,
-      securityLevel: "strict",
-      theme: "base",
-    });
+    mermaid.initialize({ startOnLoad: false, securityLevel: "strict", theme: "neutral" });
     await mermaid.run({ nodes });
-  };
-
+  }
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", renderOksMermaid, { once: true });
+    document.addEventListener("DOMContentLoaded", renderOksDiagrams, { once: true });
   } else {
-    renderOksMermaid();
+    renderOksDiagrams();
   }
-</script>
-
-<script>
-// Keep each documentation section independently expanded across page changes.
-// Just the Docs opens the current page's ancestry after every navigation; this
-// restores the sections the reader explicitly opened as well.
-(function () {
-  var storageKey = 'oks-open-nav-sections';
-
-  function sectionKey(item) {
-    var link = item.querySelector(':scope > .nav-list-link');
-    return link && (link.getAttribute('href') || link.textContent.trim());
-  }
-
-  function readOpenSections() {
-    try {
-      return JSON.parse(window.localStorage.getItem(storageKey) || '[]');
-    } catch (error) {
-      return [];
-    }
-  }
-
-  function writeOpenSections() {
-    var open = Array.prototype.slice.call(
-      document.querySelectorAll('#site-nav > .nav-list > .nav-list-item.active')
-    ).map(sectionKey).filter(Boolean);
-    try {
-      window.localStorage.setItem(storageKey, JSON.stringify(open));
-    } catch (error) {
-      // Navigation still works when storage is unavailable.
-    }
-  }
-
-  function restoreOpenSections() {
-    var open = readOpenSections();
-    if (!open.length) return;
-
-    Array.prototype.forEach.call(
-      document.querySelectorAll('#site-nav > .nav-list > .nav-list-item'),
-      function (item) {
-        if (open.indexOf(sectionKey(item)) === -1) return;
-        item.classList.add('active');
-        var expander = item.querySelector(':scope > .nav-list-expander');
-        if (expander) expander.setAttribute('aria-expanded', 'true');
-      }
-    );
-  }
-
-  function initPersistentNavigation() {
-    restoreOpenSections();
-    document.addEventListener('click', function (event) {
-      var expander = event.target.closest('.nav-list-expander');
-      var siteNav = document.getElementById('site-nav');
-      if (!expander || !siteNav || !siteNav.contains(expander)) return;
-      window.setTimeout(writeOpenSections, 0);
-    });
-  }
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initPersistentNavigation);
-  } else {
-    initPersistentNavigation();
-  }
-})();
 </script>
