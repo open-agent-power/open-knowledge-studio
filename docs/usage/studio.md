@@ -1,6 +1,6 @@
 ---
 title: 本地 Studio
-parent: 日常使用
+parent: 日常任务
 nav_order: 5
 ---
 

@@ -19,6 +19,7 @@ has_children: true
 | 在新任务中查找并使用已有知识 | [召回知识](recall.html) |
 | 保存已有聊天中的项目决策和经验 | [导入对话](../import-conversations.html) |
 | 设置稳定背景与当前工作方向 | [背景与目标](profiles.html) |
+| 在网页查看图谱、目标和评测结果 | [本地 Studio](studio.html) |
 | 保存副本或交给其他工具阅读 | [备份与导出](../connect/backup-export.html) |
 
 第一次使用从[入门教程](../first-knowledge-loop.html)开始。操作失败时，让 Agent 保留原始错误，按[故障排除](../reference/troubleshooting.html)定位。

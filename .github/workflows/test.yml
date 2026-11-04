@@ -22,7 +22,10 @@ permissions:
 jobs:
   pytest:
     name: pytest (${{ matrix.os }}, py${{ matrix.python }})
-    runs-on: ${{ matrix.os }}
+    # Preserve required-check names while avoiding the macos-latest arm64
+    # capacity outage. The same three Python versions still run on macOS;
+    # the actual host image is the supported macOS 15 Intel runner.
+    runs-on: ${{ matrix.os == 'macos-latest' && 'macos-15-intel' || matrix.os }}
     strategy:
       fail-fast: false
       matrix:
@@ -84,7 +87,10 @@ jobs:
   installed:
     name: installed artifacts (${{ matrix.os }}, py${{ matrix.python }})
     needs: package
-    runs-on: ${{ matrix.os }}
+    # Preserve required-check names while avoiding the macos-latest arm64
+    # capacity outage. The same three Python versions still run on macOS;
+    # the actual host image is the supported macOS 15 Intel runner.
+    runs-on: ${{ matrix.os == 'macos-latest' && 'macos-15-intel' || matrix.os }}
     strategy:
       fail-fast: false
       matrix:
