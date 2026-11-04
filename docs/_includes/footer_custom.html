@@ -9,6 +9,10 @@
     }
     var menu = document.getElementById('menu-button');
     if (menu) menu.setAttribute('aria-label', '文档导航');
+    document.querySelectorAll('div.highlighter-rouge > button').forEach(function (button) {
+      button.setAttribute('aria-label', '复制内容');
+      button.setAttribute('title', '复制内容');
+    });
 
     var main = document.querySelector('.main-content');
     var heads = main ? main.querySelectorAll('h2[id]') : [];

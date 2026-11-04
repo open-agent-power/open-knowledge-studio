@@ -5,7 +5,45 @@ parent: 参考手册
 ---
 # CLI 参考
 
-`oks` 命令清单 + 关键契约。日常用前几个，后几个是改协议 / 写 Provider / 做评测时才查。
+本页供 Agent 与开发者查阅精确命令。日常使用直接向 Agent 描述意图，见[日常任务](../usage/)；不需要先记住这里的参数。
+
+## 手工安装
+
+先准备 Python 3.12 或更新版本、Git 和 `pipx`。新安装使用：
+
+```bash
+pipx install open-knowledge-studio
+pipx ensurepath
+```
+
+重新打开终端，在准备保存知识的上级目录创建独立实例：
+
+```bash
+oks init my-knowledge-base
+cd my-knowledge-base
+oks status
+oks capability status
+```
+
+初始化会同时提供 Agent Skill。已有实例的更新与资产覆盖按[安装 Skill](https://raw.githubusercontent.com/open-agent-power/open-knowledge-studio/main/SKILL.md)操作，不重复初始化或覆盖本地修改。
+
+## Mail 接入
+
+本机面板与 Agent 的只读查看入口：
+
+```bash
+oks mail serve --path /path/to/knowledge-base --port 3182
+oks mail snapshot
+oks mail thread THREAD_ID
+```
+
+仅当宿主在知识库之外、无法直接发现随库 Skill 时，创建本机绑定：
+
+```bash
+oks mail setup --agent reviewer --path /path/to/knowledge-base --skills-dir .agents/skills
+```
+
+选择实际宿主的 Skill 发现目录，重新加载后使用。绑定不会覆盖已有不同内容，也不应进入团队 Git。发送、回复必须使用当前 Session；读取与回执不代表任务已执行。用户入口见 [Mail 接入](mail-portable.html)。
 
 ## 命令清单
 

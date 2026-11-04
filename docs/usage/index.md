@@ -6,7 +6,11 @@ has_children: true
 
 # 日常任务
 
-日常使用时，你只需要表达意图和做决定。收集、整理、保存与召回由 Agent 调用 OKS 完成。
+把任务交给 Agent，由它调用 OKS 完成收录、整理和查询：
+
+```text
+请查看当前知识库和我的任务，说明下一步适合查找知识、收录材料还是审核提议，并告诉我需要提供什么。
+```
 
 | 你要做什么 | 页面 |
 |---|---|
@@ -17,4 +21,4 @@ has_children: true
 | 设置稳定背景与当前工作方向 | [背景与目标](profiles.html) |
 | 保存副本或交给其他工具阅读 | [备份与导出](../connect/backup-export.html) |
 
-第一次使用请先完成[入门教程](../first-knowledge-loop.html)。操作失败时查看[故障排除](../reference/troubleshooting.html)。
+第一次使用从[入门教程](../first-knowledge-loop.html)开始。操作失败时，让 Agent 保留原始错误，按[故障排除](../reference/troubleshooting.html)定位。

@@ -12,6 +12,7 @@ kramdown:
   syntax_highlighter: rouge
 
 search_enabled: true
+enable_copy_code_button: true
 search:
   heading_level: 2
   previews: 2

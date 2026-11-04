@@ -3,40 +3,32 @@ title: 故障排除
 nav_order: 3
 parent: 参考手册
 ---
+
 # 故障排除
 
-## `oks` 命令找不到
+先把现象或原始错误交给 Agent：
 
-`pipx ensurepath` 后重新打开终端（PATH 需重载）。
-
-## `oks --version` 过旧
-
-```bash
-pipx upgrade open-knowledge-studio
+```text
+帮我排查 OKS 的这个问题。先确认当前知识库和失败位置，
+保留原始错误，说明哪些检查通过、哪些没有完成。
+先给出最小修复办法；不要清空知识库、绕过审核或一次重装所有能力。
 ```
 
-## `oks recall` 返回空
+## 按现象继续说
 
-新实例的 `wiki/` 为空是正常的。先确认当前知识库路径正确，再按[第一次知识循环](../first-knowledge-loop.html)收录材料、提出候选并由人审核。保存到 Raw 不等于已经形成可复用知识。
+| 遇到的情况 | 可以直接交给 Agent 的一句话 |
+|---|---|
+| 找不到 OKS | 检查是否安装成功、当前版本和终端能否找到程序，告诉我缺的是哪一步。 |
+| 换会话后查不到知识 | 确认两次会话连接的是同一个知识库，再检查相关知识是否已经审核保存。 |
+| 材料没有收录成功 | 检查来源是否可访问、处理能力是否可用，保留失败或跳过的原因。 |
+| 回答没有引用知识 | 先实际查询相关知识，展示命中内容和来源，再说明能支持什么结论。 |
+| 自动召回没有发生 | 先验证显式查询是否可用，再检查当前宿主是否启用并加载了召回 Hook。 |
+| 面板打不开 | 检查该知识库的本地服务和地址；有可用服务就复用，不要连接到别的实例。 |
 
-## hook 不注入会话
+新实例没有已审核知识时，先完成[第一次知识循环](../first-knowledge-loop.html)。保存了原始材料，不等于已经形成长期知识。
 
-`oks hook status` 确认安装路径；重启 Agent host（hook 在启动时读配置）。
+## 看什么结果
 
-## `oks ingest run` 报缺能力
+Agent 应报告失败原因、采取的动作和修复后的实际结果。需要下载、覆盖配置或处理私人材料时，先说明范围；未完成的步骤继续保留原状态。
 
-重提取器是 opt-in：
-
-```bash
-oks capability install <watch|document|pdf|formula> --yes
-```
-
-纯 `.md` / `.txt` 只需 `document`；URL 取决于来源。
-
-## pip 拒绝安装（externally-managed）
-
-PEP 668：用 `pipx`，不要裸 `pip`。
-
-## 镜像滞后于 PyPI
-
-`pipx install open-knowledge-studio --pip-args="-i https://pypi.org/simple"`
+精确的命令和参数留给 Agent 或开发者查阅 [CLI 参考](cli.html)。

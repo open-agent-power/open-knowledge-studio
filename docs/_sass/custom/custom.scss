@@ -28,6 +28,33 @@ body {
   box-shadow: none;
 }
 .main-content details { margin: 1.5rem 0; }
+.main-content .language-text, .main-content .language-plaintext { font-family: inherit; }
+.main-content .language-text pre, .main-content .language-plaintext pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: inherit;
+}
+.main-content div.language-text > div.highlight, .main-content div.language-plaintext > div.highlight {
+  padding: 3.5rem 1rem 1rem;
+}
+.main-content .language-text code, .main-content .language-plaintext code {
+  font-family: inherit;
+  font-size: 1rem;
+  line-height: 1.8;
+}
+.main-content .language-text > button, .main-content .language-plaintext > button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 1;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+}
+.main-content .language-text > button .copy-icon, .main-content .language-plaintext > button .copy-icon {
+  width: 18px;
+  height: 18px;
+}
 .main-content summary { color: #1759a8; cursor: pointer; }
 .main-content figure { margin: 1.5rem 0; }
 .main-content figcaption { margin-top: 0.65rem; color: #475569; font-size: 0.875rem; }
