@@ -42,6 +42,9 @@ How the pieces fit together: [Architecture](https://open-agent-power.github.io/o
 
 ```
 open-knowledge-studio/
+├── goal/                   # Goal Markdown files/folders; source of graph and editable TODO views
+├── discuss/                # dated discussion judgments, open questions and explicit references
+├── skill/                  # knowledge-base-local Skill packages (not installed host directories)
 ├── profiles/              # team, users, projects, recipes, goals — stable context
 ├── raw/                    # human-collected sources, date-based {YYYY}/{MM}/{DD}/{source}/
 ├── wiki/                   # human-reviewed memory: concept, strategy, anti-pattern
@@ -51,6 +54,12 @@ open-knowledge-studio/
 ├── _meta/                  # schema layer: raw evidence, recall case, trace event
 └── records/                # versioned acceptance evidence + experiment runs
 ```
+
+The local Studio has three primary views: **Discuss, Goal, Learning**. Discuss
+and Goal read date-indexed Markdown files. Learning combines the knowledge
+graph, parameters and evaluation; Skills, profiles, projects and review remain
+accessible within the graph. See [Studio usage](docs/usage/studio.md)
+for explicit file scopes, local editing and existing-instance compatibility.
 
 The three recall layers:
 

@@ -1,22 +1,2 @@
 <!doctype html>
-<html lang="zh-CN">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>技能版本 · OKS</title><link rel="icon" href="/favicon.svg"><link rel="stylesheet" href="/tasks.css"><link rel="stylesheet" href="/versions.css"><link rel="stylesheet" href="/workspace-shell.css"><script src="/workspace-shell.js" defer></script><script src="/workspace-ui.js" defer></script><script src="/versions.js" defer></script></head>
-<body>
-<header class="topbar"><a class="brand" href="/" aria-label="OKS 工作区">oks<span>.</span></a><nav aria-label="主导航"><a href="/#collaboration">讨论</a><a href="/tasks">目标</a><a href="/#wiki">学习</a></nav><details class="more-nav"><summary>更多</summary><div class="more-nav-menu"><a href="/#messages">通信记录</a><a href="/#agents">成员</a><a href="/start">接入检查</a><a href="/review">学习审核</a><a href="/debug">诊断</a><span aria-current="page">技能版本</span></div></details><button id="refresh" class="quiet" type="button">刷新</button></header>
-<main class="skill-workspace">
-<header class="intro"><p class="eyebrow">技能版本</p><h1>让技能适合自己</h1><p>从已审核的方法开始，保留自己的改法，再审阅上游更新。</p></header>
-<section class="picker"><label for="skillId">技能名称</label><select id="skillId" aria-label="技能名称"><option value="">正在读取技能…</option></select><button id="loadVersions" type="button">查找版本</button><span id="status" role="status" aria-live="polite">输入技能名称后查找。</span></section>
-<section id="personalPanel" class="personal-panel" hidden aria-labelledby="personalTitle"><div class="create-heading"><h2 id="personalTitle">我的用法</h2><span id="personalStatus" role="status" aria-live="polite"></span></div><p class="note">补充你的做法，保存为独立的待审版本；基础技能保留。</p><form id="personalForm"><label for="personalNotes">希望怎样调整</label><textarea id="personalNotes" rows="4" maxlength="12000" required placeholder="例如：先给结论，用短句解释依据；保留来源，把命令放在末尾。"></textarea><button id="preparePersonal" type="submit" disabled>准备个人版本</button></form><details><summary>查看所选基础说明</summary><pre id="personalBase" class="skill-source"></pre></details><div id="personalNext" class="personal-next"></div></section>
-<section id="mergePanel" class="merge-panel" hidden aria-labelledby="mergeTitle"><h2 id="mergeTitle">保留我的修改，接收上游更新</h2><p class="note">先查看变化；有冲突时逐项选择，结果仍需审核。</p><div class="merge-controls"><label for="upstreamVersion">上游版本</label><select id="upstreamVersion"></select><button id="previewMerge" type="button">查看上游变化</button></div><p id="mergeStatus" role="status" aria-live="polite"></p><div id="mergeFiles"></div><button id="prepareMerge" type="button" disabled hidden>准备更新版本</button><div id="mergeNext" class="personal-next"></div></section>
-<details class="version-records"><summary>版本记录与比较</summary><section id="compareControls" class="compare-controls" hidden><label>版本一<select id="fromVersion"></select></label><label>版本二<select id="toVersion"></select></label><button id="compare" type="button">比较变化</button></section>
-<section id="versionList" class="version-list"></section>
-</details>
-<section class="bundled-section"><div class="create-heading"><h2>随程序提供的技能说明</h2><button id="compareBundled" type="button">与所选版本比较</button></div><p class="note">这里只比较说明文字。准备审核建议不会替换现有知识，也不会安装或运行技能。</p><p id="bundledStatus" role="status" aria-live="polite"></p><div id="bundledResult" hidden><pre id="bundledDiff" class="diff-text"></pre><details><summary>查看文件清单</summary><div id="bundledFiles"></div></details><button id="prepareBundled" type="button" disabled>准备审核建议</button><p id="bundledGate" class="note"></p><details id="bundledEditDetails" hidden><summary>查看本地编辑启动命令</summary><code id="bundledEditCommand"></code></details><div id="bundledNext"></div></div></section>
-<div id="results" hidden>
-<section class="summary-grid"><article><h2>版本一</h2><p id="fromSummary"></p></article><article><h2>版本二</h2><p id="toSummary"></p></article></section>
-<section class="changes-section"><h2>文件差异 <span id="changeCount"></span></h2><div id="changes"></div></section>
-<section class="impact-section"><h2>仍引用版本一的任务</h2><div id="tasks"></div><p class="note">这里显示的是版本关联记录，不表示任务正在运行。使用情况由记录方填写，未验证是否执行。</p></section>
-<section class="recovery-section"><h2>使用技能版本</h2><p class="note">只有审核通过的版本可以加载。若本地文件有改动或不是由 OKS 管理，会保留原样。</p><details><summary>查看加载步骤与技术信息</summary><p id="loadCommand"></p><div id="hostStates"></div></details></section>
-</div>
-</main>
-</body></html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>OKS</title><script src="/studio-redirect.js" defer></script></head><body></body></html>

@@ -25,7 +25,7 @@ DATASET_SCHEMA = "recall-case/v1"
 RUN_SCHEMA = "recall-eval-run/v1"
 COMPARISON_SCHEMA = "recall-eval-comparison/v1"
 CONTEXT_SCHEMA = "recall-eval-context/v1"
-EXPERIMENT_VARIABLES = {"code": "code_sha256", "backend": "backend"}
+EXPERIMENT_VARIABLES = {"code": "code_sha256", "backend": "backend", "settings": "settings_sha256", "parameters": "parameters_sha256"}
 QUALITY_METRICS = {"recall_at_1", "recall_at_3", "recall_at_5", "mrr", "ndcg_at_5", "no_result", "stale_leakage"}
 RUN_METRICS = QUALITY_METRICS | {"latency_p50_ms", "latency_p95_ms", "case_count"}
 
@@ -156,7 +156,7 @@ def _case_metrics(slugs: list[str], relevant: set[str], forbidden: set[str]) -> 
 
 
 def run_evaluation(dataset_path: str | Path, output_path: str | Path, *, limit: int = 5,
-                   search_backend: str | None = None, split: str | None = None) -> dict[str, Any]:
+                   search_backend: str | None = None, split: str | None = None, progress=None) -> dict[str, Any]:
     if limit < 5:
         raise ValueError("limit must be >= 5 so recall_at_5 and ndcg_at_5 stay meaningful")
     dataset_path = Path(dataset_path).expanduser().resolve()
@@ -212,6 +212,9 @@ def run_evaluation(dataset_path: str | Path, output_path: str | Path, *, limit: 
             cases[-1].update({key: case[key] for key in (
                 "answerability", "user_scope", "as_of", "split", "source_group", "expected_versions",
             )})
+
+        if progress is not None:
+            progress(len(cases), len(evaluation_cases))
 
     after = _kb_snapshot(root)
     if before != after:
@@ -366,8 +369,9 @@ def compare_runs(baseline_path: str | Path, candidate_path: str | Path, output_p
         warnings.append("Legacy run lacks comparison context; settings, parameters, code and backend equality are unverified")
     else:
         for key in ("settings_sha256", "parameters_sha256"):
-            if a[key] != b[key]:
-                raise ValueError(f"Cannot compare runs with different {key}")
+            variable = "settings" if key == "settings_sha256" else "parameters"
+            if a[key] != b[key] and variable not in vary:
+                raise ValueError(f"Cannot compare runs with different {key}; declare --vary {variable}")
         for variable, field in EXPERIMENT_VARIABLES.items():
             if a[field] != b[field] and variable not in vary:
                 raise ValueError(f"Changed {variable}; declare --vary {variable} for an intentional experiment")

@@ -100,11 +100,10 @@ def load_goals(*, active_only: bool = False) -> list[dict]:
     calls :func:`load_active_goals` and only sees active goals.
     """
     gd = goals_dir()
-    if not gd.exists():
-        return []
-
+    canonical = gd.parent.parent / "goal"
+    paths = sorted(set(gd.rglob("*.md")) | set(canonical.rglob("*.md")))
     goals: list[dict] = []
-    for path in sorted(gd.rglob("*.md")):
+    for path in paths:
         meta = parse_wiki_file(path)
         if not meta:
             continue

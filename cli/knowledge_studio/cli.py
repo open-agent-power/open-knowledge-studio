@@ -934,7 +934,7 @@ def eval_compare(
     baseline: Path = typer.Argument(help="Baseline run JSON"),
     candidate: Path = typer.Argument(help="Candidate run JSON"),
     output: Optional[Path] = typer.Option(None, "--output", "-o", help="Optional comparison JSON"),
-    vary: Optional[list[str]] = typer.Option(None, "--vary", help="Intentional experiment variable: code or backend; repeat for both"),
+    vary: Optional[list[str]] = typer.Option(None, "--vary", help="Intentional variable: code, backend, settings or parameters; repeat as needed"),
 ):
     """Compare runs with matching dataset, knowledge and configuration snapshots."""
     from knowledge_studio.evaluation import compare_runs
@@ -1977,6 +1977,9 @@ _RECALL_YAML_KEYS = {
 }
 
 _INSTANCE_DIRS = [
+    "goal",
+    "discuss",
+    "skill",
     "profiles/users",
     "profiles/projects",
     "profiles/recipes",

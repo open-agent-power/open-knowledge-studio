@@ -38,7 +38,8 @@ def _relative(value: object, bucket: str) -> str:
     if "\\" in value or ":" in value or any(p in {"", ".", ".."} for p in value.split("/")):
         raise ValueError("Source path must be a canonical KB-relative path")
     path = PurePosixPath(value)
-    if path.is_absolute() or not path.is_relative_to(bucket) or path.suffix != ".md":
+    allowed = path.is_relative_to(bucket) or (bucket == "profiles/goals" and path.is_relative_to("goal"))
+    if path.is_absolute() or not allowed or path.suffix != ".md":
         raise ValueError(f"Source must be a Markdown file under {bucket}")
     return value
 
@@ -48,7 +49,8 @@ def _read(root: Path, value: str, bucket: str) -> bytes:
     target = (root / relative).resolve()
     # Resolving the root is safe; resolving the allowed bucket would allow a
     # bucket-level symlink to widen the boundary to another knowledge base.
-    if not target.is_relative_to(root.resolve() / bucket):
+    effective_bucket = "goal" if bucket == "profiles/goals" and relative.startswith("goal/") else bucket
+    if not target.is_relative_to(root.resolve() / effective_bucket):
         raise ValueError("Source path escapes its knowledge bucket")
     with target.open("rb") as handle:
         data = handle.read(MAX_BYTES + 1)

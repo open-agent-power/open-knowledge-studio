@@ -38,6 +38,12 @@
  .workspace-page .task-workspace,.workspace-page .review-workspace{display:block;position:relative}.task-workspace>#workbench,.review-workspace>.review-inbox{height:100%;padding:22px 20px;border:0}.task-stage,.review-stage{height:100%;padding:20px 22px 48px}.task-workspace:not(.detail-open)>.task-stage,.review-workspace:not(.detail-open)>.review-stage{display:none}.task-workspace.detail-open>#workbench,.review-workspace.detail-open>.review-inbox{display:none}.task-stage .back-to-tasks,.review-stage>.review-back{display:inline-block;min-height:36px;font-size:12px;margin:0 0 15px;color:var(--accent)}.task-stage .page-heading{display:block}.task-stage .page-heading h1{font-size:23px}.task-stage .task-actions{max-width:none;display:flex;flex-direction:row;justify-content:flex-start;margin-top:12px}.task-stage .work-grid{grid-template-columns:1fr}.task-stage .files-section{border-left:0;border-top:1px solid var(--line);padding:18px 0 0}.task-stage .artifact-layout{grid-template-columns:1fr}.task-stage .artifact-list{display:flex;flex-direction:row;overflow:auto}.task-stage .artifact-choice{min-width:140px}.review-stage .intro h1{font-size:23px}.review-stage .draft-preview header h2{font-size:20px}.workspace-page .workspace-empty{padding:38px 0}.workspace-page .task-row{padding:18px 12px}.workspace-page .task-row h2{font-size:15px}.workspace-page .task-row-next{font-size:12px}
 }
 @media(prefers-reduced-motion:reduce){.workspace-page *{scroll-behavior:auto!important;transition:none!important}}
+/* Embedded feature views are details of the three-menu Studio. */
+.studio-panel>.topbar,.studio-panel .rail,.studio-panel .frame>.topbar,.studio-panel .statusbar,.studio-panel .workspace-return{display:none!important}
+.studio-panel .studio{grid-template-columns:minmax(0,1fr);height:100dvh}
+.studio-panel .frame{grid-template-rows:minmax(0,1fr);height:100dvh;min-height:0}
+.studio-panel>.daily-home,.studio-panel>.task-workspace,.studio-panel>.review-workspace,.studio-panel>.debug-workspace{margin:0;max-width:none;width:100%;min-height:100dvh}
+.workspace-tools #refresh{display:none}
 
 .review-stage>.intro,.review-stage>#draftPanel,.review-stage>.page-footer{max-width:860px;margin-left:auto;margin-right:auto}.review-stage #capabilityStatus[data-state=ready]{display:none}
 

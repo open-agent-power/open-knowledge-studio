@@ -302,3 +302,16 @@ def test_compare_rejects_different_dataset_snapshots(tmp_path):
         assert "different dataset" in str(exc)
     else:
         raise AssertionError("comparison should reject different datasets")
+
+
+def test_configuration_changes_need_their_own_explicit_experiment_declaration(tmp_path):
+    left,right=_comparison_pair(tmp_path)
+    right['manifest']['comparison_context']['settings_sha256']='e'*64
+    right['manifest']['comparison_context']['parameters_sha256']='f'*64
+    right['metrics']['mrr']=.75
+    with pytest.raises(ValueError,match='settings_sha256'):
+        _compare_pair(tmp_path,left,right,vary=['code','backend'])
+    result=_compare_pair(tmp_path,left,right,vary=['settings','parameters'])
+    assert result['comparability']['status']=='matched'
+    assert set(result['comparability']['variables'])=={'settings','parameters'}
+    assert result['deltas']['mrr']==.25

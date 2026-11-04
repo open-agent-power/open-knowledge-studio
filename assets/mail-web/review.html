@@ -1,10 +1,11 @@
 <!doctype html>
 <html lang="zh-CN">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>学习审核 · OKS</title><link rel="icon" href="/favicon.svg"><link rel="stylesheet" href="/tasks.css"><link rel="stylesheet" href="/review.css"><link rel="stylesheet" href="/workspace-shell.css"><script src="/workspace-shell.js" defer></script><script src="/workspace-ui.js" defer></script><script src="/review.js" defer></script></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>学习审核 · OKS</title><link rel="icon" href="/favicon.svg"><link rel="stylesheet" href="/tasks.css"><link rel="stylesheet" href="/review.css"><link rel="stylesheet" href="/workspace-shell.css"><script src="/workspace-shell.js" defer></script><script src="/workspace-ui.js" defer></script><script src="/review.js" defer></script><link rel="stylesheet" href="/studio-theme.css">
+</head>
 <body>
 <header class="topbar"><a class="brand" href="/" aria-label="OKS 工作区">oks<span>.</span></a><nav aria-label="主导航"><a href="/#collaboration">讨论</a><a href="/tasks">目标</a><a href="/#wiki">学习</a></nav><details class="more-nav"><summary>更多</summary><div class="more-nav-menu"><a href="/#messages">通信记录</a><a href="/#agents">成员</a><a href="/start">接入检查</a><a href="/review" aria-current="page">学习审核</a><a href="/versions">技能版本</a><a href="/debug">诊断</a></div></details><a class="quiet" href="/review">刷新</a></header>
 <main id="main" class="review-workspace">
-<aside class="review-inbox" aria-label="待审核建议"><h1>学习审核</h1><p id="inboxCount">正在读取建议…</p><label class="review-search">查找建议<input id="reviewSearch" type="search" placeholder="查找建议" aria-label="查找建议"></label><div id="reviewInbox" class="review-inbox-list" aria-live="polite"></div><div class="review-inbox-footer"><a id="openPrivate" href="/review?mode=private">按使用范围查找</a><a href="/#wiki">阅读知识库 →</a></div></aside>
+<aside class="review-inbox" aria-label="待审核建议"><h1>学习审核</h1><p id="inboxCount">正在读取建议…</p><label class="review-search">查找建议<input id="reviewSearch" type="search" placeholder="查找建议" aria-label="查找建议"></label><div id="reviewInbox" class="review-inbox-list" aria-live="polite"></div></aside>
 <div class="review-stage">
 <a id="reviewBack" class="review-back" href="/review">← 全部建议</a>
 <div id="reviewEmpty" class="workspace-empty"><h2>保留值得复用的经验</h2><p>选择一条建议，阅读内容与依据后再决定。</p></div>

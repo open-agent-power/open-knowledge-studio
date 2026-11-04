@@ -62,7 +62,7 @@ def diagnostics(root, *, port=3182, local_review=False, local_edit=False):
 def task_options(root):
     """List bounded explicit Goal/Wiki choices without global-root or private-scope reads."""
     result = {'goals': [], 'wiki': [], 'truncated': False}
-    for key, bucket in (('goals', 'profiles/goals'), ('wiki', 'wiki')):
+    for key, bucket in (('goals', 'goal'), ('goals', 'profiles/goals'), ('wiki', 'wiki')):
         paths = list(islice((root / bucket).rglob('*.md'), 101))
         result['truncated'] |= len(paths) > 100
         for path in sorted(paths[:100]):

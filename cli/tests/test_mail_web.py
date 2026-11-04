@@ -36,11 +36,11 @@ def test_web_reads_real_threads_and_rejects_unsafe_requests(kb):
 
     try:
         with request("/") as response:
-            # Phase 1 panel: read-only observation surface (rail nav + timeline + wiki graph).
+            # Studio has exactly three primary views; writes remain separately
+            # gated by the same local capability checks below.
             body = response.read()
-            for label in ('讨论', '目标', '学习'):
-                assert ('<span>' + label + '</span>').encode() in body
-            assert b"<form" not in body
+            assert re.findall(rb'data-tab="([^"]+)"', body) == [b'discuss', b'goals', b'learning']
+            assert b'/studio.js' in body
         with request("/api/mail/send", {"to": "custom-agent,reviewer", "title": "Hi", "body": "hello"}) as response:
             result = json.load(response)
         assert len(mail.snapshot_data(kb, "custom-agent")["threads"]) == 1

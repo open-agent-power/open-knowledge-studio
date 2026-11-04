@@ -18,7 +18,7 @@ ROOT = asset_root() / "mail-web"
 FILES = {"/": ("index.html", "text/html"), "/style.css": ("style.css", "text/css"), "/app.js": ("app.js", "text/javascript"), "/favicon.svg": ("favicon.svg", "image/svg+xml")}
 FILES["/layout.css"] = ("layout.css", "text/css")
 FILES["/wiki-page.css"] = ("wiki-page.css", "text/css")
-for _asset in ("force-layout.js", "tag-graph.js", "mail-view-model.js", "knowledge-browser.js", "knowledge-navigation.js"):
+for _asset in ("force-layout.js", "graph-labels.js", "tag-graph.js", "mail-view-model.js", "knowledge-browser.js", "knowledge-navigation.js"):
     FILES["/" + _asset] = (_asset, "text/javascript")
 for _asset in ("tag-graph.css", "knowledge-browser.css", "knowledge-reading.css", "knowledge-workspace.css"):
     FILES["/" + _asset] = (_asset, "text/css")
@@ -30,12 +30,26 @@ FILES["/tasks.js"] = ("tasks.js", "text/javascript")
 FILES["/tasks.css"] = ("tasks.css", "text/css")
 for _page in ('start', 'review', 'versions'):
     FILES['/' + _page] = (_page + '.html', 'text/html')
-    FILES['/' + _page + '.js'] = (_page + '.js', 'text/javascript')
-    FILES['/' + _page + '.css'] = (_page + '.css', 'text/css')
+    if _page == 'review':
+        FILES['/' + _page + '.js'] = (_page + '.js', 'text/javascript')
+        FILES['/' + _page + '.css'] = (_page + '.css', 'text/css')
 FILES['/workspace-ui.js'] = ('workspace-ui.js', 'text/javascript')
 FILES['/workspace-shell.js'] = ('workspace-shell.js', 'text/javascript')
 FILES['/workspace-shell.css'] = ('workspace-shell.css', 'text/css')
 FILES['/knowledge-heatmap.js'] = ('knowledge-heatmap.js', 'text/javascript')
+for _asset in ('studio.html', 'studio.js', 'studio-model.js', 'studio.css'):
+    FILES['/' + _asset] = (_asset, 'text/html' if _asset.endswith('.html') else 'text/css' if _asset.endswith('.css') else 'text/javascript')
+for _module in ('api', 'dom', 'state', 'discussion', 'graph', 'goals', 'learning', 'settings', 'formulas', 'knowledge', 'knowledge-model', 'evaluation', 'evaluation-charts'):
+    FILES[f'/studio/{_module}.js'] = (f'studio/{_module}.js', 'text/javascript')
+for _style in ('graph', 'goals', 'learning', 'evaluation'):
+    FILES[f'/studio/{_style}.css'] = (f'studio/{_style}.css', 'text/css')
+FILES['/studio-theme.css'] = ('studio-theme.css', 'text/css')
+FILES['/studio-redirect.js'] = ('studio-redirect.js', 'text/javascript')
+for _asset in ('katex.min.js', 'katex.min.css'):
+    FILES['/vendor/katex/' + _asset] = ('vendor/katex/' + _asset, 'text/javascript' if _asset.endswith('.js') else 'text/css')
+for _font in (ROOT / 'vendor/katex/fonts').glob('*.woff2'):
+    FILES['/vendor/katex/fonts/' + _font.name] = ('vendor/katex/fonts/' + _font.name, 'font/woff2')
+
 UI_AGENT = "human"
 
 #: Self-contained page shown for "在完整 Wiki 中打开" (new tab) and embedded in
@@ -890,6 +904,7 @@ def render_wiki_page(item: dict, embed: bool = False, return_to: str = "/#view=k
 <title>{title} · OKS Wiki</title>
 <link rel="stylesheet" href="/wiki-page.css">
 <link rel="stylesheet" href="/knowledge-reading.css?v=8">
+<link rel="stylesheet" href="/studio-theme.css">
 </head>
 <body class="{'embed' if embed else 'full'}">
 <main class="wiki">
@@ -912,6 +927,49 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(403, {"error": "loopback Host required"})
             return
         route = self.path.split("?", 1)[0]
+        if route.startswith('/api/evaluation/'):
+            from . import studio_evaluation as ev
+            query = parse_qs(urlsplit(self.path).query)
+            try:
+                if route == '/api/evaluation/catalog':
+                    result = ev.catalog(self.server.kb_root)
+                elif route == '/api/evaluation/run':
+                    result = ev.run(self.server.kb_root, query.get('id',[''])[0])
+                elif route == '/api/evaluation/job':
+                    result = ev.read(self.server.kb_root, 'jobs/' + ev.identifier(query.get('id',[''])[0]) + '.json')
+                else:
+                    self.send_json(404, {'error':'Unknown evaluation view'})
+                    return
+                self.send_json(200, result)
+            except (OSError, ValueError, KeyError) as exc:
+                self.send_json(400, {'error':str(exc)})
+            return
+        if route.startswith('/api/studio/'):
+            from . import studio
+            import yaml
+            query = parse_qs(urlsplit(self.path).query)
+            try:
+                if route == '/api/studio/scopes':
+                    result = studio.scopes(self.server.kb_root, query.get("kind", ["goal"])[0])
+                elif route == '/api/studio/view':
+                    result = studio.view(self.server.kb_root, query.get('scope', [''])[0])
+                elif route == '/api/studio/file':
+                    result = studio.read_file(self.server.kb_root, query.get('path', [''])[0])
+                elif route == '/api/studio/contexts':
+                    result = studio.context_catalog(self.server.kb_root)
+                elif route == '/api/studio/skills':
+                    result = studio.local_skills(self.server.kb_root)
+                elif route == '/api/studio/usage':
+                    result = studio.usage(self.server.kb_root)
+                elif route == '/api/studio/settings':
+                    result = studio.settings(self.server.kb_root)
+                else:
+                    self.send_json(404, {'error': 'Unknown workspace view'})
+                    return
+                self.send_json(200, result)
+            except (OSError, ValueError, TypeError, UnicodeError, yaml.YAMLError) as exc:
+                self.send_json(400, {'error': str(exc) if isinstance(exc, ValueError) else '无法读取所选文件，原记录保留。'})
+            return
         if route in {'/api/daily/overview', '/api/daily/entry'}:
             try:
                 from . import daily_capture, daily_learning
@@ -1147,6 +1205,9 @@ class Handler(BaseHTTPRequestHandler):
             })
             return
         entry = FILES.get(route)
+        panel = parse_qs(urlsplit(self.path).query).get('panel') == ['1']
+        if route == '/' and not panel:
+            entry = ('studio.html', 'text/html')
         if not entry:
             self.send_error(404)
             return
@@ -1156,7 +1217,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(data)))
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
-        self.send_header("Content-Security-Policy", "default-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'")
+        self.send_header("Content-Security-Policy", "default-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'self'; form-action 'self'")
         self.end_headers()
         self.wfile.write(data)
 
@@ -1181,13 +1242,13 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
-    def read_json(self):
+    def read_json(self, max_bytes=65536):
         length = int(self.headers.get("Content-Length", "0") or 0)
-        if length <= 0 or length > 65536:
+        if length <= 0 or length > max_bytes:
             if length > 0:
                 self.connection.settimeout(1)
                 self.rfile.read(min(length, 131072))
-            raise ValueError("request body must be between 1 and 65536 bytes")
+            raise ValueError(f"request body must be between 1 and {max_bytes} bytes")
         value = json.loads(self.rfile.read(length).decode("utf-8"))
         if not isinstance(value, dict):
             raise ValueError("request body must be an object")
@@ -1215,6 +1276,41 @@ class Handler(BaseHTTPRequestHandler):
             self._reject_post(403, 'same-origin JSON requests required')
             return
         route = self.path.split("?", 1)[0]
+        if route in {'/api/evaluation/import', '/api/evaluation/start', '/api/evaluation/compare'}:
+            from . import studio_evaluation as ev
+            import yaml
+            try:
+                if route != '/api/evaluation/compare':
+                    if not self.server.local_edit or self.headers.get('Origin') != allowed_origin:
+                        self._reject_post(403, 'Local editing and explicit same-origin requests are required')
+                        return
+                payload = self.read_json(max_bytes=ev.MAX_UPLOAD+65536 if route.endswith('/import') else 65536)
+                if payload.get('expected_knowledge_base') != str(self.server.kb_root):
+                    raise ValueError('Knowledge base changed; reload before continuing')
+                operation = ev.import_dataset if route.endswith('/import') else ev.start if route.endswith('/start') else ev.compare
+                self.send_json(200, operation(self.server.kb_root,payload))
+            except (OSError, ValueError, KeyError, TypeError, yaml.YAMLError) as exc:
+                self.send_json(400, {'error':str(exc)})
+            return
+        if route in {'/api/studio/file', '/api/studio/settings'}:
+            if not getattr(self.server, 'local_edit', False):
+                self._reject_post(403, 'Local editing is disabled; use oks mail serve --local-edit')
+                return
+            if self.headers.get('Origin') != allowed_origin:
+                self._reject_post(403, 'An explicit same-origin request is required for local editing')
+                return
+            from . import studio
+            import yaml
+            try:
+                request = self.read_json()
+                if request.get('expected_knowledge_base') != str(self.server.kb_root):
+                    self.send_json(409, {'error': '知识库已切换，请重新读取。', 'code': 'instance_changed'})
+                    return
+                operation = studio.save_file if route.endswith('/file') else studio.save_settings
+                self.send_json(200, operation(self.server.kb_root, request))
+            except (OSError, ValueError, KeyError, TypeError, UnicodeError, yaml.YAMLError) as exc:
+                self.send_json(409, {'error': str(exc) if isinstance(exc, ValueError) else '保存失败，原文件保留。'})
+            return
         if route in {'/api/tasks/create', '/api/skills/import-bundled', '/api/skills/derive', '/api/skills/merge-prepare', '/api/tasks/reminders', '/api/tasks/lifecycle', '/api/tasks/accept-sources', '/api/tasks/progress', '/api/tasks/correction'}:
             if not getattr(self.server, 'local_edit', False):
                 self._reject_post(403, 'Local editing is disabled; use oks mail serve --local-edit')

@@ -30,7 +30,7 @@ function renderInbox() {
     link.addEventListener('click',event=>{if(event.button||event.ctrlKey||event.metaKey||event.shiftKey||event.altKey)return;event.preventDefault();navigateReview(item.path);});host.append(link);
   }
   if(!matches.length)host.append(el('p',query?'没有匹配的建议。':'暂无待审核的共享草稿。','empty'));
-  $('reviewBack').href=reviewUrl(null);$('openPrivate').href=reviewUrl(null,'private');
+  $('reviewBack').href=reviewUrl(null);
 }
 async function loadInbox() {
   const ticket=++inboxTicket;
@@ -75,7 +75,7 @@ async function navigateReview(path,mode='') {
 $('reviewSearch').value=new URLSearchParams(location.search).get('q')||'';
 $('reviewSearch').addEventListener('input',()=>{const url=new URL(location.href);if($('reviewSearch').value)url.searchParams.set('q',$('reviewSearch').value);else url.searchParams.delete('q');history.replaceState({...history.state},'',url);renderInbox();});
 $('reviewBack').addEventListener('click',event=>{event.preventDefault();navigateReview(null);});
-$('openPrivate').addEventListener('click',event=>{event.preventDefault();navigateReview(null,'private');});
+
 window.addEventListener('pagehide',rememberReviewPosition);
 $('draftPreview').addEventListener('click',event=>{
   const link=event.target.closest('a[href]');
