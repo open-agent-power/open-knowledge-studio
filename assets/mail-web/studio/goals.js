@@ -9,6 +9,9 @@ export function createGoalsView({ dom, state, actions, model: M }) {
       file =
         state.view.files[state.selected] || state.view.files[state.view.entry];
     layout.append(doc);
+    doc.id = "goalDocument";
+    doc.inert = state.saving;
+    if (state.saving) doc.setAttribute("aria-busy", "true");
     const toolbar = el("div", "toolbar"),
       modes = el("div", "seg");
     for (const [id, label] of [
@@ -119,6 +122,7 @@ export function createGoalsView({ dom, state, actions, model: M }) {
             status("未保存");
           };
           text.onblur = () => {
+            if (state.saving) return;
             if (text.textContent !== row.text) {
               try {
                 void saveDocument(

@@ -24,13 +24,16 @@ export function createKnowledgeView({ dom, state, actions, api }) {
     query = "",
     selected = null,
     draftReview = null;
+  function closeReview() {
+    draftReview?.destroy();
+    draftReview = null;
+  }
   function destroy() {
     ticket++;
     dispose();
     dispose = () => {};
     clearInterval(timer);
-    draftReview?.destroy();
-    draftReview = null;
+    closeReview();
   }
   async function render() {
     destroy();
@@ -52,7 +55,7 @@ export function createKnowledgeView({ dom, state, actions, api }) {
     search.setAttribute("aria-label", "搜索图谱");
     const reset = button("收起", () => {
       if (!actions.canLeave()) return;
-      draftReview?.destroy();
+      closeReview();
       expanded.clear();
       depth = 1;
       selected = null;
@@ -78,7 +81,9 @@ export function createKnowledgeView({ dom, state, actions, api }) {
       signature = "",
       refreshing = false,
       maxUses = 1,
-      hitIds = new Set();
+      hitIds = new Set(),
+      selectionSequence = 0,
+      detailNode = null;
     const graph = createGraph(svg, zoom, select, {
       button,
       showEdgeLabels: false,
@@ -104,8 +109,11 @@ export function createKnowledgeView({ dom, state, actions, api }) {
         ? projectQuery(roots, hits, relations)
         : projectKnowledge(roots, expanded, depth, query, relations);
       if (selected && !projection.nodes.some((n) => n.id === selected)) {
+        selectionSequence++;
+        detailNode = null;
         selected = null;
         aside.hidden = true;
+        aside.replaceChildren();
         shell.classList.remove("with-detail");
       }
       maxUses = Math.max(1, ...roots.map((n) => n.uses));
@@ -117,7 +125,7 @@ export function createKnowledgeView({ dom, state, actions, api }) {
       try {
         const { createDraftReview } = await import("./draft-review.js");
         if (current !== ticket || selected !== node.id) return;
-        draftReview?.destroy();
+        closeReview();
         draftReview = createDraftReview({
           api,
           getContext: () => state.context,
@@ -139,11 +147,13 @@ export function createKnowledgeView({ dom, state, actions, api }) {
     }
     function select(node) {
       if (current !== ticket || !actions.canLeave()) return false;
-      void showSelection(node);
+      void showSelection(findNode(roots, node.id) || node);
       return true;
     }
     async function showSelection(node) {
-      draftReview?.destroy();
+      const sequence = ++selectionSequence;
+      detailNode = node;
+      closeReview();
       revealNode(roots, node.id, expanded);
       selected = node.id;
       aside.hidden = false;
@@ -152,7 +162,7 @@ export function createKnowledgeView({ dom, state, actions, api }) {
       const heading = el("header"),
         close = button("×", () => {
           if (!actions.canLeave()) return;
-          draftReview?.destroy();
+          closeReview();
           selected = null;
           aside.hidden = true;
           shell.classList.remove("with-detail");
@@ -245,11 +255,26 @@ export function createKnowledgeView({ dom, state, actions, api }) {
             const file = await api.request(
               "/api/studio/file?" + new URLSearchParams({ path: node.path }),
             );
-            if (current === ticket && selected === node.id)
+            if (
+              current === ticket &&
+              sequence === selectionSequence &&
+              selected === node.id
+            )
               body.textContent = file.text;
           } catch (error) {
-            actions.status(error.message);
+            if (
+              current === ticket &&
+              sequence === selectionSequence &&
+              selected === node.id
+            )
+              actions.status(error.message);
           }
+          if (
+            current !== ticket ||
+            sequence !== selectionSequence ||
+            selected !== node.id
+          )
+            return;
         }
         if (node.url) {
           const link = el('a', 'detail-meta', '来源 ↗');
@@ -334,7 +359,7 @@ export function createKnowledgeView({ dom, state, actions, api }) {
     };
     async function runQuery() {
       if (!actions.canLeave()) return;
-      draftReview?.destroy();
+      closeReview();
       const text = search.value.trim();
       if (!text) return;
       const sequence = ++querySequence,
@@ -353,7 +378,7 @@ export function createKnowledgeView({ dom, state, actions, api }) {
           !actions.canLeave()
         )
           return;
-        draftReview?.destroy();
+        closeReview();
         hits = mapQueryHits(roots, [...(result.knowledge || []), ...(result.team_knowledge || [])]);
         queryMode = true;
         for (const hit of hits)
@@ -431,18 +456,28 @@ export function createKnowledgeView({ dom, state, actions, api }) {
         )
           return;
         const next = JSON.stringify(result);
-        if (next === signature) return;
-        signature = next;
-        [map, usage, skills, contexts] = result;
-        roots = knowledgeTree(map, usage, skills, contexts);
-        paint();
-        const warnings = [
-          ...(usage.warnings || []),
-          ...(skills.warnings || []),
-          ...(contexts.warnings || []),
-        ];
-        if (map.scope?.truncated) warnings.push("图谱已达读取上限");
-        if (warnings.length) actions.status(warnings.join("；"));
+        if (next !== signature) {
+          signature = next;
+          [map, usage, skills, contexts] = result;
+          roots = knowledgeTree(map, usage, skills, contexts);
+          paint();
+          const warnings = [
+            ...(usage.warnings || []),
+            ...(skills.warnings || []),
+            ...(contexts.warnings || []),
+          ];
+          if (map.scope?.truncated) warnings.push("图谱已达读取上限");
+          if (warnings.length) actions.status(warnings.join("；"));
+        }
+        const node = selected && findNode(roots, selected);
+        if (
+          node &&
+          !node.children &&
+          node !== detailNode &&
+          !draftReview &&
+          !state.saving
+        )
+          void showSelection(node);
       } catch (error) {
         if (current === ticket) actions.status(error.message);
       } finally {

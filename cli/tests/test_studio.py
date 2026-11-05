@@ -111,12 +111,12 @@ def test_two_goal_writers_cannot_overwrite_one_another(kb):
 def test_goal_editor_refuses_other_buckets_and_noncanonical_paths(kb, path):
     with pytest.raises((ValueError, OSError)):
         studio.save_file(kb, {'path': path, 'create': True, 'text': '# no'})
-    assert (kb / 'wiki/rule.md').read_text().startswith('---')
+    assert (kb / 'wiki/rule.md').read_text(encoding='utf-8').startswith('---')
 
 
 def test_symlink_escape_and_malformed_frontmatter_preserve_files(kb, tmp_path):
     outside = tmp_path / 'outside.md'
-    outside.write_text('# private')
+    outside.write_text('# private', encoding='utf-8')
     (kb / 'goal/link.md').symlink_to(outside)
     with pytest.raises(ValueError):
         studio.read_file(kb, 'goal/link.md')
@@ -129,10 +129,10 @@ def test_symlink_escape_and_malformed_frontmatter_preserve_files(kb, tmp_path):
 
 def test_relative_references_and_unreadable_scope_have_explicit_boundaries(kb):
     path = kb / 'goal/interface/page.md'
-    path.write_text('# 页面\n\n[知识](../../wiki/rule.md)\n')
+    path.write_text('# 页面\n\n[知识](../../wiki/rule.md)\n', encoding='utf-8')
     result = studio.view(kb, 'goal/interface/page.md')
     assert 'wiki/rule.md' in result['files']
-    (kb / 'goal/bad.md').write_text('---\n[invalid\n---\n# bad')
+    (kb / 'goal/bad.md').write_text('---\n[invalid\n---\n# bad', encoding='utf-8')
     with pytest.raises(ValueError, match='No readable'):
         studio.view(kb, 'goal/bad.md')
 
@@ -142,7 +142,7 @@ def test_a_goal_reference_is_not_automatically_a_parent_child_relation(kb):
     edge = next(e for e in result['edges'] if e['from'] == 'goal/interface/index.md' and e['to'] == 'goal/interface/page.md')
     assert edge['type'] == 'cites'
     index = kb / 'goal/interface/index.md'
-    index.write_text('# 根目标\n\n## 子目标\n[[goal/interface/page.md]]\n')
+    index.write_text('# 根目标\n\n## 子目标\n[[goal/interface/page.md]]\n', encoding='utf-8')
     result = studio.view(kb, 'goal/interface')
     edge = next(e for e in result['edges'] if e['from'] == 'goal/interface/index.md' and e['to'] == 'goal/interface/page.md')
     assert edge['type'] == 'contains'
@@ -150,11 +150,11 @@ def test_a_goal_reference_is_not_automatically_a_parent_child_relation(kb):
 
 def test_code_examples_do_not_create_relations_or_agent_judgments(kb):
     path = kb / 'goal/code.md'
-    path.write_text('```md\n# Fake\n[[wiki/rule]]\n```\n# Actual\n`[[wiki/rule]]`\n<!-- [[wiki/rule]] -->\n')
+    path.write_text('```md\n# Fake\n[[wiki/rule]]\n```\n# Actual\n`[[wiki/rule]]`\n<!-- [[wiki/rule]] -->\n', encoding='utf-8')
     result = studio.view(kb, 'goal/code.md')
     assert result['nodes'][0]['title'] == 'Actual'
     assert set(result['files']) == {'goal/code.md'}
-    (kb / 'discuss/code.md').write_text('[[goal/code.md]]\n\n```md\n## AI 理解\n不是实际判断。\n```\n')
+    (kb / 'discuss/code.md').write_text('[[goal/code.md]]\n\n```md\n## AI 理解\n不是实际判断。\n```\n', encoding='utf-8')
     result = studio.view(kb, 'goal/code.md')
     assert all(n['type'] != 'agent_understanding' for n in result['nodes'])
 
@@ -172,12 +172,12 @@ def test_use_counts_keep_their_original_meaning_and_do_not_mutate(kb):
     state = kb / '.oks'
     state.mkdir()
     path = state / 'access.json'
-    path.write_text('{"rule": 3, "other": 1}')
+    path.write_text('{"rule": 3, "other": 1}', encoding='utf-8')
     before = path.read_bytes()
     result = studio.usage(kb)
     assert result['entries'][0] == {'slug': 'rule', 'count': 3}
     assert result['timing_recorded'] is False and path.read_bytes() == before
-    path.write_text('{"rule": true}')
+    path.write_text('{"rule": true}', encoding='utf-8')
     invalid = studio.usage(kb)
     assert invalid['warnings'] and invalid['entries'] == []
 
@@ -189,11 +189,11 @@ def test_new_goal_and_settings_are_instance_local_and_preserve_unknown_keys(kb, 
     with pytest.raises(ValueError, match='exists'):
         studio.save_file(kb, {'path': 'goal/new/a.md', 'text': '# overwrite', 'create': True})
     (kb / 'settings').mkdir()
-    (kb / 'settings/recall.yaml').write_text('custom: keep\nrecall:\n  topn: 3\n')
+    (kb / 'settings/recall.yaml').write_text('custom: keep\nrecall:\n  topn: 3\n', encoding='utf-8')
     before = studio.settings(kb)
     after = studio.save_settings(kb, {'expected_sha256': before['sha256'], 'values': {'recall_topn': 5, 'embedding_fallback': True}})
     assert after['values']['recall_topn'] == 5 and after['values']['embedding_fallback'] is True
-    assert 'custom: keep' in (kb / 'settings/recall.yaml').read_text()
+    assert 'custom: keep' in (kb / 'settings/recall.yaml').read_text(encoding='utf-8')
     for values in ({'recall_topn': True}, {'recall_floor': float('nan')}, {'memory_validity': 'off'}, {'unknown': 'secret'}):
         with pytest.raises(ValueError):
             studio.save_settings(kb, {'expected_sha256': after['sha256'], 'values': values})
@@ -257,7 +257,7 @@ def test_discussion_dates_are_paths_and_contexts_keep_their_own_roles(kb):
     assert created['kind'] == 'discuss'
     project = kb / 'profiles/projects/test.md'
     project.parent.mkdir(parents=True)
-    project.write_text('# Project\n[[wiki/rule]]')
+    project.write_text('# Project\n[[wiki/rule]]', encoding='utf-8')
     result = studio.context_catalog(kb)
     assert next(item for item in result['entries'] if item['path']=='profiles/projects/test.md')['type']=='project'
     assert {'a':'profiles/projects/test.md','b':'wiki/rule.md','type':'cites'} in result['edges']

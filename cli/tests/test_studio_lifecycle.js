@@ -225,6 +225,64 @@ test("a pending save can finish after reconnecting to the same instance", async 
   assert.equal(page.state.dirty, false);
 });
 
+test("goal inputs remain inert until the save readback completes and unlock after failure", async () => {
+  const saved = deferred(), readback = deferred();
+  let saving = false;
+  const page = await controller({
+    hook: (url) => {
+      if (url === "/api/studio/file") return saved.promise;
+      if (saving && url.startsWith("/api/studio/view")) return readback.promise;
+    },
+  });
+  page.state.dirty = true;
+  saving = true;
+  const pending = page.actions.saveDocument({ path: "discuss/one.md", sha256: "old" }, "# Saved");
+  const surface = page.dom.$("goalDocument");
+  assert.equal(surface.inert, true);
+  assert.equal(surface["aria-busy"], "true");
+  saved.resolve({});
+  await settle();
+  assert.equal(page.state.saving, true);
+  assert.equal(surface.inert, true);
+  readback.resolve({ knowledge_base: "/kb", scope: "discuss/one.md", entry: "discuss/one.md",
+    version: 2, files: { "discuss/one.md": { kind: "goal" } }, warnings: [] });
+  await pending;
+  assert.equal(page.state.saving, false);
+  assert.equal(surface.inert, false);
+
+  const failed = await controller({ hook: (url) => {
+    if (url === "/api/studio/file") return Promise.reject(new Error("save rejected"));
+  } });
+  await failed.actions.saveDocument({ path: "discuss/one.md", sha256: "old" }, "# Unsaved");
+  assert.equal(failed.state.dirty, true);
+  assert.equal(failed.state.saving, false);
+  assert.equal(failed.dom.$("goalDocument").inert, false);
+});
+
+test("discussion target navigation retains the linked goal through catalog refresh and reload", async () => {
+  const hook = (url) => {
+    if (url === "/api/studio/scopes?kind=goal") return { scopes: [{ path: "goal", files: [
+      { path: "goal/z.md", title: "Latest goal" }, { path: "goal/a.md", title: "Linked goal" },
+    ] }], warnings: [] };
+    if (url.startsWith("/api/studio/view")) {
+      const scope = new URL("http://local" + url).searchParams.get("scope");
+      return { knowledge_base: "/kb", scope, entry: scope, version: 1, files: {
+        [scope]: { kind: scope.startsWith("discuss/") ? "discuss" : "goal" },
+        "goal/a.md": { kind: "goal" },
+      }, warnings: [] };
+    }
+  };
+  const page = await controller({ hook });
+  page.actions.scopeFile("goal/a.md");
+  await settle();
+  await page.tick(12);
+  assert.equal(page.state.scope, "goal/a.md");
+  assert.equal(page.state.selected, "goal/a.md");
+  const reloaded = await controller({ hash: page.location.hash, hook });
+  assert.equal(reloaded.state.scope, "goal/a.md");
+  assert.equal(reloaded.state.selected, "goal/a.md");
+});
+
 test("learning loads only the selected module and discards late imports", async () => {
   const dom = domFixture(),
     graph = deferred(),

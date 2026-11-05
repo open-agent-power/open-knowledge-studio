@@ -154,7 +154,7 @@ import { createLearningView } from "./studio/learning.js";
     select.value = state.scope;
     if (data.warnings.length) status(data.warnings.join("；"));
   }
-  async function loadView(force = false) {
+  async function loadView(force = false, afterSave = false) {
     if (state.tab === "learning") return;
     if (state.viewLoading && !force) return;
     if (!state.scope) {
@@ -188,7 +188,7 @@ import { createLearningView } from "./studio/learning.js";
       return;
     }
     if ($("connectionRecovery")) $("connectionRecovery").hidden = true;
-    if (state.dirty || state.saving) {
+    if (state.dirty || (state.saving && !afterSave)) {
       if (state.view && next.version !== state.view.version)
         status("文件已有更新，请先保存或重新读取");
       return;
@@ -262,9 +262,11 @@ import { createLearningView } from "./studio/learning.js";
     if (state.view?.files[path]?.kind === "goal") {
       if (!canLeave()) return;
       state.selected = path;
+      state.scope = path;
       state.mode = "list";
       state.tab = "goals";
       render();
+      void loadCurrent().catch((error) => status(error.message));
     } else void inspect(path);
   }
   async function inspect(path) {
@@ -283,6 +285,11 @@ import { createLearningView } from "./studio/learning.js";
     if (state.saving) return;
     status("保存中…");
     state.saving = true;
+    const surface = $("goalDocument");
+    if (surface) {
+      surface.inert = true;
+      surface.setAttribute("aria-busy", "true");
+    }
     const knowledgeBase = state.context.knowledge_base;
     try {
       await post("/api/studio/file", {
@@ -292,14 +299,25 @@ import { createLearningView } from "./studio/learning.js";
       });
       if (knowledgeBase !== state.context.knowledge_base) return;
       state.dirty = false;
-      state.saving = false;
-      await loadView(true);
-      status("");
+      await loadView(true, true);
+      if (knowledgeBase === state.context.knowledge_base) status("");
     } catch (e) {
       if (knowledgeBase !== state.context.knowledge_base) return;
-      state.saving = false;
       state.dirty = true;
       status(e.message);
+    } finally {
+      if (surface) {
+        surface.inert = false;
+        surface.removeAttribute("aria-busy");
+      }
+      if (knowledgeBase === state.context.knowledge_base) {
+        state.saving = false;
+        const currentSurface = $("goalDocument");
+        if (currentSurface) {
+          currentSurface.inert = false;
+          currentSurface.removeAttribute("aria-busy");
+        }
+      }
     }
   }
   function openNew() {

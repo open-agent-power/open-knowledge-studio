@@ -93,7 +93,7 @@ def history(root, kind="vfs"):
         return {"records": []}
     if path.stat().st_size > 4 * 1024 * 1024:
         raise ValueError("VFS observation history exceeds limit")
-    rows = json.loads(path.read_text())
+    rows = json.loads(path.read_text(encoding="utf-8"))
     if (
         not isinstance(rows, list)
         or len(rows) > 200

@@ -29,7 +29,7 @@ jobs:
         with:
           node-version: "24"
       - name: Run frontend contracts
-        run: node --test cli/tests/test_knowledge_heatmap.js cli/tests/test_studio_model.js cli/tests/test_studio_lifecycle.js cli/tests/test_workspace_navigation.js cli/tests/test_draft_review.js cli/tests/test_graph.js
+        run: node --test cli/tests/test_knowledge_heatmap.js cli/tests/test_studio_model.js cli/tests/test_studio_lifecycle.js cli/tests/test_workspace_navigation.js cli/tests/test_draft_review.js cli/tests/test_graph.js cli/tests/test_knowledge_view.js
 
   pytest:
     name: pytest (${{ matrix.os }}, py${{ matrix.python }})
