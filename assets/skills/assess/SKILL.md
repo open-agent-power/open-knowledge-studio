@@ -147,7 +147,7 @@ oks registry bind \
   --goals {goal-slug-1},{goal-slug-2}
 ```
 
-Writes `profiles/agents/registry.jsonl` (git-shared). The hook reads it on next
+Writes `records/registry/terminals.jsonl` (git-shared). The hook reads it on next
 prompt: matching entry skips the first-run guide.
 
 ## Step 4: Report

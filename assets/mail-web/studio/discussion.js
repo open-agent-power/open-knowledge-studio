@@ -1,6 +1,7 @@
+import { createTimeline } from "./timeline.js";
 // View module. State and side effects are supplied explicitly by the controller.
 import { drawGraph as drawForceGraph } from "./graph.js";
-export function createDiscussionView({ dom, state, actions, model: M }) {
+export function createDiscussionView({ dom, state, actions, model: M, api }) {
   const { $, el, button } = dom;
   const { render, scopeFile } = actions;
   let expanded = false,
@@ -8,8 +9,8 @@ export function createDiscussionView({ dom, state, actions, model: M }) {
   const drawGraph = (...args) =>
     drawForceGraph(...args, { entry: state.view.entry, button });
   function renderDiscussion() {
-    const data = M.graph(state.view, expanded),
-      stage = el("div", "graph-stage");
+    let data = M.graph(state.view, expanded);
+    const stage = el("div", "graph-stage");
     stage.setAttribute("aria-label", "目标及关联知识");
     const ns = "http://www.w3.org/2000/svg",
       svg = document.createElementNS(ns, "svg");
@@ -117,7 +118,28 @@ export function createDiscussionView({ dom, state, actions, model: M }) {
       }
     };
     display(data.nodes.length);
+    const timeline = createTimeline({
+      dom,
+      api,
+      events: state.view.timeline,
+      onSelect: (frame) => {
+        pause();
+        data = M.graph(frame, true);
+        seek.max = Math.max(1, data.nodes.length);
+        seek.value = seek.max;
+        display(data.nodes.length);
+        detail.hidden = true;
+      },
+      onCurrent: () => {
+        data = M.graph(state.view, expanded);
+        seek.max = Math.max(1, data.nodes.length);
+        seek.value = seek.max;
+        display(data.nodes.length);
+      },
+    });
+    $("content").append(timeline.element);
     destroyGraph = () => {
+      timeline.destroy();
       pause();
       graphDispose();
     };

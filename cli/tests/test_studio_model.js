@@ -99,3 +99,30 @@ test('query projection shows only exact hits and their ancestors',async()=>{
  assert.deepEqual(graph.nodes.map(n=>n.id),['root','one','hit']);
  assert.equal(graph.edges.length,2);
 });
+test('mindmap edits preserve sibling branches and source frontmatter',()=>{
+ const text='---\r\ntype: goal\r\n---\r\n# Day\r\n## [ ] A\r\n### [ ] A1\r\n## [ ] B\r\n';
+ const changed=model.addChild(text,{kind:'heading',level:2,line:4},'A2');
+ assert.ok(changed.includes('### [ ] A1\r\n### [ ] A2\r\n## [ ] B'));
+ assert.ok(changed.startsWith('---\r\ntype: goal\r\n---'));
+ const removed=model.removeBranch(changed,{kind:'heading',level:2,line:4});
+ assert.equal(removed,text.replace('## [ ] A\r\n### [ ] A1\r\n',''));
+});
+test('daily mindmap uses actual Markdown hierarchy and supports branch collapse',async()=>{
+ const {goalTree,layoutTree}=await standaloneModule('mindmap.js');
+ const view={entry:'profiles/goals/2026/11/05/a.md',entries:['profiles/goals/2026/11/05/a.md'],files:{}};
+ view.files[view.entry]={title:'A',path:view.entry,kind:'goal',outline:[{kind:'heading',level:1,line:0,parent:null,text:'A',checked:false},{kind:'heading',level:2,line:2,parent:0,text:'first',checked:false},{kind:'task',level:3,line:3,parent:2,text:'verify',checked:true}]};
+ const tree=goalTree(view,'2026-11-05');assert.equal(tree.children[0].children[0].children[0].title,'verify');
+ const full=layoutTree(tree),folded=layoutTree(tree,new Set([view.entry]));
+ assert.equal(full.nodes.length,4);assert.equal(folded.nodes.length,2);assert.equal(full.edges.length,3);
+ assert.equal(full.nodes.find(n=>n.title==='verify').checked,true);
+});
+test('inline child drafts reserve a separate row without mutating saved knowledge',async()=>{
+ const {withDraftNode,layoutTree}=await standaloneModule('mindmap.js');
+ const tree={id:'root',title:'Root',children:[{id:'a',title:'A',children:[]},{id:'b',title:'B',children:[]}]};
+ const drawn=withDraftNode(tree,{id:'root',title:'Draft'}),graph=layoutTree(drawn);
+ assert.equal(tree.children.length,2);assert.equal(drawn.children.length,3);
+ const draft=graph.nodes.find(n=>n.draft);
+ assert.equal(draft.parentId,'root');
+ assert.equal(new Set(graph.nodes.filter(n=>!n.children.length).map(n=>n.y)).size,3);
+ assert.ok(graph.edges.some(e=>e.to.draft));
+});

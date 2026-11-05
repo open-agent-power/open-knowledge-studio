@@ -15,10 +15,11 @@ from itertools import islice
 
 import yaml
 
-from . import handoff, store, tasks, workspace
+from . import handoff, store, tasks, workspace, layout, studio_history
 
-GOAL_ROOTS = ('goal', 'profiles/goals')
-READ_ROOTS = ('goal', 'profiles', 'project', 'discuss', 'wiki', 'raw', 'drafts', 'skill', 'mail', 'records')
+GOAL_ROOTS = ('profiles/goals', 'goal')
+DISCUSS_ROOTS = ('profiles/discuss', 'discuss')
+READ_ROOTS = ('goal', 'profiles', 'project', 'discuss', 'wiki', 'raw', 'drafts', 'skill', 'skills', 'mail', 'records')
 MAX_FILES = 80
 MAX_GRAPH_BYTES = 2 * 1024 * 1024
 MAX_SCAN = 400
@@ -35,14 +36,14 @@ def _path(root, relative, *, goal=False):
                   for prefix in (GOAL_ROOTS if goal else READ_ROOTS))
     if not allowed:
         raise ValueError('Path is outside the selected knowledge buckets')
-    return tasks._inside(root.resolve(), relative)
+    return tasks._inside(root.resolve(), layout.canonical(root.resolve(), relative))
 
 
 def read_file(root, relative):
-    _path(root, relative)
+    relative = _path(root, relative).relative_to(root.resolve()).as_posix()
     item = workspace._text_file(root, relative, {'.md'})
     meta, body, _ = _markdown(item['text'])
-    kind = 'goal' if any(relative.startswith(p + '/') for p in GOAL_ROOTS) else relative.split('/')[0]
+    kind = 'goal' if any(relative.startswith(p + '/') for p in GOAL_ROOTS) else 'discuss' if any(relative.startswith(p + '/') for p in DISCUSS_ROOTS) else relative.split('/')[0]
     title = _title(body, str(meta.get('title') or Path(relative).stem)) if kind == 'goal' else str(meta.get('title') or _title(body, Path(relative).stem))
     return {**item, 'title': title, 'kind': kind,
             'outline': outline(item['text'])}
@@ -120,7 +121,7 @@ def scopes(root, kind="goal"):
     result, warnings = [], []
     if kind not in {"goal", "discuss"}:
         raise ValueError("Choose goal or discuss")
-    for bucket in (("discuss",) if kind == "discuss" else GOAL_ROOTS):
+    for bucket in (DISCUSS_ROOTS if kind == "discuss" else GOAL_ROOTS):
         base = root / bucket
         if not base.is_dir():
             continue
@@ -146,12 +147,12 @@ def scopes(root, kind="goal"):
 
 
 def document_path(root, path):
-    discussion = isinstance(path, str) and (path == 'discuss' or path.startswith('discuss/'))
+    discussion = isinstance(path, str) and any(path == p or path.startswith(p + '/') for p in DISCUSS_ROOTS)
     return _path(root, path, goal=not discussion)
 
 
 def document_date(path):
-    match = re.match(r'^(?:goal|discuss)/(\d{4})/(\d{2})/(\d{2})(?:/|$)', path)
+    match = re.match(r'^(?:goal|discuss|profiles/goals|profiles/discuss)/(\d{4})/(\d{2})/(\d{2})(?:/|$)', path)
     if match:
         from datetime import date
         try:
@@ -178,7 +179,7 @@ def context_catalog(root):
                 kind = 'project'
             elif relative.startswith('profiles/goals/') or bucket == 'goal':
                 kind = 'goal'
-            elif bucket == 'discuss':
+            elif any(relative.startswith(p + '/') for p in DISCUSS_ROOTS):
                 kind = 'discuss'
             else:
                 kind = 'profile'
@@ -247,16 +248,18 @@ def _references(root, path, text, wiki_index):
             try:
                 target = _path(root, candidate)
                 if target.suffix.lower() == '.md' and target.is_file():
-                    resolved.append(candidate)
+                    resolved.append(target.relative_to(root.resolve()).as_posix())
                     break
             except ValueError:
                 continue
     return list(dict.fromkeys(resolved))
 
 
-def view(root, scope):
+def view(root, scope, *, seed_paths=None):
     target = document_path(root, scope)
-    if target.is_dir():
+    if seed_paths is not None:
+        seeds = seed_paths
+    elif target.is_dir():
         seeds = sorted(p.relative_to(root).as_posix() for p in islice(target.rglob('*.md'), MAX_FILES + 1))
     elif target.suffix.lower() == '.md':
         seeds = [scope]
@@ -276,7 +279,7 @@ def view(root, scope):
     queue = seeds[:MAX_FILES]
     # Written discussion links can point into the chosen Goal scope. Do not
     # infer current chat/session or relevance from file modification times.
-    discussions = list(islice((root / 'discuss').rglob('*.md'), MAX_SCAN + 1))
+    discussions = list(islice((p for bucket in DISCUSS_ROOTS for p in (root / bucket).rglob('*.md')), MAX_SCAN + 1))
     if len(discussions) > MAX_SCAN:
         warnings.append(f'Discussion reverse lookup limited to {MAX_SCAN} files')
     for p in discussions[:MAX_SCAN]:
@@ -334,7 +337,7 @@ def view(root, scope):
     if not readable_goals:
         raise ValueError('No readable Goal files in this scope')
     entry = next((p for p in readable_goals if Path(p).stem.lower() in {'index', 'readme'}), readable_goals[0])
-    return {'scope': scope, 'entry': entry, 'files': files, 'nodes': nodes, 'edges': edges,
+    return {'scope': scope, 'entry': entry, 'entries': readable_goals, 'files': files, 'nodes': nodes, 'edges': edges,
             'version': version, 'warnings': list(dict.fromkeys(warnings)),
             'replay': 'current_projection_only', 'knowledge_base': str(root)}
 
@@ -342,6 +345,7 @@ def view(root, scope):
 def save_file(root, request):
     path, text = request.get('path'), request.get('text')
     target = document_path(root, path)
+    path = target.relative_to(root.resolve()).as_posix()
     if target.suffix.lower() != '.md' or not isinstance(text, str) or not text.strip():
         raise ValueError('Provide a nonempty Goal Markdown document')
     if len(text.encode('utf-8')) > 60000 or '\x00' in text:
@@ -350,20 +354,82 @@ def save_file(root, request):
     lock = tasks._inside(root, '.oks/locks/goal-' + hashlib.sha256(path.encode()).hexdigest() + '.lock')
     with store._file_lock(lock):
         document_path(root, path)  # recheck after acquiring the writer lock
+        before = None
         if request.get('create') is True:
             if target.exists() or request.get('expected_sha256') is not None:
                 raise ValueError('Goal already exists; read it before editing')
         else:
             current = read_file(root, path)
+            before = current['text']
             if current['sha256'] != request.get('expected_sha256'):
                 raise ValueError('Goal changed; reload before saving')
-        store._atomic_write(target, text)
+        if before != text:
+            event=studio_history.record(root,path,before,text,action='create' if before is None else 'edit',actor=str(request.get('actor','unspecified'))[:100],status='prepared')
+            try:
+                store._atomic_write(target, text)
+            except OSError:
+                studio_history.finish(root,event,'failed')
+                raise
+            studio_history.finish(root,event)
+            studio_history.checkpoint(root,path,text)
     return read_file(root, path)
+
+
+def day_view(root, selected_kind, date):
+    from datetime import datetime
+    datetime.strptime(date,'%Y-%m-%d')
+    if selected_kind not in {'goal','discuss'}:raise ValueError('Choose goal or discuss')
+    activity=studio_history.events(root,date,selected_kind)
+    listing=scopes(root,selected_kind)
+    paths=[f['path'] for scope in listing['scopes'] for f in scope['files'] if f['date']==date]
+    paths += [e['path'] for e in activity if (root/e['path']).is_file()]
+    paths=list(dict.fromkeys(paths))
+    scope=(layout.GOALS if selected_kind=='goal' else layout.DISCUSS)+'/'+date.replace('-','/')
+    if not paths:
+        return {'scope':scope,'date':date,'entry':'','entries':[],'files':{},'nodes':[],'edges':[],
+                'timeline':activity,'version':date,'warnings':listing['warnings'],'knowledge_base':str(root)}
+    result=view(root,scope,seed_paths=paths)
+    result.update(date=date,timeline=studio_history.events(root,date,selected_kind))
+    result['version'] += ':' + hashlib.sha256(json.dumps(result['timeline'],sort_keys=True).encode()).hexdigest()
+    return result
+
+
+def revision_view(root, identifier):
+    """Reconstruct only documents actually retained by this point that day."""
+    from datetime import datetime
+    event = studio_history.snapshot(root, identifier)
+    date = datetime.fromisoformat(event['at']).date().isoformat()
+    retained = {}
+    for row in studio_history.events(root, date, event['kind'], snapshots=True):
+        if row.get('status', 'complete') != 'complete':
+            continue
+        retained[row['path']] = row
+        if row['id'] == identifier:
+            break
+    files, nodes, edges = {}, [], []
+    for path, row in retained.items():
+        text = row['after']
+        meta, body, _ = _markdown(text)
+        file = {'path': path, 'text': text, 'sha256': row['after_sha256'], 'kind': row['kind'],
+                'title': _title(body, str(meta.get('title') or Path(path).stem)) if row['kind']=='goal' else str(meta.get('title') or _title(body, Path(path).stem)), 'outline': outline(text)}
+        files[path] = file
+        nodes.append({'id': path, 'path': path, 'type': row['kind'], 'title': file['title']})
+        if row['kind'] == 'discuss':
+            for label, kind in [('人的判断', 'human_judgment'), ('AI 理解', 'agent_understanding'), ('待确认', 'open_question')]:
+                match = re.search(r'^##\s+' + label + r'\s*\n([\s\S]*?)(?=^##\s|\Z)', _visible_markdown(body), re.M)
+                if match and match[1].strip():
+                    identity = path + '#' + kind
+                    nodes.append({'id': identity, 'path': path, 'type': kind, 'title': label, 'text': match[1].strip()})
+                    edges.append({'from': path, 'to': identity, 'type': 'states'})
+    return {'entry': event['path'], 'entries': list(files), 'files': files, 'nodes': nodes, 'edges': edges,
+            'revision': event, 'knowledge_base': str(root), 'read_only': True,
+            'coverage': 'Only retained documents at or before this recorded point; no reconstruction of unknown past'}
 
 
 def local_skills(root):
     result, warnings = [], []
-    for p in islice((root / 'skill').rglob('SKILL.md'), MAX_SCAN):
+    bases = ('skills',) if (root/'skills').is_dir() else ('skill',)
+    for p in islice((p for base in bases for p in (root/base).rglob('SKILL.md')), MAX_SCAN):
         rel = p.relative_to(root).as_posix()
         try:
             item = read_file(root, rel)
@@ -458,3 +524,23 @@ def save_settings(root, request):
                 data[field] = value
         store._atomic_write(path, yaml.safe_dump(data, allow_unicode=True, sort_keys=False))
     return settings(root)
+
+
+def activity(root,date):
+    from datetime import datetime
+    from .vfs_observation import history
+    datetime.strptime(date,'%Y-%m-%d')
+    def on_day(value):
+        try:return datetime.fromisoformat(value.replace('Z','+00:00')).astimezone().date().isoformat()==date
+        except (ValueError,TypeError,AttributeError):return False
+    queried=set();used=[]
+    for row in history(root,'recall')['records']:
+        if on_day(row.get('at')):
+            queried.update(hit.get('source_path') for hit in row.get('hits',[]) if hit.get('source_path'))
+    base=tasks._inside(root,'records/evaluation/use-events')
+    for p in base.glob('*.json'):
+        row=json.loads(tasks._inside(root,p.relative_to(root).as_posix()).read_text())
+        if on_day(row.get('at')):used.append(row['slug'])
+    return {'date':date,'queried_paths':sorted(queried),'used_slugs':used,
+            'edited_paths':sorted({e['path'] for e in studio_history.events(root,date)}),
+            'meaning':'Dated observed activity only; query is not adoption; historical counters have no date'}

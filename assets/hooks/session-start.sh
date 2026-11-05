@@ -57,7 +57,7 @@ fi
 CONTEXT=$(cat << EOF
 [Knowledge Studio] $WIKI_COUNT wiki pages | $DRAFT_COUNT drafts | $RAW_COUNT raw files
 Domains: $DOMAINS
-Use /query to search knowledge, /ingest to triage raw files, /status for overview.
+Use oh-my-oks for knowledge lookup, daily goals, source intake and reviewed learning.
 EOF
 )
 

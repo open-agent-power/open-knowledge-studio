@@ -13,7 +13,7 @@
     <link rel="stylesheet" href="/vendor/katex/katex.min.css" />
     <script src="/vendor/katex/katex.min.js" defer></script>
     <script src="/graph-labels.js" defer></script>
-<script src="/force-layout.js" defer></script>
+    <script src="/force-layout.js" defer></script>
     <script src="/studio-model.js" defer></script>
     <script src="/workspace-ui.js" defer></script>
     <script type="module" src="/studio.js"></script>
@@ -28,14 +28,14 @@
         ><button data-tab="goals">目标</button
         ><button data-tab="learning">学习</button>
       </nav>
-      <span id="instance"></span>
+      <span id="instance"></span
+      ><button id="showGuide" aria-label="使用引导">?</button>
     </header>
+    <aside id="onboarding" hidden></aside>
     <main>
       <div id="scopeBar">
         <label for="scope">日期</label
-        ><select id="scope" aria-label="目标文件范围">
-          <option value="">选择文件或文件夹</option></select
-        ><button
+        ><input id="scope" type="date" aria-label="日期" /><button
           id="newGoal"
           title="新增目标 Markdown"
           aria-label="新增目标 Markdown"
@@ -59,11 +59,11 @@
             ×
           </button>
         </header>
-        <label for="newPath">文件路径</label
+        <label for="newPath">标题</label
         ><input
           id="newPath"
           required
-          placeholder="goal/项目/目标.md"
+          placeholder="新目标"
           maxlength="300"
         /><label for="newText">Markdown</label
         ><textarea id="newText" required rows="9"></textarea>

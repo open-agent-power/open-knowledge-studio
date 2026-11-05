@@ -7,9 +7,9 @@ unread mail, prints a structured <recalled-memory> block on stdout.
 
 Agent identity: env OKS_AGENT_ID > installed .claude/.codex hook location > host
 environment > payload agent_id > cwd basename > "unknown".
-Terminal registry (profiles/agents/registry.jsonl, git-shared): binds agent+cwd
+Terminal registry (records/registry/terminals.jsonl, git-shared): binds agent+cwd
 to profile/goal. New terminal with no registry entry + no active goals → inject
-first-run guide prompting AI to ask the user (→ /assess builds profile/goal,
+first-run guide prompting AI to ask the user (→ oh-my-oks builds profile/goal,
 writes registry). Subsequent prompts use active goals or registry goals.
 
 Inject trace (records/inject.jsonl, git-shared): appends what was injected
@@ -180,7 +180,7 @@ def _load_active_goals(kb_root: Path) -> list:
     return goals
 
 
-# ── Terminal registry (profiles/agents/registry.jsonl, git-shared) ──
+# ── Terminal registry (records/registry/terminals.jsonl, git-shared) ──
 
 def _agent_id(payload: dict, cwd: str) -> str:
     """Agent identity: explicit OKS > installed hook > host env > payload > cwd."""
@@ -208,9 +208,11 @@ def _agent_id(payload: dict, cwd: str) -> str:
 
 
 def _registry_path(kb_root: Path) -> Path:
-    d = kb_root / "profiles" / "agents"
-    d.mkdir(parents=True, exist_ok=True)
-    return d / "registry.jsonl"
+    canonical = kb_root / "records" / "registry" / "terminals.jsonl"
+    legacy = kb_root / "profiles" / "agents" / "registry.jsonl"
+    path = legacy if not canonical.exists() and legacy.exists() else canonical
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return path
 
 
 def _find_registry_entry(kb_root: Path, agent_id: str, cwd: str) -> dict | None:
@@ -754,7 +756,7 @@ def main() -> int:
             "## 首次使用（新终端）\n"
             "注册表无此终端的 goal 绑定。\n"
             "建议反问用户确认：当前目标 / 技术栈 / 项目。\n"
-            "确认后调 /assess 建档 + `oks registry bind` 绑定 goal，后续 hook 显示 goal。"
+            "确认后使用 oh-my-oks 建档 + `oks registry bind` 绑定 goal，后续 hook 显示 goal。"
         )
 
     # Goal section: 只在 registry 绑了 goal 时显示（没绑 = 永远不显示）

@@ -211,7 +211,7 @@ def test_http_edit_permissions_instance_binding_and_reused_views(kb, editing):
                 call('/api/studio/file', {**payload, 'expected_knowledge_base': str(kb.parent)})
             assert error.value.code == 409
             with call('/api/studio/file', payload) as response:
-                assert json.load(response)['path'] == 'goal/new.md'
+                assert json.load(response)['path'] == 'profiles/goals/new.md'
         else:
             with pytest.raises(HTTPError) as error:
                 call('/api/studio/file', payload)

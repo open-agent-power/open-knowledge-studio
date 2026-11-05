@@ -116,3 +116,108 @@
 .add-task button {
   color: var(--accent);
 }
+.mindmap-stage {
+  position: relative;
+  min-height: 360px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: radial-gradient(#dde5f0 0.6px, transparent 0.6px);
+  background-size: 19px 19px;
+}
+.mindmap-canvas {
+  overflow: auto;
+  max-height: calc(100vh - 275px);
+  min-height: 360px;
+  padding: 16px;
+}
+.mindmap-node {
+  cursor: pointer;
+  outline: none;
+}
+.mindmap-node text {
+  font: 12px system-ui;
+  fill: #7083a5;
+}
+.mindmap-node:focus rect {
+  stroke: #728cbe;
+  stroke-width: 2;
+}
+.mindmap-node.done text {
+  text-decoration: line-through;
+  fill: #8fa99f;
+}
+.mindmap-editor {
+  position: absolute;
+  right: 15px;
+  top: 15px;
+  background: #fff;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 8px 25px #19294f0d;
+  width: 245px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.mindmap-editor[hidden] {
+  display: none;
+}
+.mindmap-editor input:not([type="checkbox"]) {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  font-size: 12px;
+}
+.mindmap-editor label {
+  width: 100%;
+  font-size: 12px;
+}
+.close-node {
+  margin-left: auto;
+}
+.day-timeline input[type="range"] {
+  min-width: 90px;
+  width: 120px;
+}
+.day-timeline select {
+  border: 0;
+  background: none;
+  color: inherit;
+}
+#scope[type="date"] {
+  border: 0;
+  background: transparent;
+  color: #8294b4;
+  font: 12px system-ui;
+}
+.mindmap-add {
+  cursor: pointer;
+  outline: none;
+}
+.mindmap-add text {
+  font: 14px system-ui;
+  fill: #9bacc8;
+}
+.mindmap-add:hover circle,
+.mindmap-add:focus circle {
+  stroke: #748fbc;
+  fill: #f2f6fd;
+}
+.mindmap-inline-editor {
+  margin: 0;
+  width: 200px;
+}
+.mindmap-inline-editor input {
+  box-sizing: border-box;
+  width: 100%;
+  height: 38px;
+  border: 1px solid #8fa9d4;
+  border-radius: 8px;
+  padding: 8px;
+  font: 12px system-ui;
+  outline: none;
+  background: white;
+  color: #617ba5;
+}

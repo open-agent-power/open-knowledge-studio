@@ -922,6 +922,16 @@ def sources_link(path: Path, name: str = typer.Option(..., '--name'),
         raise typer.BadParameter(str(exc))
 
 
+@app.command('layout-migrate')
+def layout_migrate():
+    """Unify legacy goal/discuss/skill buckets with a resumable local audit."""
+    from .layout import migrate
+    try:
+        _emit_json(migrate(_instance_root(None)))
+    except (OSError, ValueError) as exc:
+        raise typer.BadParameter(str(exc))
+
+
 @sources_app.command('list')
 def sources_list():
     from .linked_sources import catalog
@@ -2062,9 +2072,9 @@ _RECALL_YAML_KEYS = {
 }
 
 _INSTANCE_DIRS = [
-    "goal",
-    "discuss",
-    "skill",
+    "profiles/discuss",
+    "skills",
+    "records/studio",
     "profiles/users",
     "profiles/projects",
     "profiles/recipes",
@@ -2142,6 +2152,7 @@ oks wiki use <slug>            # 标记引用
 
 
 _SHARED_ASSETS = ("templates", "_meta", "settings", "profiles")
+_DEFAULT_CORE_SKILLS = ('oh-my-oks',)
 
 # How each agent ecosystem's directory is assembled from the single-source
 # components under assets/. Supporting another agent is one line here.
@@ -2248,6 +2259,10 @@ def _materialize_assets(root: Path, base: Path, overwrite: bool) -> list[str]:
         src = base / name
         if src.is_dir() and copy_into(src, root / name):
             done.append(name)
+    from . import skill_bundle
+    core = base / 'skills' / skill_bundle.CORE
+    if core.is_dir() and skill_bundle.copy(root,core,'skills/'+skill_bundle.CORE,overwrite=overwrite):
+        done.append('skills/'+skill_bundle.CORE)
 
     for dest_name, spec in _AGENT_TARGETS.items():
         dest = root / dest_name
@@ -2265,7 +2280,12 @@ def _materialize_assets(root: Path, base: Path, overwrite: bool) -> list[str]:
         for component in ("skills", "hooks", "rules"):
             src = base / component
             if spec[component] and src.is_dir():
-                wrote |= copy_into(src, dest / component)
+                if component == 'skills':
+                    for skill_name in _DEFAULT_CORE_SKILLS:
+                        if (src/skill_name).is_dir():
+                            wrote |= copy_into(src/skill_name,dest/component/skill_name)
+                else:
+                    wrote |= copy_into(src, dest / component)
         if wrote:
             done.append(dest_name)
     for wrapper, bake in preserved_bakes.items():
@@ -2330,6 +2350,8 @@ def init(
         raise typer.Exit(1)
 
     root.mkdir(parents=True, exist_ok=True)
+    from .studio_history import initialize
+    initialize(root)
 
     for d in _INSTANCE_DIRS:
         p = root / d
@@ -2752,10 +2774,12 @@ def _migrate_codex_hook_paths(settings_path: Path, root: Path) -> bool:
 @app.command(name="skills-install")
 def skills_install(
     force: bool = typer.Option(False, "--force", help="Overwrite existing skills"),
+    all_bundled: bool = typer.Option(False,'--all-bundled',help='Opt in to legacy and specialized bundled Skills'),
+    consolidate: bool = typer.Option(False,'--consolidate',help='Archive old bundled host Skills and keep the minimal core entry'),
 ) -> None:
     """Materialize bundled skills into supported Agent directories (current KB).
 
-    Use after upgrading oks to refresh skills (e.g. /assess replacing /start),
+    Use after upgrading oks to refresh the minimal oh-my-oks entry,
     without re-running full `oks init`.
     """
     root = Path.cwd()
@@ -2767,14 +2791,20 @@ def skills_install(
         console.print("[red]No bundled assets found. Reinstall: pipx upgrade open-knowledge-studio[/red]")
         raise typer.Exit(1)
     import shutil
+    from . import skill_bundle
+    if all_bundled and consolidate:raise typer.BadParameter('Choose --all-bundled or --consolidate')
+    if consolidate:
+        archived=skill_bundle.consolidate(root,base,[name for name,spec in _AGENT_TARGETS.items() if spec['skills']])
+        if archived.get('manifest'):console.print('Archived legacy packages: '+archived['manifest'],markup=False)
+    if (base/'skills'/skill_bundle.CORE).is_dir():
+        skill_bundle.copy(root,base/'skills'/skill_bundle.CORE,'skills/'+skill_bundle.CORE,overwrite=force)
     done: list[str] = []
     for dest_name, spec in _AGENT_TARGETS.items():
         skill_names = tuple(spec.get("skill_names", ()))
         if not spec.get("skills") and not skill_names:
             continue
+        if spec.get('skills') and not all_bundled:skill_names=_DEFAULT_CORE_SKILLS
         dest = root / dest_name / "skills"
-        if force and dest.exists():
-            shutil.rmtree(dest)
         dest.mkdir(parents=True, exist_ok=True)
         wrote = False
         src = base / "skills"
@@ -2796,7 +2826,7 @@ def skills_install(
         if wrote:
             done.append(dest_name)
     if done:
-        skill_names = sorted(p.name for p in (base / "skills").iterdir() if p.is_dir()) if (base / "skills").is_dir() else []
+        skill_names = sorted(p.name for p in (base / "skills").iterdir() if p.is_dir()) if all_bundled else list(_DEFAULT_CORE_SKILLS)
         console.print(f"[green]Installed skills into:[/green] {', '.join(done)}")
         console.print(f"[dim]Skills: {', '.join(skill_names)}[/dim]")
     else:
@@ -3426,7 +3456,8 @@ def registry_list() -> None:
     """List terminal registry entries (agent+cwd -> profile/goal)."""
     import json
     root = _instance_root(None)
-    path = root / "profiles" / "agents" / "registry.jsonl"
+    from .layout import registry_path
+    path = registry_path(root)
     if not path.is_file():
         console.print("[dim]No registry entries.[/dim]")
         return
@@ -3467,7 +3498,8 @@ def registry_bind(
     """Bind an agent+cwd to a profile + goals (creates or updates entry)."""
     from datetime import datetime, timezone
     root = _instance_root(None)
-    path = root / "profiles" / "agents" / "registry.jsonl"
+    from .layout import registry_path
+    path = registry_path(root)
     ts = datetime.now(timezone.utc).isoformat(timespec="seconds")
 
     def update(current: str) -> str:
@@ -3526,7 +3558,8 @@ def registry_remove(
 ) -> None:
     """Remove a registry entry."""
     root = _instance_root(None)
-    path = root / "profiles" / "agents" / "registry.jsonl"
+    from .layout import registry_path
+    path = registry_path(root)
     if not path.is_file():
         console.print("[dim]No registry.[/dim]")
         return

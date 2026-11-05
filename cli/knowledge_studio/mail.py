@@ -131,7 +131,8 @@ def normalise_evidence_refs(value: Any) -> list[dict[str, str]]:
 
 def _registry_agents(root: Path) -> list[str]:
     agents: list[str] = []
-    path = root / "profiles" / "agents" / "registry.jsonl"
+    from .layout import registry_path
+    path = registry_path(root)
     if path.is_file():
         try:
             for line in path.read_text(encoding="utf-8").splitlines():

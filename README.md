@@ -42,10 +42,8 @@ How the pieces fit together: [Architecture](https://open-agent-power.github.io/o
 
 ```
 open-knowledge-studio/
-├── goal/                   # Goal Markdown files/folders; source of graph and editable TODO views
-├── discuss/                # dated discussion judgments, open questions and explicit references
-├── skill/                  # knowledge-base-local Skill packages (not installed host directories)
-├── profiles/              # team, users, projects, recipes, goals — stable context
+├── profiles/               # users, projects, agents, recipes; dated goals/ and discuss/
+├── skills/                 # reusable Skill packages; host installations stay in hidden host folders
 ├── raw/                    # human-collected sources, date-based {YYYY}/{MM}/{DD}/{source}/
 ├── wiki/                   # human-reviewed memory: concept, strategy, anti-pattern
 ├── drafts/                 # Candidate proposals, awaiting review
@@ -152,7 +150,7 @@ Optional auto-recall hooks (wire recall into your Agent host):
 
 ```bash
 oks hook install --editor claude   # or: qoder | codex | both
-oks skills-install                # bundle skills + agent-config into .claude/.qoder/.pi/.codex
+oks skills-install                # install the minimal oh-my-oks entry; preserve other host Skills
 ```
 
 Next steps:
@@ -233,3 +231,5 @@ OKS runs entirely on your local filesystem. No telemetry, no remote calls from c
 [MIT](./LICENSE)
 
 Read [linked knowledge and call observability](docs/linked-knowledge-observability.md) for review semantics, version boundaries and timing scope.
+
+See [instance layout and daily revision history](docs/instance-layout.md) for canonical paths, timeline semantics and optional onboarding.

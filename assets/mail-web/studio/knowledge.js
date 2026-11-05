@@ -69,6 +69,7 @@ export function createKnowledgeView({ dom, state, actions, api }) {
       usage,
       skills,
       contexts,
+      activity = {queried_paths:[],used_slugs:[]},
       roots = [],
       signature = "";
     function paint() {
@@ -105,6 +106,7 @@ export function createKnowledgeView({ dom, state, actions, api }) {
           `${node.title} · 显式使用 ${node.uses}${node.pending ? " · 待审核" : ""}`;
         n.classList.toggle("selected", node.id === selected);
         n.classList.toggle("pending-node", node.pending || node.has_pending);
+        n.classList.toggle('day-active', activity.queried_paths.includes(node.path) || activity.used_slugs.includes(node.path?.split('/').pop().replace(/\.md$/,'')));
         n.classList.toggle(
           "query-hit",
           hits.some((h) => h.nodeId === node.id),
@@ -384,6 +386,7 @@ export function createKnowledgeView({ dom, state, actions, api }) {
           api.request("/api/studio/usage"),
           api.request("/api/studio/skills"),
           api.request("/api/studio/contexts"),
+          api.request("/api/studio/activity?" + new URLSearchParams({date:state.date})),
         ]);
         if (
           current !== ticket ||
@@ -394,7 +397,7 @@ export function createKnowledgeView({ dom, state, actions, api }) {
         const next = JSON.stringify(result);
         if (next === signature) return;
         signature = next;
-        [map, usage, skills, contexts] = result;
+        [map, usage, skills, contexts, activity] = result;
         roots = knowledgeTree(map, usage, skills, contexts);
         paint();
         const warnings = [

@@ -1,3 +1,4 @@
+import { renderOnboarding } from "./studio/onboarding.js";
 import { createStudioState } from "./studio/state.js";
 import { $, el, button } from "./studio/dom.js";
 import { createStudioApi } from "./studio/api.js";
@@ -35,6 +36,7 @@ import { createSettingsView } from "./studio/settings.js";
     writable,
     scopeFile,
     inspect,
+    navigate,
   };
   const settingsView = createSettingsView({
     dom,
@@ -47,12 +49,14 @@ import { createSettingsView } from "./studio/settings.js";
     state,
     actions,
     model: M,
+    api,
   });
   const goalsView = createGoalsView({
     dom,
     state,
     actions,
     model: M,
+    api,
   });
   const learningView = createLearningView({
     dom,
@@ -64,9 +68,17 @@ import { createSettingsView } from "./studio/settings.js";
   const renderDiscussion = () => discussionView.render();
   const renderGoals = () => goalsView.render();
   const renderLearning = () => learningView.render();
+  function localDate() {
+    const n = new Date();
+    return [
+      n.getFullYear(),
+      String(n.getMonth() + 1).padStart(2, "0"),
+      String(n.getDate()).padStart(2, "0"),
+    ].join("-");
+  }
   function updateRoute() {
     const p = new URLSearchParams({ tab: state.tab });
-    if (state.scope) p.set("scope", state.scope);
+    if (state.date) p.set("date", state.date);
     if (state.selected && state.tab === "goals") p.set("file", state.selected);
     if (state.tab === "learning") p.set("view", state.learn);
     history.replaceState(null, "", "#" + p);
@@ -107,40 +119,31 @@ import { createSettingsView } from "./studio/settings.js";
     if (!["discuss", "goals", "learning"].includes(state.tab))
       state.tab = "discuss";
     state.scope = params.get("scope") || "";
+    state.date =
+      params.get("date") ||
+      state.scope
+        .match(/(\d{4})\/(\d{2})\/(\d{2})/)
+        ?.slice(1)
+        .join("-") ||
+      state.date;
     state.selected = params.get("file") || "";
     state.learn =
       params.get("view") ||
       { messages: "mail", agents: "members" }[raw] ||
       "graph";
   }
-  async function loadScopes() {
-    const kind = state.tab === "discuss" ? "discuss" : "goal";
-    const data = await request("/api/studio/scopes?kind=" + kind);
-    state.scopes = data.scopes;
-    const select = $("scope");
-    select.replaceChildren(new Option("选择日期 / 文件", ""));
-    const groups = new Map();
-    const files = data.scopes
-      .flatMap((s) => s.files)
-      .sort((a, b) => (b.date || "").localeCompare(a.date || ""));
-    for (const file of files) {
-      const date = file.date || "历史未归档";
-      if (!groups.has(date)) {
-        const group = el("optgroup");
-        group.label = date;
-        groups.set(date, group);
-        select.append(group);
-      }
-      groups.get(date).append(new Option(file.title, file.path));
+  async function selectDate() {
+    if (state.tab === "learning") {
+      $("scope").value = state.date || (state.date = localDate());
+      state.scope = "";
+      return;
     }
-    const valid =
-      files.some((f) => f.path === state.scope) ||
-      data.scopes.some((s) => s.path === state.scope);
-    if (!valid) state.scope = files[0]?.path || "";
-    if (valid && !files.some((f) => f.path === state.scope))
-      select.append(new Option(state.scope, state.scope));
-    select.value = state.scope;
-    if (data.warnings.length) status(data.warnings.join("；"));
+    const kind = state.tab === "discuss" ? "discuss" : "goal";
+    if (!state.date) state.date = localDate();
+    $("scope").value = state.date;
+    state.scope =
+      (kind === "discuss" ? "profiles/discuss/" : "profiles/goals/") +
+      state.date.replaceAll("-", "/");
   }
   async function loadView(force = false) {
     if (state.viewLoading && !force) return;
@@ -155,7 +158,11 @@ import { createSettingsView } from "./studio/settings.js";
     let next;
     try {
       next = await request(
-        "/api/studio/view?" + new URLSearchParams({ scope: at }),
+        "/api/studio/view?" +
+          new URLSearchParams({
+            kind: state.tab === "discuss" ? "discuss" : "goal",
+            date: state.date,
+          }),
       );
     } finally {
       if (ticket === state.loading) state.viewLoading = false;
@@ -189,34 +196,43 @@ import { createSettingsView } from "./studio/settings.js";
     if (!state.settingsDirty && !state.dirty)
       status(next.warnings.length ? next.warnings.join("；") : "");
   }
+  async function navigate(tab) {
+    if (!canLeave()) return;
+    state.tab = tab;
+    state.scope = "";
+    state.selected = "";
+    await selectDate();
+    if (tab !== "learning") await loadView(true);
+    else render();
+  }
   function render() {
     discussionView.destroy();
+    goalsView.destroy();
     learningView.destroy();
     document.querySelectorAll("[data-tab]").forEach((b) => {
       if (b.dataset.tab === state.tab) b.setAttribute("aria-current", "page");
       else b.removeAttribute("aria-current");
     });
-    $("scopeBar").hidden = state.tab === "learning";
-    $("scope").setAttribute(
-      "aria-label",
-      state.tab === "discuss" ? "讨论日期与文件" : "目标日期与文件",
-    );
+    $("scopeBar").hidden = false;
+    $("scope").setAttribute("aria-label", "日期");
     $("newGoal").setAttribute(
       "aria-label",
       state.tab === "discuss" ? "新增讨论 Markdown" : "新增目标 Markdown",
     );
+    $("newGoal").hidden = state.tab !== "discuss";
     $("newGoal").disabled = !writable();
     $("newGoal").title = writable() ? "新增 Markdown" : "只读模式";
     document.title =
       "OKS · " +
       { discuss: "讨论", goals: "目标", learning: "学习" }[state.tab];
     $("content").replaceChildren();
+    renderOnboarding({ dom, state, actions, api });
     updateRoute();
     if (state.tab === "learning") {
       renderLearning();
       return;
     }
-    if (!state.view) {
+    if (!state.view || (state.tab !== "goals" && !state.view.entries?.length)) {
       $("content").append(
         el("div", "empty", state.tab === "discuss" ? "暂无讨论" : "暂无目标"),
       );
@@ -255,6 +271,7 @@ import { createSettingsView } from "./studio/settings.js";
         path: file.path,
         text,
         expected_sha256: file.sha256,
+        actor: "studio-user",
       });
       state.dirty = false;
       state.saving = false;
@@ -269,18 +286,14 @@ import { createSettingsView } from "./studio/settings.js";
   function openNew() {
     if (!writable()) return;
     const now = new Date(),
-      bucket = state.tab === "discuss" ? "discuss" : "goal";
-    const date = [
-      now.getFullYear(),
-      String(now.getMonth() + 1).padStart(2, "0"),
-      String(now.getDate()).padStart(2, "0"),
-    ].join("/");
+      bucket = state.tab === "discuss" ? "discuss" : "goals";
+    const date = state.date.replaceAll("-", "/");
     const title = bucket === "discuss" ? "新讨论" : "新目标";
-    $("newPath").value = `${bucket}/${date}/${title}.md`;
+    $("newPath").value = title;
     $("newText").value =
       bucket === "discuss"
         ? `# ${title}\n\n## 人的判断\n\n## AI 理解\n\n## 待确认\n`
-        : `# ${title}\n\n- [ ] 下一步\n`;
+        : `---\ntype: goal\nstatus: active\n---\n\n# ${title}\n\n## [ ] 下一步\n`;
     $("newError").textContent = "";
     $("newDialog").showModal();
   }
@@ -291,7 +304,12 @@ import { createSettingsView } from "./studio/settings.js";
   $("closeFile").onclick = () => $("fileDialog").close();
   $("newForm").onsubmit = async (event) => {
     event.preventDefault();
-    const path = $("newPath").value.trim();
+    const title = $("newPath").value.trim();
+    if (!title || /[/\\\r\n]/.test(title)) {
+      $("newError").textContent = "标题不能含路径分隔符";
+      return;
+    }
+    const path = `profiles/${state.tab === "discuss" ? "discuss" : "goals"}/${state.date.replaceAll("-", "/")}/${title}.md`;
     try {
       await post("/api/studio/file", {
         path,
@@ -302,8 +320,8 @@ import { createSettingsView } from "./studio/settings.js";
       $("newDialog").close();
       state.selected = path;
       state.scope = path;
-      state.tab = path.startsWith("discuss/") ? "discuss" : "goals";
-      await loadScopes();
+      state.tab = path.startsWith("profiles/discuss/") ? "discuss" : "goals";
+      await selectDate();
       await loadView(true);
     } catch (e) {
       $("newError").textContent = e.message;
@@ -311,28 +329,22 @@ import { createSettingsView } from "./studio/settings.js";
   };
   document.querySelectorAll("[data-tab]").forEach(
     (b) =>
-      (b.onclick = async () => {
-        if (!canLeave()) return;
-        state.tab = b.dataset.tab;
-        if (state.tab !== "learning") {
-          state.scope = "";
-          state.selected = "";
-          await loadScopes();
-          await loadView(true);
-        }
-        render();
+      (b.onclick = () => {
+        void navigate(b.dataset.tab).catch((e) => status(e.message));
       }),
   );
   $("scope").onchange = async (event) => {
     if (!canLeave()) {
-      $("scope").value = state.scope;
+      $("scope").value = state.date;
       return;
     }
-    state.scope = event.target.value;
+    state.date = event.target.value;
+    await selectDate();
     state.selected = "";
     state.view = null;
     try {
-      await loadView(true);
+      if (state.tab === "learning") render();
+      else await loadView(true);
     } catch (e) {
       status(e.message);
       render();
@@ -351,14 +363,15 @@ import { createSettingsView } from "./studio/settings.js";
     }
     restore();
     void (async () => {
-      await loadScopes();
+      await selectDate();
       if (state.scope) await loadView(true);
       else render();
       if (state.tab === "learning") render();
     })().catch((e) => status(e.message));
   });
   document.addEventListener("visibilitychange", () => {
-    if (!document.hidden) void loadView().catch((e) => status(e.message));
+    if (!document.hidden && state.tab !== "learning")
+      void loadView().catch((e) => status(e.message));
   });
   document.addEventListener("oks:reconnected", async (event) => {
     state.context = event.detail.context;
@@ -366,10 +379,20 @@ import { createSettingsView } from "./studio/settings.js";
       state.dirty = state.settingsDirty = false;
       state.view = null;
       state.scope = state.selected = "";
-      await loadScopes();
+      await selectDate();
     }
     await loadView(true);
   });
+  $("showGuide").onclick = async () => {
+    if (!canLeave()) return;
+    state.onboarding = writable()
+      ? await post("/api/studio/onboarding", { action: "reset" })
+      : {
+          status: "not_started",
+          steps: { discuss: false, goals: false, learning: false },
+        };
+    render();
+  };
   restore();
   void (async () => {
     state.context = await window.OksWorkspace.ready;
@@ -378,7 +401,8 @@ import { createSettingsView } from "./studio/settings.js";
       .split(/[\\/]/)
       .pop();
     $("instance").title = state.context.knowledge_base;
-    await loadScopes();
+    state.onboarding = await request("/api/studio/onboarding");
+    await selectDate();
     if (state.scope) await loadView(true);
     else render();
     if (state.tab === "learning") render();
@@ -392,7 +416,7 @@ import { createSettingsView } from "./studio/settings.js";
         !state.saving &&
         (++listingTick % 5 === 0 || !state.scope)
       )
-        await loadScopes();
+        await selectDate();
       if (state.scope) await loadView();
     })().catch((e) => status(e.message));
   }, 2000);

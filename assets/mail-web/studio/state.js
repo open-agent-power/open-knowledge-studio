@@ -2,6 +2,8 @@
 export function createStudioState() {
   return {
     context: null,
+    date: "",
+    onboarding: null,
     scopes: [],
     scope: "",
     view: null,

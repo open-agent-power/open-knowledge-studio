@@ -10,6 +10,7 @@ from knowledge_studio.config import get_kb_root
 FS_RESPONSE_SCHEMA = "oks-fs-response/v1"
 MAX_READ_MANY_FILES = 250
 MAX_READ_MANY_TOTAL_CHARS = 8 * 1024 * 1024
+_HIDDEN_SCOPES = {'goal', 'discuss', 'skill', 'host-skills'}
 
 
 class VfsError(ValueError):
@@ -27,15 +28,16 @@ class Mount:
 
 
 MOUNTS: dict[str, Mount] = {
-    "goal": Mount("goal", ("goal",)),
-    "discuss": Mount("discuss", ("discuss",)),
-    "skill": Mount("skill", ("skill",)),
+    "goal": Mount("goal", ("profiles", "goals")),
+    "discuss": Mount("discuss", ("profiles", "discuss")),
+    "skill": Mount("skill", ("skills",)),
     "profiles": Mount("profiles", ("profiles",)),
     "raw": Mount("raw", ("raw",), (("executions",), (".logs",))),
     "wiki": Mount("wiki", ("wiki",)),
     "drafts": Mount("drafts", ("drafts",)),
     "mail": Mount("mail", ("mail",)),
-    "skills": Mount("skills", (".agents", "skills")),
+    "skills": Mount("skills", ("skills",)),
+    "host-skills": Mount("host-skills", (".agents", "skills")),
     "traces": Mount("traces", ("raw", "executions")),
 }
 
@@ -127,6 +129,12 @@ class VfsResolver:
         if uri.scope is None:
             return ResolvedNode(uri=uri, path=None, mount=None, synthetic_root=True)
         mount = MOUNTS[uri.scope]
+        legacy = {'goal': ('goal',), 'discuss': ('discuss',), 'skill': ('skill',), 'skills': ('skill',)}
+        if uri.scope in legacy:
+            expected = self.root.joinpath(*mount.relative_root, *uri.parts)
+            fallback = self.root.joinpath(*legacy[uri.scope], *uri.parts)
+            if not expected.exists() and fallback.exists():
+                mount = Mount(uri.scope, legacy[uri.scope])
         if any(uri.parts[: len(prefix)] == prefix for prefix in mount.excluded_prefixes):
             raise VfsError("PATH_NOT_EXPOSED", f"Path is not exposed under oks://{uri.scope}/")
         mount_root = self.root.joinpath(*mount.relative_root)
@@ -162,9 +170,10 @@ class VfsResolver:
         self._reject_symlinks(self.root, raw_relative.parts)
 
         candidate = candidate.resolve(strict=False)
-        ordered = [MOUNTS["traces"]] + [
-            mount for scope, mount in MOUNTS.items() if scope != "traces"
+        ordered = [MOUNTS["traces"], MOUNTS["skills"], MOUNTS["profiles"]] + [
+            mount for scope, mount in MOUNTS.items() if scope not in {"traces", "skills", "profiles"}
         ]
+        ordered += [Mount("goal", ("goal",)), Mount("discuss", ("discuss",)), Mount("skill", ("skill",))]
         for mount in ordered:
             mount_root = self.root.joinpath(*mount.relative_root).resolve(strict=False)
             try:
@@ -259,6 +268,7 @@ class VfsService:
                         "uri": f"oks://{scope}/",
                     }
                     for scope in MOUNTS
+                    if scope not in _HIDDEN_SCOPES
                 ],
             }
         assert node.path is not None and node.mount is not None
@@ -393,6 +403,8 @@ class VfsService:
                 return
             if node.synthetic_root:
                 for scope, mount in MOUNTS.items():
+                    if scope in _HIDDEN_SCOPES:
+                        continue
                     yield {
                         "name": scope,
                         "type": "directory",
@@ -480,6 +492,8 @@ class VfsService:
         def all_files():
             if node.synthetic_root:
                 for scope, mount in MOUNTS.items():
+                    if scope in _HIDDEN_SCOPES:
+                        continue
                     mount_root = self._existing_mount_root(scope)
                     if mount_root is None:
                         continue

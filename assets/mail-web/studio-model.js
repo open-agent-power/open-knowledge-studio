@@ -69,7 +69,51 @@
       }
     return { nodes, edges };
   }
-  const api = { replaceLine, toggle, rename, graph };
+
+  function branchEnd(text, row) {
+    const lines = text.match(/[^\r\n]*(?:\r\n|\r|\n|$)/g) || [];
+    const following = [];
+    let fence = false;
+    for (let i = row.line + 1; i < lines.length; i++) {
+      const line = lines[i];
+      if (/^\s*(```|~~~)/.test(line)) {
+        fence = !fence;
+        continue;
+      }
+      if (fence) continue;
+      const heading = line.match(/^(#{1,6})\s/);
+      const task = line.match(/^(\s*)[-*+]\s+\[[ xX]\]/);
+      if (row.kind === "heading" && heading && heading[1].length <= row.level)
+        return i;
+      if (
+        row.kind === "task" &&
+        (heading ||
+          (task &&
+            task[1].length <= (lines[row.line].match(/^\s*/)?.[0].length || 0)))
+      )
+        return i;
+    }
+    return lines.length;
+  }
+  function addChild(text, row, title) {
+    if (!title.trim() || /[\r\n]/.test(title)) throw Error("标题必须为一行");
+    const lines = text.match(/[^\r\n]*(?:\r\n|\r|\n|$)/g) || [];
+    const end = branchEnd(text, row),
+      newline = text.includes("\r\n") ? "\r\n" : "\n";
+    const prefix =
+      row.kind === "heading" && row.level < 6
+        ? "#".repeat(row.level + 1) + " [ ] "
+        : (lines[row.line].match(/^\s*/)?.[0] || "") + "  - [ ] ";
+    if (end > 0 && !/[\r\n]$/.test(lines[end - 1])) lines[end - 1] += newline;
+    lines.splice(end, 0, prefix + title.trim() + newline);
+    return lines.join("");
+  }
+  function removeBranch(text, row) {
+    const lines = text.match(/[^\r\n]*(?:\r\n|\r|\n|$)/g) || [];
+    lines.splice(row.line, branchEnd(text, row) - row.line);
+    return lines.join("");
+  }
+  const api = { replaceLine, toggle, rename, graph, addChild, removeBranch };
   root.OksStudioModel = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;
 })(typeof globalThis !== "undefined" ? globalThis : this);

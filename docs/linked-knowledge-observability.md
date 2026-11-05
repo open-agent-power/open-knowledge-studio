@@ -38,7 +38,7 @@ oks eval export --name personal-preferences --kind preference
 
 ## 虚拟文件与调用链
 
-学习 → 文件展示现有 `oks://` 文件映射。`oks://skills/` 保留宿主 `.agents/skills` 映射；`oks://skill/` 指向知识库 `skill/`，另补 `goal/` 与 `discuss/`。
+学习 → 文件展示现有 `oks://` 文件映射。`oks://skills/` 指向统一后的知识库 `skills/`；宿主安装入口只保留 `oks://host-skills/` 的显式兼容读取，不列入知识库浏览。旧 `oks://skill/`、`oks://goal/`、`oks://discuss/` 保留兼容解析，不在根目录重复展示。
 
 ```bash
 oks fs ls oks:// --format json

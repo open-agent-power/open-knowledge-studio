@@ -14,13 +14,13 @@ runner = CliRunner()
 # Contract: what `oks init` must produce. Buckets come from _INSTANCE_DIRS; the
 # per-agent dirs and templates/_meta/settings/profiles are assembled from assets/.
 EXPECTED_BUCKETS = [
-    "goal", "discuss", "skill",
+    "profiles/discuss", "skills", "records/studio",
     "profiles/users", "profiles/projects", "profiles/recipes", "profiles/goals",
     "raw", "wiki", "drafts",
 ]
 EXPECTED_TOP_LEVEL = {
     ".claude", ".qoder", ".pi", ".codex", ".agents", ".codebuddy", ".workbuddy", "_meta", "settings", "templates",
-    "profiles", "raw", "wiki", "drafts", "mail", "goal", "discuss", "skill", ".gitignore", "AGENTS.md",
+    "profiles", "raw", "wiki", "drafts", "mail", "skills", "records", ".gitignore", "AGENTS.md",
 }
 
 
@@ -56,7 +56,7 @@ def test_init_never_materializes_dev_only_skills(tmp_path):
     assert "review-upstream-pr" not in installed
     assert "upstream-pr-remediation" not in installed
     # User-facing skills still arrive.
-    assert {"ingest", "query", "promote"} <= installed
+    assert installed == {"oh-my-oks"}
 
 
 def test_init_assembles_each_agent_ecosystem(tmp_path):
@@ -98,7 +98,7 @@ def test_skills_install_adds_workbuddy_skill_to_existing_instances(tmp_path, mon
 
 def test_asset_materialization_and_legacy_install_skip_generated_bytecode(tmp_path, monkeypatch):
     base = tmp_path / "packaged-assets"
-    skill = base / "skills" / "sample"
+    skill = base / "skills" / "oh-my-oks"
     cache = skill / "scripts/__pycache__"
     cache.mkdir(parents=True)
     (cache / "run.cpython-314.pyc").write_bytes(b"generated cache")
@@ -108,15 +108,15 @@ def test_asset_materialization_and_legacy_install_skip_generated_bytecode(tmp_pa
     target = tmp_path / "kb"
     assert runner.invoke(app, ["init", str(target), "--no-git", "--no-set-default"]).exit_code == 0
     for host in (".agents", ".claude", ".qoder"):
-        installed = target / host / "skills/sample"
+        installed = target / host / "skills/oh-my-oks"
         assert (installed / "scripts/run.py").exists()
         assert not (installed / "scripts/__pycache__").exists()
     other = tmp_path / "legacy-kb"
     (other / "wiki").mkdir(parents=True)
     monkeypatch.chdir(other)
     assert runner.invoke(app, ["skills-install"]).exit_code == 0
-    assert (other / ".agents/skills/sample/scripts/run.py").exists()
-    assert not (other / ".agents/skills/sample/scripts/__pycache__").exists()
+    assert (other / ".agents/skills/oh-my-oks/scripts/run.py").exists()
+    assert not (other / ".agents/skills/oh-my-oks/scripts/__pycache__").exists()
 
 
 def test_workbuddy_skill_requires_read_only_cli_recall(tmp_path):
@@ -215,8 +215,9 @@ def test_init_materializes_shareable_assets(tmp_path):
     assert result.exit_code == 0, result.output
 
     # skills + templates arrive so the Claude Code experience works out of the box
-    assert (target / ".claude" / "skills" / "ingest").is_dir()
-    assert (target / ".claude" / "skills" / "office" / "SKILL.md").is_file()
+    assert (target / ".claude" / "skills" / "oh-my-oks").is_dir()
+    assert not (target / ".claude" / "skills" / "office").exists()
+    assert (target / "skills" / "oh-my-oks" / "SKILL.md").is_file()
     assert (target / ".claude" / "settings.json").is_file()
     assert (target / "templates").is_dir()
     for schema in ("recall-case.schema.json", "trace-event.schema.json", "run-manifest.schema.json"):

@@ -179,7 +179,7 @@ def test_root_ls_is_synthetic_and_physical_ls_hides_exclusions(vfs_root):
 
     assert service.ls("oks://")["entries"] == [
         {"name": scope, "type": "directory", "uri": f"oks://{scope}/"}
-        for scope in MOUNTS
+        for scope in MOUNTS if scope not in {"goal", "discuss", "skill", "host-skills"}
     ]
     assert service.ls("oks://raw/")["entries"] == []
 
@@ -394,7 +394,7 @@ def test_tree_and_find_honor_exclusions_and_reject_symlinks(vfs_root):
         assert exc.value.code == "SYMLINK_NOT_ALLOWED"
 
 
-def test_root_tree_and_find_reject_broken_symlink_mount(vfs_root):
+def test_host_mount_is_not_traversed_by_root_and_explicit_paths_reject_symlinks(vfs_root):
     from knowledge_studio.vfs import VfsError, VfsResolver, VfsService
 
     (vfs_root / ".agents/skills/query").rmdir()
@@ -404,9 +404,11 @@ def test_root_tree_and_find_reject_broken_symlink_mount(vfs_root):
     )
     service = VfsService(VfsResolver(vfs_root))
 
+    service.tree("oks://")
+    service.find("needle", under="oks://")
     for operation in (
-        lambda: service.tree("oks://"),
-        lambda: service.find("needle", under="oks://"),
+        lambda: service.tree("oks://host-skills/"),
+        lambda: service.find("needle", under="oks://host-skills/"),
     ):
         with pytest.raises(VfsError) as exc:
             operation()

@@ -1,6 +1,6 @@
 import { callTimeline } from "./call-trace.js";
 // Existing oks:// mounts, measured on the server; no fabricated flame spans.
-export function createFilesView({ dom, actions, api }) {
+export function createFilesView({ dom, state, actions, api }) {
   const { $, el, button } = dom;
   let ticket = 0, uri = 'oks://', operation = 'ls', limit = 20000, offset = 0;
   function destroy() { ticket++; }
@@ -37,7 +37,7 @@ export function createFilesView({ dom, actions, api }) {
       const data = await api.request('/api/studio/fs-history');
       if (current !== ticket || requestNo !== serial) return;
       const list = el('div', 'call-history'); list.append(el('strong', null, '历史'));
-      for (const record of data.records.slice(-12).reverse())
+      for (const record of data.records.filter(r => new Date(r.at).toLocaleDateString('sv-SE') === state.date).slice(-12).reverse())
         list.append(button(`${record.operation} · ${record.total_ms.toFixed(2)} ms · ${record.uri}`, () => trace(record), 'file-entry'));
       detail.append(list);
     }

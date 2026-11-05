@@ -1,6 +1,6 @@
 # 画像索引
 
-> **用途**：L0 profile 层（对所有 goal 始终可见）。
+> **用途**：任务上下文，按身份与任务选择读取，不全量注入。
 > **Updated**: 2026-07-13
 
 ## 目录结构
@@ -11,6 +11,14 @@
 | `users/<id>/profile.md` | 个人偏好 | 每季度 | 按需加载 | ~100 |
 | `projects/<name>.md` | 项目 onboarding profile | 每次贡献前 | 按需加载 | ~200 |
 | `agents/<id>.md` | 团队共享 Agent 角色 | 职责变化时 | 按需加载 | ~200 |
+
+## 日常上下文与运行记录
+
+- `agents/` 保存角色和协作约定；终端绑定位于 `records/registry/terminals.jsonl`。
+- `recipes/` 保存场景化输入、步骤和验收配方。
+- `goals/YYYY/MM/DD/` 与 `discuss/YYYY/MM/DD/` 保存当日目标和讨论。
+- 可共享能力包统一放在根目录 `skills/`；宿主隐藏目录中的 Skill 是安装入口。
+- 修订在 `records/timeline/`，三步引导状态在 `records/studio/onboarding.json`。
 
 ## Frontmatter 字段规范
 

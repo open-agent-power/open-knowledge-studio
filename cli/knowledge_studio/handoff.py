@@ -46,6 +46,9 @@ def _relative(value: object, bucket: str) -> str:
 
 def _read(root: Path, value: str, bucket: str) -> bytes:
     relative = _relative(value, bucket)
+    if bucket == 'profiles/goals':
+        from .layout import canonical
+        relative = canonical(root, relative)
     target = (root / relative).resolve()
     # Resolving the root is safe; resolving the allowed bucket would allow a
     # bucket-level symlink to widen the boundary to another knowledge base.

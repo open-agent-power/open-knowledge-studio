@@ -29,7 +29,9 @@ def test_failure_and_missing_mount_do_not_create_knowledge_files(tmp_path):
     assert history(tmp_path)["records"][0]["status"] == "failed"
     assert not (tmp_path / "wiki").exists()
     names = {e["name"] for e in execute(tmp_path, "ls", "oks://")["result"]["entries"]}
-    assert {"goal", "discuss", "skill", "skills"} <= names
+    assert {"profiles", "skills"} <= names
+    assert "host-skills" not in names
+    assert not {"goal", "discuss", "skill"} & names
 
 
 def test_boundary_rejection_is_retained_as_failed_trace(tmp_path):

@@ -39,7 +39,7 @@ FILES['/workspace-shell.css'] = ('workspace-shell.css', 'text/css')
 FILES['/knowledge-heatmap.js'] = ('knowledge-heatmap.js', 'text/javascript')
 for _asset in ('studio.html', 'studio.js', 'studio-model.js', 'studio.css'):
     FILES['/' + _asset] = (_asset, 'text/html' if _asset.endswith('.html') else 'text/css' if _asset.endswith('.css') else 'text/javascript')
-for _module in ('api', 'dom', 'state', 'discussion', 'graph', 'goals', 'learning', 'settings', 'formulas', 'knowledge', 'knowledge-model', 'evaluation', 'evaluation-charts', 'files', 'evaluation-review', 'call-trace'):
+for _module in ('api', 'dom', 'state', 'discussion', 'graph', 'goals', 'learning', 'settings', 'formulas', 'knowledge', 'knowledge-model', 'evaluation', 'evaluation-charts', 'files', 'evaluation-review', 'call-trace', 'timeline', 'mindmap', 'onboarding'):
     FILES[f'/studio/{_module}.js'] = (f'studio/{_module}.js', 'text/javascript')
 for _style in ('graph', 'goals', 'learning', 'evaluation'):
     FILES[f'/studio/{_style}.css'] = (f'studio/{_style}.css', 'text/css')
@@ -955,7 +955,14 @@ class Handler(BaseHTTPRequestHandler):
                 if route == '/api/studio/scopes':
                     result = studio.scopes(self.server.kb_root, query.get("kind", ["goal"])[0])
                 elif route == '/api/studio/view':
-                    result = studio.view(self.server.kb_root, query.get('scope', [''])[0])
+                    result = studio.day_view(self.server.kb_root, query.get('kind',['goal'])[0], query['date'][0]) if 'date' in query else studio.view(self.server.kb_root, query.get('scope', [''])[0])
+                elif route == '/api/studio/revision':
+                    result = studio.revision_view(self.server.kb_root, query.get('id',[''])[0])
+                elif route == '/api/studio/onboarding':
+                    from .studio_history import onboarding
+                    result = onboarding(self.server.kb_root)
+                elif route == '/api/studio/activity':
+                    result = studio.activity(self.server.kb_root,query.get('date',[''])[0])
                 elif route == '/api/studio/file':
                     result = studio.read_file(self.server.kb_root, query.get('path', [''])[0])
                 elif route == '/api/studio/contexts':
@@ -1307,7 +1314,7 @@ class Handler(BaseHTTPRequestHandler):
             except (OSError, ValueError, KeyError, TypeError, yaml.YAMLError) as exc:
                 self.send_json(400, {'error':str(exc)})
             return
-        if route in {'/api/studio/file', '/api/studio/settings'}:
+        if route in {'/api/studio/file', '/api/studio/settings', '/api/studio/onboarding'}:
             if not getattr(self.server, 'local_edit', False):
                 self._reject_post(403, 'Local editing is disabled; use oks mail serve --local-edit')
                 return
@@ -1321,7 +1328,8 @@ class Handler(BaseHTTPRequestHandler):
                 if request.get('expected_knowledge_base') != str(self.server.kb_root):
                     self.send_json(409, {'error': '知识库已切换，请重新读取。', 'code': 'instance_changed'})
                     return
-                operation = studio.save_file if route.endswith('/file') else studio.save_settings
+                from .studio_history import onboarding
+                operation = studio.save_file if route.endswith('/file') else onboarding if route.endswith('/onboarding') else studio.save_settings
                 self.send_json(200, operation(self.server.kb_root, request))
             except (OSError, ValueError, KeyError, TypeError, UnicodeError, yaml.YAMLError) as exc:
                 self.send_json(409, {'error': str(exc) if isinstance(exc, ValueError) else '保存失败，原文件保留。'})
@@ -1584,6 +1592,8 @@ class Handler(BaseHTTPRequestHandler):
 
 class _LoopbackHTTPServer(ThreadingHTTPServer):
     def server_close(self):
+        history_service = getattr(self,'history_service',None)
+        if history_service is not None:history_service.stop()
         service = getattr(self, 'daily_service', None)
         if service is not None:
             service.stop()
@@ -1609,6 +1619,9 @@ def create_server(root: Path, port: int = 3182, *, mode: str = "reader", knowled
     server.local_edit = bool(local_edit)
     server.knowledge_source = knowledge_source
     server.session_id = None
+    if local_edit:
+        from .studio_history import Watcher
+        server.history_service = Watcher(root).start()
     if local_edit and (root / 'settings/daily-capture.json').is_file():
         from .daily_learning import CaptureService
         server.daily_service = CaptureService(root).start()
