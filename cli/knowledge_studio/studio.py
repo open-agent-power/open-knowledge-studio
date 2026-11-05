@@ -38,14 +38,18 @@ def _path(root, relative, *, goal=False):
     return tasks._inside(root.resolve(), relative)
 
 
-def read_file(root, relative):
+def _read_document(root, relative):
     _path(root, relative)
     item = workspace._text_file(root, relative, {'.md'})
-    meta, body, _ = _markdown(item['text'])
+    meta, body, offset = _markdown(item['text'])
     kind = 'goal' if any(relative.startswith(p + '/') for p in GOAL_ROOTS) else relative.split('/')[0]
     title = _title(body, str(meta.get('title') or Path(relative).stem)) if kind == 'goal' else str(meta.get('title') or _title(body, Path(relative).stem))
-    return {**item, 'title': title, 'kind': kind,
-            'outline': outline(item['text'])}
+    return {**item, 'title': title, 'kind': kind}, meta, body, offset
+
+
+def read_file(root, relative):
+    item, _, body, offset = _read_document(root, relative)
+    return {**item, 'outline': _outline(body, offset)}
 
 
 def _markdown(text):
@@ -83,6 +87,10 @@ def _visible_markdown(body):
 def outline(text):
     """Keep source line identities; descriptions and fenced code are never TODOs."""
     _, body, offset = _markdown(text)
+    return _outline(body, offset)
+
+
+def _outline(body, offset):
     rows, stack = [], []
     level, fenced, metadata = 1, None, False
     for number, line in enumerate(body.splitlines(), offset):
@@ -132,7 +140,7 @@ def scopes(root, kind="goal"):
             relative = path.relative_to(root).as_posix()
             try:
                 _path(root, relative, goal=kind != "discuss")
-                read = read_file(root, relative)
+                read, _, _, _ = _read_document(root, relative)
             except (OSError, ValueError, UnicodeError, yaml.YAMLError):
                 warnings.append(relative + ': unavailable')
                 continue
@@ -163,7 +171,7 @@ def document_date(path):
 
 def context_catalog(root):
     """Project real context files, not inferred user identities or approved Wiki."""
-    entries, warnings, texts = [], [], {}
+    entries, warnings, documents = [], [], {}
     buckets = ('profiles', 'project', 'goal', 'discuss')
     for bucket in buckets:
         base = root / bucket
@@ -183,9 +191,8 @@ def context_catalog(root):
             else:
                 kind = 'profile'
             try:
-                item = read_file(root, relative)
-                meta, body, _ = _markdown(item['text'])
-                texts[relative] = item['text']
+                item, meta, body, _ = _read_document(root, relative)
+                documents[relative] = (meta, body)
                 entries.append({'id': relative, 'path': relative, 'title': item['title'], 'type': kind,
                     'body': body[:12000], 'body_truncated': len(body) > 12000,
                     'date': document_date(relative), 'group': str(Path(relative).parent),
@@ -198,7 +205,8 @@ def context_catalog(root):
         index.setdefault(path.stem, []).append(path.relative_to(root).as_posix())
     edges = []
     for entry in entries:
-        for target in _references(root, entry['path'], texts[entry['path']], index):
+        meta, body = documents[entry['path']]
+        for target in _references(root, entry['path'], meta, body, index):
             edges.append({'a': entry['id'], 'b': target, 'type': 'cites'})
     from . import linked_sources, mail
     teams = linked_sources.catalog(root)
@@ -215,15 +223,15 @@ def context_catalog(root):
             'body': body[:12000], 'body_truncated': len(body) > 12000,
             'metadata': {**{key:str(meta.get(key,'')) for key in ('from','to','thread_id','reply_to','record_kind')},
                          **{key:str(value) for key,value in message.get('state',{}).items()}}})
-        for target in _references(root, entries[-1]['path'], body, index):
+        message_meta, message_body, _ = _markdown(body)
+        for target in _references(root, entries[-1]['path'], message_meta, message_body, index):
             edges.append({'a': identifier, 'b': target, 'type': 'cites'})
         if meta.get('reply_to'):
             edges.append({'a': identifier, 'b':'mail:'+str(meta['reply_to']), 'type':'reply_to'})
     return {'entries': entries, 'edges': edges, 'warnings': warnings}
 
 
-def _references(root, path, text, wiki_index):
-    meta, body, _ = _markdown(text)
+def _references(root, path, meta, body, wiki_index):
     body = _visible_markdown(body)
     tokens = re.findall(r'(?<!\\)\[\[([^\]|]+)(?:\|[^\]]+)?\]\]', body)
     tokens += re.findall(r'(?<!!)\[[^\]]*\]\(([^\s)]+)\)', body)
@@ -264,7 +272,7 @@ def view(root, scope):
         raise ValueError('Choose a Goal Markdown file or folder')
     if not seeds:
         raise ValueError('No Goal Markdown files in this scope')
-    warnings, files, edges, total = [], {}, [], 0
+    warnings, files, edges, discussion_context, total = [], {}, [], [], 0
     if len(seeds) > MAX_FILES:
         warnings.append('Goal scope exceeds file limit')
     wiki_index = {}
@@ -279,12 +287,15 @@ def view(root, scope):
     discussions = list(islice((root / 'discuss').rglob('*.md'), MAX_SCAN + 1))
     if len(discussions) > MAX_SCAN:
         warnings.append(f'Discussion reverse lookup limited to {MAX_SCAN} files')
+    documents = {}
     for p in discussions[:MAX_SCAN]:
         rel = p.relative_to(root).as_posix()
         try:
-            doc = read_file(root, rel)
-            if any(ref in seeds for ref in _references(root, rel, doc['text'], wiki_index)):
+            item, meta, body, offset = _read_document(root, rel)
+            if any(ref in seeds for ref in _references(root, rel, meta, body, wiki_index)):
                 queue.append(rel)
+                if len(documents) < MAX_FILES:
+                    documents[rel] = item, meta, body, offset
         except (OSError, ValueError, UnicodeError, yaml.YAMLError):
             warnings.append(rel + ': unavailable')
     while queue and len(files) < MAX_FILES:
@@ -292,7 +303,7 @@ def view(root, scope):
         if path in files:
             continue
         try:
-            item = read_file(root, path)
+            item, meta, body, offset = documents.pop(path) if path in documents else _read_document(root, path)
         except (OSError, ValueError, UnicodeError, yaml.YAMLError):
             warnings.append(path + ': unavailable')
             continue
@@ -300,12 +311,15 @@ def view(root, scope):
         if total > MAX_GRAPH_BYTES:
             warnings.append('Context byte limit reached')
             break
-        files[path] = item
+        files[path] = {**item, 'outline': _outline(body, offset)}
+        if item['kind'] == 'discuss':
+            discussion_context.append((path, meta, body))
         child_refs = set()
         if item['kind'] == 'goal':
             for section in re.finditer(r'^#{1,6}\s+(?:子目标|任务分解|Subgoals)\s*\n([\s\S]*?)(?=^#{1,6}\s|\Z)', _visible_markdown(item['text']), re.M | re.I):
-                child_refs.update(_references(root, path, section[1], wiki_index))
-        for ref in _references(root, path, item['text'], wiki_index):
+                section_meta, section_body, _ = _markdown(section[1])
+                child_refs.update(_references(root, path, section_meta, section_body, wiki_index))
+        for ref in _references(root, path, meta, body, wiki_index):
             relation = 'contains' if ref in child_refs else 'source' if ref.startswith(('raw/', 'records/')) else 'cites'
             edges.append({'from': path, 'to': ref, 'type': relation,
                           'evidence': path, 'origin': 'written_reference'})
@@ -315,10 +329,7 @@ def view(root, scope):
         warnings.append('Context file limit reached')
     nodes = [{'id': p, 'path': p, 'type': item['kind'], 'title': item['title'], 'sha256': item['sha256']}
              for p, item in files.items()]
-    for p, item in files.items():
-        if item['kind'] != 'discuss':
-            continue
-        meta, body, _ = _markdown(item['text'])
+    for p, meta, body in discussion_context:
         body = _visible_markdown(body)
         for label, kind in [('人的判断', 'human_judgment'), ('AI 理解', 'agent_understanding'), ('待确认', 'open_question')]:
             match = re.search(r'^##\s+' + re.escape(label) + r'\s*\n([\s\S]*?)(?=^##\s|\Z)', body, re.M)
@@ -366,8 +377,7 @@ def local_skills(root):
     for p in islice((root / 'skill').rglob('SKILL.md'), MAX_SCAN):
         rel = p.relative_to(root).as_posix()
         try:
-            item = read_file(root, rel)
-            meta, _, _ = _markdown(item['text'])
+            item, meta, _, _ = _read_document(root, rel)
             result.append({'path': rel, 'title': str(meta.get('name') or p.parent.name), 'sha256': item['sha256']})
         except (OSError, ValueError, UnicodeError, yaml.YAMLError):
             warnings.append(rel + ': unavailable')

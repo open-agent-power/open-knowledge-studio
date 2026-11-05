@@ -59,6 +59,29 @@ def test_outline_preserves_source_lines_nesting_and_non_tasks():
     assert next(r for r in rows if '执行项' in r['text'])['kind'] == 'note'
 
 
+def test_projection_reuses_documents_only_within_the_current_request(kb, monkeypatch):
+    reads = []
+    original = studio.workspace._text_file
+
+    def record_read(root, relative, suffixes):
+        reads.append(relative)
+        return original(root, relative, suffixes)
+
+    monkeypatch.setattr(studio.workspace, '_text_file', record_read)
+    relative = 'discuss/2026/11/04/interface.md'
+    first = studio.view(kb, 'goal/interface')
+    assert reads.count(relative) == 1
+    assert all('outline' in item for item in first['files'].values())
+
+    document = kb / relative
+    document.write_text(document.read_text(encoding='utf-8') + '\n外部修改\n', encoding='utf-8')
+    reads.clear()
+    second = studio.view(kb, 'goal/interface')
+    assert reads.count(relative) == 1
+    assert second['version'] != first['version']
+    assert second['files'][relative]['text'].splitlines()[-1] == '外部修改'
+
+
 def test_goal_edit_is_revision_checked_and_does_not_modify_task_agreements(kb):
     before = studio.read_file(kb, 'goal/interface/page.md')
     request = {'path': before['path'], 'expected_sha256': before['sha256'], 'text': before['text'] + '\n新说明\n'}

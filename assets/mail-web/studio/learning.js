@@ -1,13 +1,22 @@
-import { createKnowledgeView } from "./knowledge.js";
-import { createEvaluationView } from "./evaluation.js";
-import { createFilesView } from "./files.js";
-
-export function createLearningView({ dom, state, actions, api, settingsView }) {
+export function createLearningView({ dom, state, actions, api }) {
   const { $, el, button } = dom;
-  const graph = createKnowledgeView({ dom, state, actions, api });
-  const evaluation = createEvaluationView({ dom, state, actions, api });
-  const files = createFilesView({ dom, state, actions, api });
-  function render() {
+  const views = new Map(),
+    loaders = {
+      graph: () => import("./knowledge.js").then((m) => m.createKnowledgeView),
+      files: () => import("./files.js").then((m) => m.createFilesView),
+      settings: () => import("./settings.js").then((m) => m.createSettingsView),
+      evaluation: () =>
+        import("./evaluation.js").then((m) => m.createEvaluationView),
+    };
+  let ticket = 0,
+    active = null;
+  function destroy() {
+    ticket++;
+    active?.destroy?.();
+    active = null;
+  }
+  async function render() {
+    const current = ++ticket;
     const bar = el("div", "toolbar"),
       nav = el("div", "seg");
     // Old routes resolve into the same graph; there is no duplicate category UI.
@@ -33,17 +42,21 @@ export function createLearningView({ dom, state, actions, api, settingsView }) {
       );
     bar.append(nav);
     $("content").append(bar);
-    if (state.learn === "settings") void settingsView.render();
-    else if (state.learn === "evaluation") void evaluation.render();
-    else if (state.learn === "files") void files.render();
-    else void graph.render();
+    const id = state.learn;
+    try {
+      let view = views.get(id);
+      if (!view) {
+        const createView = await loaders[id]();
+        if (current !== ticket) return;
+        view = createView({ dom, state, actions, api });
+        views.set(id, view);
+      }
+      if (current !== ticket) return;
+      active = view;
+      await view.render();
+    } catch (error) {
+      if (current === ticket) actions.status(error.message);
+    }
   }
-  return {
-    render,
-    destroy: () => {
-      graph.destroy();
-      evaluation.destroy();
-      files.destroy();
-    },
-  };
+  return { render, destroy };
 }

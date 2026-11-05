@@ -21,7 +21,6 @@ import typer
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
-from rich.markdown import Markdown
 from rich.markup import escape
 
 from knowledge_studio import store
@@ -29,27 +28,11 @@ from knowledge_studio import mail as mail_domain
 from knowledge_studio.i18n import t
 from knowledge_studio.raw_commit import CommitError as _CommitError
 from knowledge_studio.raw_commit import raw_commit as _raw_commit
-from knowledge_studio.recall import (
-    RECALL_RESPONSE_SCHEMA,
-    describe_goal_selection,
-    recall,
-    recall_episodic,
-    recall_knowledge,
-)
 from knowledge_studio.vfs import FS_RESPONSE_SCHEMA, VfsError, VfsService
-from knowledge_studio.workbuddy import inspect_workbuddy_adapter
 from knowledge_studio.skills_cli import app as skills_app
 from knowledge_studio.handoff_cli import app as handoff_app
 from knowledge_studio.feedback_cli import app as feedback_app
 from knowledge_studio.tasks_cli import app as tasks_app
-
-# ── ingest: connector is a regular PyPI dependency (oks-connector>=0.2.0) ──
-from oks_connector.raw_bundle_adapter import (
-    build_parser as _connector_parser,
-    run_ingest as _connector_run_ingest,
-)
-_connector_available = True
-
 
 def _configure_utf8_stdio() -> None:
     """Keep Unicode Raw evidence printable in Windows legacy code pages."""
@@ -644,15 +627,6 @@ def ingest_prepare_cmd(
     ))
 
 
-def _connector_install_hint() -> str:
-    return ""  # no-op: connector is built into the monorepo
-
-
-def _connector_command() -> str | None:
-    """Connector is the PyPI ``oks-connector`` package (>=0.2.0) — no separate binary needed."""
-    return "built-in" if _connector_available else None
-
-
 # Both extract from PDFs: pdf-lite reads the text layer, pdf runs MinerU for
 # layout and asset evidence. Guards must accept either, not the literal "pdf".
 _PDF_CAPABILITIES = frozenset({"pdf-lite", "pdf"})
@@ -679,16 +653,6 @@ def ingest(
     """Acquire one source through the installed oks-connector dependency; no Wiki promotion occurs here."""
     if mode not in {"quick", "forensic"}:
         raise typer.BadParameter("--mode must be quick or forensic")
-    connector = _connector_command()
-    if connector is None:
-        console.print(Panel.fit(
-            f"[bold red]{t('connector_missing')}[/bold red]\n\n"
-            f"{t('connector_missing_hint')}",
-            title=t("action_required"),
-            border_style="red",
-        ))
-        raise typer.Exit(2)
-
     # ── pre-flight: check capability before running the connector ──
     needed = _recommended_capability(source)
     if not _capability_already_installed(needed):
@@ -728,12 +692,14 @@ def ingest(
     if formula_secondary and needed in _PDF_CAPABILITIES:
         cli_args.append("--formula-secondary")
         cli_args.extend(["--formula-max-regions", str(formula_max_regions)])
+    from oks_connector.raw_bundle_adapter import build_parser, run_ingest
+
     try:
-        parsed = _connector_parser().parse_args(cli_args)
+        parsed = build_parser().parse_args(cli_args)
     except SystemExit as exc:
         raise typer.Exit(exc.code)
     try:
-        exit_code = _connector_run_ingest(parsed)
+        exit_code = run_ingest(parsed)
     except Exception as exc:
         console.print(Panel.fit(
             f"[bold red]{exc}[/bold red]",
@@ -823,7 +789,7 @@ def recall_cmd(
     `--knowledge-only` drops the episodic path for a wiki-only view; `--type`
     narrows the knowledge path to one wiki type before ranking and `--limit`.
     """
-    from knowledge_studio.recall import load_recall_params
+    from knowledge_studio.recall import load_recall_params, recall
     load_recall_params()  # 触发 env 迁移警告（env 已废弃）
     output_format = _validate_output_format(output_format)
     if compact and output_format != 'json':
@@ -1240,6 +1206,8 @@ def wiki_get(
     slug: str = typer.Argument(help="Page slug"),
 ):
     """Get a wiki page by slug."""
+    from rich.markdown import Markdown
+
     page = store.get_wiki_page(slug)
     if not page:
         console.print(f"[red]Page not found: {slug}[/red]")
@@ -1437,6 +1405,8 @@ def workbuddy_doctor(
     This never calls WorkBuddy and never writes Wiki, configuration, or the
     project Skill.
     """
+    from knowledge_studio.workbuddy import inspect_workbuddy_adapter
+
     output_format = output_format.lower().strip()
     if output_format not in {"text", "json"}:
         console.print("[red]--format must be text or json[/red]")

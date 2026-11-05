@@ -3,10 +3,34 @@
 from datetime import date
 import json
 from pathlib import Path
+import subprocess
 import sys
 
 import pytest
 from typer.testing import CliRunner
+
+
+def test_cli_version_defers_unused_command_dependencies():
+    result = subprocess.run(
+        [sys.executable, "-B", "-X", "utf8", "-c", """
+import sys
+from typer.testing import CliRunner
+from knowledge_studio.cli import app
+
+result = CliRunner().invoke(app, ["--version"])
+assert result.exit_code == 0, result.output
+assert result.output.startswith("oks ")
+unused = {"rich.markdown", "oks_connector.raw_bundle_adapter",
+          "knowledge_studio.recall", "knowledge_studio.workbuddy"}
+assert not unused.intersection(sys.modules), unused.intersection(sys.modules)
+"""],
+        cwd=Path(__file__).resolve().parents[1],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=30,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
 
 
 def _make_vfs_instance(root: Path) -> None:

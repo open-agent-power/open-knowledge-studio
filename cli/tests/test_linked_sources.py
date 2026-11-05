@@ -40,7 +40,7 @@ def linked(tmp_path):
     (repo / "knowledge").mkdir()
     (repo / "sources/reviews").mkdir(parents=True)
     body = "# Quartz cancellation\nUse explicit refunds."
-    (repo / "knowledge/one.md").write_text(body)
+    (repo / "knowledge/one.md").write_text(body, encoding="utf-8", newline="\n")
     (repo / "sources/index.json").write_text(
         json.dumps(
             {

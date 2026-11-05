@@ -70,7 +70,8 @@ export function createKnowledgeView({ dom, state, actions, api }) {
       skills,
       contexts,
       roots = [],
-      signature = "";
+      signature = "",
+      refreshing = false;
     function paint() {
       dispose();
       const relations = [...map.edges, ...(contexts?.edges || [])];
@@ -378,6 +379,8 @@ export function createKnowledgeView({ dom, state, actions, api }) {
       }
     }
     async function refresh() {
+      if (refreshing) return;
+      refreshing = true;
       try {
         const result = await Promise.all([
           api.request("/api/mail/knowledge-map"),
@@ -406,6 +409,8 @@ export function createKnowledgeView({ dom, state, actions, api }) {
         if (warnings.length) actions.status(warnings.join("；"));
       } catch (error) {
         if (current === ticket) actions.status(error.message);
+      } finally {
+        refreshing = false;
       }
     }
     await refresh();

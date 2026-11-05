@@ -284,10 +284,13 @@ def _locked_atomic_update(
         return True
 
 
-def parse_wiki_file(path: Path) -> dict | None:
+def parse_wiki_file(path: Path, *, strict: bool = False) -> dict | None:
+    """Parse Wiki metadata; strict callers distinguish I/O failure from invalid text."""
     try:
         text = path.read_text(encoding="utf-8")
     except OSError:
+        if strict:
+            raise
         return None
 
     return _parse_wiki_text(text, path)
