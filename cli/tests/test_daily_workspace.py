@@ -116,9 +116,11 @@ def test_export_inspect_promote_new_task_and_withdrawal(case, monkeypatch, tmp_p
         draft_path = root / shared['path']
         assert selection['subject'] not in document['text'] and 'Synthetic citation preference' not in document['text']
         with pytest.raises(HTTPError):
-            request('/api/learning/promote', {'path': shared['path'], 'expected_sha256': '0' * 64, 'confirm_review': True})
+            request('/api/learning/promote', {'path': shared['path'], 'expected_sha256': '0' * 64,
+                                            'expected_knowledge_base': document['knowledge_base'], 'confirm_review': True})
         assert draft_path.is_file()
-        promoted = request('/api/learning/promote', {'path': shared['path'], 'expected_sha256': document['sha256'], 'confirm_review': True})
+        promoted = request('/api/learning/promote', {'path': shared['path'], 'expected_sha256': document['sha256'],
+                                                   'expected_knowledge_base': document['knowledge_base'], 'confirm_review': True})
         assert (root / promoted['path']).is_file() and draft_path.is_file()
         assert hashlib.sha256(draft_path.read_bytes()).hexdigest() == document['sha256']
         history = request('/api/learning/draft?' + urlencode({'path': shared['path']}))

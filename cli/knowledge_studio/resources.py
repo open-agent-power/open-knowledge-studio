@@ -4,11 +4,15 @@ from pathlib import Path
 
 def asset_source() -> Path | None:
     """Prefer checkout assets over generated copies; installed packages use _assets."""
-    module = Path(__file__).resolve()
-    for parent in module.parents:
-        if (parent / ".git").exists() and (parent / "assets").is_dir():
-            return parent / "assets"
-    packaged = module.parent / "_assets"
+    package = Path(__file__).resolve().parent
+    checkout = package.parent.parent
+    if (
+        package == checkout / "cli" / "knowledge_studio"
+        and (checkout / ".git").exists()
+        and (checkout / "assets").is_dir()
+    ):
+        return checkout / "assets"
+    packaged = package / "_assets"
     if packaged.is_dir() and any(packaged.iterdir()):
         return packaged
     return None

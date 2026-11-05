@@ -40,9 +40,9 @@ FILES['/workspace-shell.css'] = ('workspace-shell.css', 'text/css')
 FILES['/knowledge-heatmap.js'] = ('knowledge-heatmap.js', 'text/javascript')
 for _asset in ('studio.html', 'studio.js', 'studio-model.js', 'studio.css'):
     FILES['/' + _asset] = (_asset, 'text/html' if _asset.endswith('.html') else 'text/css' if _asset.endswith('.css') else 'text/javascript')
-for _module in ('api', 'dom', 'state', 'discussion', 'graph', 'goals', 'learning', 'settings', 'formulas', 'knowledge', 'knowledge-model', 'evaluation', 'evaluation-charts', 'files', 'evaluation-review', 'call-trace'):
+for _module in ('api', 'dom', 'state', 'discussion', 'graph', 'goals', 'learning', 'settings', 'formulas', 'knowledge', 'knowledge-model', 'evaluation', 'evaluation-charts', 'files', 'evaluation-review', 'call-trace', 'draft-review'):
     FILES[f'/studio/{_module}.js'] = (f'studio/{_module}.js', 'text/javascript')
-for _style in ('graph', 'goals', 'learning', 'evaluation'):
+for _style in ('graph', 'goals', 'learning', 'evaluation', 'draft-review'):
     FILES[f'/studio/{_style}.css'] = (f'studio/{_style}.css', 'text/css')
 FILES['/studio-theme.css'] = ('studio-theme.css', 'text/css')
 FILES['/studio-redirect.js'] = ('studio-redirect.js', 'text/javascript')
@@ -1052,6 +1052,7 @@ class Handler(BaseHTTPRequestHandler):
                     result['body_html'] = md_to_html(result['text']) if result['format'] == 'markdown' else '<pre>' + html.escape(result['text']) + '</pre>'
                 elif route == '/api/learning/draft':
                     result = workspace.draft(self.server.kb_root, query.get('path', [''])[0], query.get('revision', [None])[0])
+                    result['knowledge_base'] = str(self.server.kb_root)
                     raw = result['text'].lstrip('\ufeff')
                     front = re.match(r'^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)', raw)
                     body = raw[front.end():] if front else raw
@@ -1389,6 +1390,9 @@ class Handler(BaseHTTPRequestHandler):
             from . import feedback, workspace
             try:
                 request = self.read_json()
+                if route in {'/api/learning/promote', '/api/learning/reject'} and request.get('expected_knowledge_base') != str(self.server.kb_root):
+                    self.send_json(409, {'error': '知识库已切换，请重新读取。', 'code': 'instance_changed'})
+                    return
                 if route == '/api/learning/promote':
                     result = workspace.invoke(self.server.kb_root, 'promote', request)
                 elif route == '/api/learning/reject':

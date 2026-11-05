@@ -47,8 +47,11 @@ def execute(args: list[str], cwd: Path, env: dict, log: Path, timeout: int = 180
                                    text=True, encoding="utf-8", errors="replace", timeout=timeout)
     except subprocess.TimeoutExpired as exc:
         # Preserve partial evidence, without assuming that a timeout is success.
-        output = (exc.stdout or b"") + (exc.stderr or b"")
-        log.write_bytes(output if isinstance(output, bytes) else output.encode("utf-8"))
+        output = b"".join(
+            value.encode("utf-8") if isinstance(value, str) else value or b""
+            for value in (exc.stdout, exc.stderr)
+        )
+        log.write_bytes(output)
         raise RuntimeError(f"Timed out: {log}") from exc
     log.write_text(completed.stdout + completed.stderr, encoding="utf-8")
     if completed.returncode:
@@ -405,6 +408,7 @@ def main() -> int:
             report["artifacts"][kind] = entry
             save_json(work / "report.json", report)
             env = clean_env()
+            env["PIP_CACHE_DIR"] = str(work / "pip-cache")
             execute([sys.executable, "-I", "-m", "venv", str(target / "venv")], target, env, target / "venv.log")
             python = target / "venv" / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
             execute([str(python), "-I", "-m", "pip", "install", "--no-input", str(artifact)], target, env, target / "install.log", timeout=600)

@@ -22,12 +22,15 @@ export function createKnowledgeView({ dom, state, actions, api }) {
     queryMode = false,
     querySequence = 0,
     query = "",
-    selected = null;
+    selected = null,
+    draftReview = null;
   function destroy() {
     ticket++;
     dispose();
     dispose = () => {};
     clearInterval(timer);
+    draftReview?.destroy();
+    draftReview = null;
   }
   async function render() {
     destroy();
@@ -48,6 +51,8 @@ export function createKnowledgeView({ dom, state, actions, api }) {
     search.value = query;
     search.setAttribute("aria-label", "搜索图谱");
     const reset = button("收起", () => {
+      if (!actions.canLeave()) return;
+      draftReview?.destroy();
       expanded.clear();
       depth = 1;
       selected = null;
@@ -112,8 +117,34 @@ export function createKnowledgeView({ dom, state, actions, api }) {
         );
       }
     }
+    async function openReview(node, heading) {
+      if (!actions.canLeave()) return;
+      try {
+        const { createDraftReview } = await import("./draft-review.js");
+        if (current !== ticket || selected !== node.id) return;
+        draftReview?.destroy();
+        draftReview = createDraftReview({
+          api,
+          getContext: () => state.context,
+          onBusy: (busy) => {
+            state.saving = busy;
+          },
+          onDecision: () => {
+            void refresh();
+          },
+        });
+        selected = null;
+        aside.replaceChildren(heading);
+        const host = el("div");
+        aside.append(host);
+        await draftReview.render(host, { path: node.path });
+      } catch (error) {
+        if (current === ticket) actions.status(error.message);
+      }
+    }
     async function select(node) {
-      if (current !== ticket) return;
+      if (current !== ticket || !actions.canLeave()) return;
+      draftReview?.destroy();
       revealNode(roots, node.id, expanded);
       selected = node.id;
       aside.hidden = false;
@@ -121,6 +152,8 @@ export function createKnowledgeView({ dom, state, actions, api }) {
       aside.replaceChildren();
       const heading = el("header"),
         close = button("×", () => {
+          if (!actions.canLeave()) return;
+          draftReview?.destroy();
           selected = null;
           aside.hidden = true;
           shell.classList.remove("with-detail");
@@ -231,15 +264,7 @@ export function createKnowledgeView({ dom, state, actions, api }) {
           aside.append(
             button(
               "审核",
-              () => {
-                aside.replaceChildren(heading);
-                const frame = el("iframe", "knowledge-review");
-                frame.title = "审核 " + node.title;
-                frame.src =
-                  "/review?panel=1&detail=1&draft=" +
-                  encodeURIComponent(node.path);
-                aside.append(frame);
-              },
+              () => openReview(node, heading),
               "soft",
             ),
           );
@@ -291,6 +316,10 @@ export function createKnowledgeView({ dom, state, actions, api }) {
       paint();
     }
     search.oninput = () => {
+      if (!actions.canLeave()) {
+        search.value = query;
+        return;
+      }
       querySequence++;
       query = search.value;
       queryMode = false;
@@ -305,6 +334,8 @@ export function createKnowledgeView({ dom, state, actions, api }) {
       }
     };
     async function runQuery() {
+      if (!actions.canLeave()) return;
+      draftReview?.destroy();
       const text = search.value.trim();
       if (!text) return;
       const sequence = ++querySequence,
@@ -317,7 +348,13 @@ export function createKnowledgeView({ dom, state, actions, api }) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ query: text }),
         });
-        if (current !== ticket || sequence !== querySequence) return;
+        if (
+          current !== ticket ||
+          sequence !== querySequence ||
+          !actions.canLeave()
+        )
+          return;
+        draftReview?.destroy();
         hits = mapQueryHits(roots, [...(result.knowledge || []), ...(result.team_knowledge || [])]);
         queryMode = true;
         for (const hit of hits)

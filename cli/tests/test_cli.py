@@ -33,6 +33,38 @@ assert not unused.intersection(sys.modules), unused.intersection(sys.modules)
     assert result.returncode == 0, result.stdout + result.stderr
 
 
+def test_recall_command_reads_parameters_once_and_preserves_legacy_warning(tmp_path, monkeypatch):
+    from knowledge_studio import recall as engine
+    from knowledge_studio.cli import app
+
+    monkeypatch.setenv("OKS_ROOT", str(tmp_path))
+    monkeypatch.setenv("OKS_RECALL_TOPN", "5")
+    wiki = tmp_path / "wiki"
+    wiki.mkdir()
+    (wiki / "policy.md").write_text(
+        "---\ntitle: Quasar\ntype: concept\narea: computing\n---\nquasar policy",
+        encoding="utf-8",
+    )
+    load = engine.load_recall_params
+    reads = []
+
+    def load_params(*args, **kwargs):
+        reads.append(None)
+        return load(*args, **kwargs)
+
+    load_params._warned = False
+    monkeypatch.setattr(engine, "load_recall_params", load_params)
+    result = CliRunner().invoke(app, [
+        "recall", "quasar", "--goal", "none", "--no-task", "--knowledge-only",
+        "--search-backend", "native", "--format", "json",
+    ])
+
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.stdout)["knowledge"]
+    assert len(reads) == 1
+    assert result.stderr.count("OKS_RECALL_TOPN") == 1
+
+
 def _make_vfs_instance(root: Path) -> None:
     (root / "wiki").mkdir()
     (root / "wiki/page.md").write_text("# Page\nneedle here\n", encoding="utf-8")

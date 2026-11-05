@@ -224,6 +224,19 @@ def _ensure_windows_lock_file(lock_path: Path) -> None:
             seed.flush()
 
 
+def _replace_snapshot(source, target) -> None:
+    """Allow a short Windows reader to close before publishing the snapshot."""
+    deadline = time.monotonic() + 0.15
+    while True:
+        try:
+            os.replace(source, target)
+            return
+        except PermissionError as exc:
+            if os.name != "nt" or exc.winerror != 5 or time.monotonic() >= deadline:
+                raise
+            time.sleep(0.01)
+
+
 def _atomic_write(path: Path, content: str | bytes) -> None:
     """Write a snapshot with fsync + atomic replace + directory fsync."""
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -233,7 +246,7 @@ def _atomic_write(path: Path, content: str | bytes) -> None:
             f.write(content)
             f.flush()
             os.fsync(f.fileno())
-        os.replace(tmp, str(path))
+        _replace_snapshot(tmp, str(path))
         try:
             dir_fd = os.open(str(path.parent), os.O_RDONLY)
             try:

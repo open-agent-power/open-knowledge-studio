@@ -6,7 +6,6 @@ import shutil
 import pytest
 from typer.testing import CliRunner
 
-import knowledge_studio.cli as cli_module
 from knowledge_studio import resources
 from knowledge_studio.cli import app
 
@@ -62,7 +61,7 @@ def test_init_never_materializes_dev_only_skills(tmp_path):
 
 def test_init_assembles_each_agent_ecosystem(tmp_path):
     """Single-source components are composed per agent target."""
-    from knowledge_studio.cli import _AGENT_TARGETS
+    from knowledge_studio.instance_cli import _AGENT_TARGETS
 
     target = tmp_path / "kb"
     assert runner.invoke(app, ["init", str(target), "--no-git", "--no-set-default"]).exit_code == 0
@@ -137,7 +136,7 @@ def test_workbuddy_skill_requires_read_only_cli_recall(tmp_path):
 
 def test_hook_install_refreshes_persistence_support_file_and_stale_engine(tmp_path):
     """Old instances receive support files and the current hook protocol."""
-    from knowledge_studio.cli import _ensure_recall_scripts
+    from knowledge_studio.hooks import _ensure_recall_scripts
 
     target = tmp_path / "kb"
     hooks = target / ".claude" / "hooks"
@@ -445,7 +444,7 @@ def test_qoder_no_hooks_dir_but_runs_via_claude_hooks(tmp_path):
     """plan A (qoder-cli): _AGENT_TARGETS['.qoder']['hooks']=False.
     .qoder/ no longer gets a hooks/ dir (dead weight — settings.json
     points to .claude/hooks), but qoder config + skills still install."""
-    from knowledge_studio.cli import _AGENT_TARGETS
+    from knowledge_studio.instance_cli import _AGENT_TARGETS
     assert _AGENT_TARGETS[".qoder"]["hooks"] is False, "plan A: .qoder hooks should be disabled"
     assert _AGENT_TARGETS[".qoder"]["skills"] is True, "qoder skills still install"
     assert _AGENT_TARGETS[".qoder"]["config"] == "qoder", "qoder config still install"

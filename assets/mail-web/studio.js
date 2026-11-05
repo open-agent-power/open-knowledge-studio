@@ -375,7 +375,7 @@ import { createLearningView } from "./studio/learning.js";
     }
   };
   window.addEventListener("beforeunload", (event) => {
-    if (state.dirty || state.settingsDirty) {
+    if (state.dirty || state.settingsDirty || state.saving) {
       event.preventDefault();
       event.returnValue = "";
     }
