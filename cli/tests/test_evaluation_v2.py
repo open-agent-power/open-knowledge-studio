@@ -212,11 +212,11 @@ def test_actual_cli_v2_retains_engine_leaks_and_does_not_modify_kb(tmp_path, mon
 
 
 def test_v2_schema_packaged_asset_fallback(tmp_path, monkeypatch, data):
-    import knowledge_studio.evaluation_dataset as module
+    from knowledge_studio import resources
     package = tmp_path / "installed/knowledge_studio"
     destination = package / "_assets/_meta"
     destination.mkdir(parents=True)
-    schema = Path(module.__file__).resolve().parents[2] / "assets/_meta/recall-case-v2.schema.json"
+    schema = resources.asset_root() / "_meta/recall-case-v2.schema.json"
     (destination / schema.name).write_bytes(schema.read_bytes())
-    monkeypatch.setattr(module, "__file__", str(package / "evaluation_dataset.py"))
+    monkeypatch.setattr(resources, "__file__", str(package / "resources.py"))
     validate_v2(data)

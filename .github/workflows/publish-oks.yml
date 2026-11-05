@@ -41,15 +41,25 @@ jobs:
           python -m pip install pytest requests
           python -m pytest cli/tests/ -q
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Run frontend contracts before publish
+        run: node --test cli/tests/test_knowledge_heatmap.js cli/tests/test_studio_model.js cli/tests/test_studio_lifecycle.js cli/tests/test_workspace_navigation.js
+
       - name: Install build backend
         run: python -m pip install --upgrade build
-
-      - name: Bundle shareable assets into package
-        run: python cli/scripts/bundle_assets.py
 
       - name: Build sdist and wheel
         working-directory: cli
         run: python -m build --outdir ../dist
+
+      - name: Validate the distributions to publish
+        run: python cli/scripts/check_dist.py dist
+
+      - name: Exercise the distributions outside the checkout
+        run: python cli/scripts/smoke_installed.py dist --work-dir "${{ runner.temp }}/oks-publish-installed"
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4

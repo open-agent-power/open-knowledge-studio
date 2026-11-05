@@ -12,7 +12,8 @@ from urllib.parse import parse_qs, urlsplit
 from knowledge_studio import identity, mail, mail_media, store
 from knowledge_studio import mail_knowledge, mail_timeline, mail_observation, team_sync
 from knowledge_studio.mail_activity import activity_data, delivery_records
-from knowledge_studio.mail_setup import asset_root, validate_root, agent_id
+from knowledge_studio.mail_setup import validate_root, agent_id
+from knowledge_studio.resources import asset_root
 
 ROOT = asset_root() / "mail-web"
 FILES = {"/": ("index.html", "text/html"), "/style.css": ("style.css", "text/css"), "/app.js": ("app.js", "text/javascript"), "/favicon.svg": ("favicon.svg", "image/svg+xml")}

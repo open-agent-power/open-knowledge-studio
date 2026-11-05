@@ -12,7 +12,7 @@ from pathlib import Path
 
 from typer.testing import CliRunner
 
-from knowledge_studio import cli as cli_module
+from knowledge_studio import cli as cli_module, resources
 from knowledge_studio.cli import app
 
 
@@ -337,7 +337,7 @@ def test_collaboration_opt_in_survives_instance_upgrade(tmp_path, editor):
     assert upgraded.exit_code == 0, upgraded.output
     after = json.loads(settings_path.read_text(encoding="utf-8"))
     assert after == before
-    bundled = cli_module._asset_source() / "hooks" / "subagent-collaboration.py"
+    bundled = resources.asset_root() / "hooks" / "subagent-collaboration.py"
     assert script_path.read_bytes() == bundled.read_bytes()
     for event in ("SubagentStart", "SubagentStop"):
         assert len(_collaboration_handlers(target, editor, event)) == 1
@@ -992,7 +992,7 @@ def test_hook_install_refreshes_an_outdated_wrapper_body(tmp_path):
     refreshed = wrapper.read_text(encoding="utf-8")
     assert "exec " not in refreshed
     assert baked in refreshed
-    bundled = (cli_module._asset_source() / "hooks" / "user-prompt-recall.sh").read_text(
+    bundled = (resources.asset_root() / "hooks" / "user-prompt-recall.sh").read_text(
         encoding="utf-8"
     )
     assert refreshed == bundled.replace('"${OKS_PYTHON:-python3}"', baked)

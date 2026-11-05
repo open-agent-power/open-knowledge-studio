@@ -288,12 +288,12 @@ def handoff_probe(cli: Path, work: Path, env: dict, root: Path) -> dict:
     records = json.loads((root / ".oks/retrieval-debug.json").read_text(encoding="utf-8"))
     if records[0]["stage"] != "hook_emitted" or not records[0]["diagnostics"].get("task"):
         raise RuntimeError("Installed Hook diagnostic lost task/stage evidence")
-    from knowledge_studio.cli import _asset_source
-    query_instructions = (_asset_source() / "skills/query/SKILL.md").read_text(encoding="utf-8")
+    from knowledge_studio.resources import asset_root
+    query_instructions = (asset_root() / "skills/query/SKILL.md").read_text(encoding="utf-8")
     if "task_context.candidates" not in query_instructions or "6-factor recall engine" in query_instructions:
         raise RuntimeError("Packaged query instructions are stale")
     for name in ("debug.html", "debug.js", "debug.css", "tasks.html", "tasks.js", "tasks.css"):
-        if not (_asset_source() / "mail-web" / name).is_file():
+        if not (asset_root() / "mail-web" / name).is_file():
             raise RuntimeError("Debug page missing from installed package")
     feedback_result = feedback_probe(cli, work, env, root, agreement, pages[0])
     task_result = task_probe(cli, work, env, root)
@@ -312,14 +312,14 @@ def handoff_probe(cli: Path, work: Path, env: dict, root: Path) -> dict:
 def probe(work: Path) -> dict:
     # Executed with the installed interpreter under -I, never the source Python.
     import knowledge_studio
-    from knowledge_studio.cli import _asset_source
+    from knowledge_studio.resources import asset_root
     import yaml
 
     module = Path(knowledge_studio.__file__).resolve()
     if not module.is_relative_to(Path(sys.prefix).resolve()):
         raise RuntimeError(f"Imported code outside the clean environment: {module}")
     packaged = module.parent / "_assets"
-    if _asset_source().resolve() != packaged.resolve():
+    if asset_root().resolve() != packaged.resolve():
         raise RuntimeError("Schema/assets are resolving to a checkout instead of the installed package")
     for schema in ("recall-case.schema.json", "recall-case-v2.schema.json"):
         if not (packaged / "_meta" / schema).is_file():

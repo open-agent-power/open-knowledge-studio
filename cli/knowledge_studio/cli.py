@@ -25,6 +25,7 @@ from rich.markup import escape
 
 from knowledge_studio import store
 from knowledge_studio import mail as mail_domain
+from knowledge_studio import resources
 from knowledge_studio.i18n import t
 from knowledge_studio.raw_commit import CommitError as _CommitError
 from knowledge_studio.raw_commit import raw_commit as _raw_commit
@@ -2142,22 +2143,6 @@ _AGENT_TARGETS = {
 }
 
 
-def _asset_source() -> Path | None:
-    """Locate the instance-template tree.
-
-    A source checkout is authoritative during development; `_assets/` may be a
-    stale build artifact. Installed wheels have no repo root and use `_assets/`,
-    which is a verbatim copy of `assets/` — so both share one layout.
-    """
-    for parent in Path(__file__).resolve().parents:
-        if (parent / ".git").exists() and (parent / "assets").is_dir():
-            return parent / "assets"
-    packaged = Path(__file__).resolve().parent / "_assets"
-    if packaged.is_dir() and any(packaged.iterdir()):
-        return packaged
-    return None
-
-
 def _materialize_assets(root: Path, base: Path, overwrite: bool) -> list[str]:
     """Assemble instance directories from the single-source asset tree."""
     import shutil
@@ -2306,7 +2291,7 @@ def init(
         p.mkdir(parents=True, exist_ok=True)
         (p / ".gitkeep").touch()
 
-    base = _asset_source()
+    base = resources.asset_source()
     if base is None:
         console.print(
             "[yellow]No bundled assets found — skills/templates not materialized.[/yellow]\n"
@@ -2732,7 +2717,7 @@ def skills_install(
     if not (root / "wiki").is_dir():
         console.print("[red]Not in a knowledge base directory (no wiki/).[/red]")
         raise typer.Exit(1)
-    base = _asset_source()
+    base = resources.asset_source()
     if base is None:
         console.print("[red]No bundled assets found. Reinstall: pipx upgrade open-knowledge-studio[/red]")
         raise typer.Exit(1)
@@ -3548,7 +3533,7 @@ def _ensure_recall_scripts(root: Path, hooks_dir: Path | None = None) -> list[st
     hooks_dir = hooks_dir or (root / ".claude" / "hooks")
     hooks_dir.mkdir(parents=True, exist_ok=True)
 
-    base = _asset_source()
+    base = resources.asset_source()
     src_dir = None
     if base is not None:
         src_dir = base / "hooks"
@@ -3605,7 +3590,7 @@ def _ensure_recall_scripts(root: Path, hooks_dir: Path | None = None) -> list[st
 
 def _stale_hook_engines(hooks_dir: Path) -> list[str]:
     """Return installed Python hook engines that differ from bundled assets."""
-    base = _asset_source()
+    base = resources.asset_source()
     if base is None:
         return []
     stale: list[str] = []
@@ -3785,7 +3770,7 @@ def _ensure_subagent_collaboration_script(hooks_dir: Path) -> bool:
     """Install or refresh the opt-in collaboration event recorder asset."""
     import stat
 
-    base = _asset_source()
+    base = resources.asset_source()
     source = base / "hooks" / _SUBAGENT_COLLABORATION_SCRIPT if base else None
     if source is None or not source.is_file():
         raise FileNotFoundError(
@@ -3896,10 +3881,6 @@ def _validate_hook_recall_response(data: object) -> Optional[dict]:
     return result
 
 
-def _hook_recall_script() -> Path:
-    return Path(__file__).resolve().parent / "_assets" / "hooks" / "user-prompt-recall.py"
-
-
 def _run_hook_recall(
     root: Path,
     prompt: str,
@@ -3907,8 +3888,11 @@ def _run_hook_recall(
     cwd: str,
     agent_id: str,
 ) -> dict:
-    """Run the exact installed prompt hook in its structured bridge mode."""
-    script = _hook_recall_script()
+    """Run the resolved prompt hook in its structured bridge mode."""
+    assets = resources.asset_source()
+    if assets is None:
+        return _hook_recall_error("hook_script_unavailable")
+    script = assets / "hooks" / "user-prompt-recall.py"
     if not script.is_file():
         return _hook_recall_error("hook_script_unavailable")
     env = os.environ.copy()
@@ -4064,7 +4048,7 @@ def hook_install(
         raise typer.Exit(1)
     collaboration = collaboration or workflow
     if collaboration:
-        base = _asset_source()
+        base = resources.asset_source()
         candidate = base / "hooks" / _SUBAGENT_COLLABORATION_SCRIPT if base else None
         if candidate is None or not candidate.is_file():
             console.print(
@@ -4119,7 +4103,7 @@ def hook_install(
                     ):
                         raise ValueError(f"{settings_path} has an invalid hooks.{event} structure")
             _read_task_workflow_config(workflow_path)
-            assets = _asset_source()
+            assets = resources.asset_source()
             if assets is None:
                 raise FileNotFoundError("bundled hook assets are unavailable")
             required_assets = (*_HOOK_SUPPORT_FILES, *_RECALL_HOOK_SCRIPTS, _SUBAGENT_COLLABORATION_SCRIPT)
@@ -4147,7 +4131,7 @@ def hook_install(
         try:
             created = _ensure_recall_scripts(root, hooks_dir=hooks_dir)
             if workflow and cross_workspace:
-                runner_source = _asset_source() / "hooks" / "_hook_runner.py"
+                runner_source = resources.asset_source() / "hooks" / "_hook_runner.py"
                 runner_target = hooks_dir / "_hook_runner.py"
                 if runner_target.read_bytes() != runner_source.read_bytes():
                     shutil.copy2(runner_source, runner_target)

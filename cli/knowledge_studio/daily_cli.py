@@ -9,14 +9,13 @@ import shlex
 
 import typer
 
-from . import daily_learning, daily_sources, store, tasks
+from . import daily_learning, daily_sources, resources, store, tasks
 
 app = typer.Typer(help='Connect actual daily conversations and readings to Raw and pending knowledge.', no_args_is_help=True)
 
 
 def _wire_claude(root, workspace):
-    from .cli import _asset_source
-    assets = _asset_source()
+    assets = resources.asset_source()
     if assets is None:
         raise ValueError('Hook assets unavailable')
     settings_path = tasks._inside(workspace, '.claude/settings.local.json')

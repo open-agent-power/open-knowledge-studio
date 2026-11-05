@@ -20,6 +20,17 @@ permissions:
   contents: read
 
 jobs:
+  frontend:
+    name: frontend model and lifecycle contracts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Run frontend contracts
+        run: node --test cli/tests/test_knowledge_heatmap.js cli/tests/test_studio_model.js cli/tests/test_studio_lifecycle.js cli/tests/test_workspace_navigation.js
+
   pytest:
     name: pytest (${{ matrix.os }}, py${{ matrix.python }})
     runs-on: ${{ matrix.os }}

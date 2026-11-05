@@ -7,6 +7,7 @@ import pytest
 from typer.testing import CliRunner
 
 import knowledge_studio.cli as cli_module
+from knowledge_studio import resources
 from knowledge_studio.cli import app
 
 runner = CliRunner()
@@ -104,7 +105,7 @@ def test_asset_materialization_and_legacy_install_skip_generated_bytecode(tmp_pa
     (cache / "run.cpython-314.pyc").write_bytes(b"generated cache")
     (skill / "SKILL.md").write_text("# Sample", encoding="utf-8")
     (skill / "scripts/run.py").write_text("print('sample')", encoding="utf-8")
-    monkeypatch.setattr(cli_module, "_asset_source", lambda: base)
+    monkeypatch.setattr(resources, "asset_source", lambda: base)
     target = tmp_path / "kb"
     assert runner.invoke(app, ["init", str(target), "--no-git", "--no-set-default"]).exit_code == 0
     for host in (".agents", ".claude", ".qoder"):
@@ -368,7 +369,7 @@ def test_team_init_quotes_yaml_unsafe_name(tmp_path):
 
 
 def test_team_init_fallback_without_bundled_assets(tmp_path, monkeypatch):
-    monkeypatch.setattr(cli_module, "_asset_source", lambda: None)
+    monkeypatch.setattr(resources, "asset_source", lambda: None)
     target = tmp_path / "team-knowledge-studio"
     result = runner.invoke(
         app,

@@ -149,7 +149,7 @@ def test_actual_hook_does_not_emit_closed_goal_private_rule_or_reminder(kb):
     close(root)
     hook=Path(__file__).resolve().parents[2]/'assets/hooks/user-prompt-recall.py'
     if not hook.exists():
-        from knowledge_studio.mail_setup import asset_root
+        from knowledge_studio.resources import asset_root
         hook=asset_root()/'hooks/user-prompt-recall.py'
     p=subprocess.run([sys.executable,str(hook)],input=json.dumps(dict(prompt='继续',session_id='closed',cwd=str(work))),cwd=work,
         env={**os.environ,'OKS_HOOK_OUTPUT':'json'},capture_output=True,text=True,encoding='utf-8',timeout=30)

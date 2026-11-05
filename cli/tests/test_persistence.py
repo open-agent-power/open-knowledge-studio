@@ -110,9 +110,9 @@ def test_user_prompt_recall_reads_date_organized_mail(tmp_path, monkeypatch):
     """v0.6.16 mail 按日期子目录存, user-prompt-recall 的 _load_unread_mail
     必须用 rglob 才能读到, 否则 Agent 收不到未读通知."""
     import importlib.util, sys
-    from knowledge_studio import cli as cli_module
+    from knowledge_studio.resources import asset_root
 
-    hook_path = cli_module._asset_source() / "hooks" / "user-prompt-recall.py"
+    hook_path = asset_root() / "hooks" / "user-prompt-recall.py"
     sys.path.insert(0, str(hook_path.parent))  # let `from _persistence import` resolve
     spec = importlib.util.spec_from_file_location("_upr_test", hook_path)
     mod = importlib.util.module_from_spec(spec)

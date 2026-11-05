@@ -105,7 +105,7 @@ def test_duplicate_add_and_snooze_past_never_overwrite(kb):
 def test_actual_hook_dedups_and_requires_selected_task(kb):
     root,work=kb
     reminders.add(root,{**request(root),'due_at':'2020-01-01T00:00:00Z'})
-    from knowledge_studio.mail_setup import asset_root
+    from knowledge_studio.resources import asset_root
     hook=asset_root()/'hooks/user-prompt-recall.py'
     env={**os.environ,'OKS_HOOK_OUTPUT':'json'}
     def run():
