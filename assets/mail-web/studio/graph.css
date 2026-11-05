@@ -13,7 +13,9 @@
   width: 100%;
   height: 100%;
   touch-action: none;
+  cursor: grab;
 }
+.graph-stage svg:active { cursor: grabbing; }
 .studio-node {
   cursor: grab;
   outline: none;
@@ -23,10 +25,20 @@
   stroke-width: 2;
 }
 .studio-node text {
-  fill: #8795ac;
+  fill: var(--ink);
   font-size: 10px;
   pointer-events: auto;
   cursor: pointer;
+}
+.studio-node, .graph-edges line { transition: opacity 140ms ease-out; }
+.has-selection .studio-node:not(.selected):not(.is-neighbor),
+.has-selection .graph-edges line:not(.is-neighbor) { opacity: .24; }
+.studio-node.selected text { font-weight: 600; }
+.studio-node.selected circle:nth-child(2),
+.studio-node:focus-visible circle:nth-child(2) { stroke: #526fae; stroke-width: 2.5; }
+.graph-edges line.is-neighbor { stroke: #7e94bc; stroke-width: 1.6; }
+@media (prefers-reduced-motion: reduce) {
+  .studio-node, .graph-edges line { transition: none; }
 }
 .edge-label {
   fill: #aeb9ca;

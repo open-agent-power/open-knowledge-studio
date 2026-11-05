@@ -46,7 +46,7 @@ jobs:
           node-version: "24"
 
       - name: Run frontend contracts before publish
-        run: node --test cli/tests/test_knowledge_heatmap.js cli/tests/test_studio_model.js cli/tests/test_studio_lifecycle.js cli/tests/test_workspace_navigation.js cli/tests/test_draft_review.js
+        run: node --test cli/tests/test_knowledge_heatmap.js cli/tests/test_studio_model.js cli/tests/test_studio_lifecycle.js cli/tests/test_workspace_navigation.js cli/tests/test_draft_review.js cli/tests/test_graph.js
 
       - name: Install build backend
         run: python -m pip install --upgrade build

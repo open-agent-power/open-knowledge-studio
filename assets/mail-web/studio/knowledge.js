@@ -1,4 +1,4 @@
-import { drawGraph } from "./graph.js";
+import { createGraph } from "./graph.js";
 import { callTimeline } from './call-trace.js';
 import {
   knowledgeTree,
@@ -76,9 +76,29 @@ export function createKnowledgeView({ dom, state, actions, api }) {
       contexts,
       roots = [],
       signature = "",
-      refreshing = false;
+      refreshing = false,
+      maxUses = 1,
+      hitIds = new Set();
+    const graph = createGraph(svg, zoom, select, {
+      button,
+      showEdgeLabels: false,
+      nodeFill: (n) => usageColor(n.uses, maxUses, n.pending, nodeHue(n)),
+      nodeRadius: (n) => (n.children ? 13 : 8),
+      nodeDashed: (n) => n.pending,
+      nodeRegion: (n) => n.family,
+      regionColor: (n) => `hsl(${nodeHue(n)} 45% 78%)`,
+      nodeTitle: (n) =>
+        `${n.title} · 显式使用 ${n.uses}${n.pending ? " · 待审核" : ""}`,
+      nodeClass: (n) =>
+        [
+          n.pending || n.has_pending ? "pending-node" : "",
+          hitIds.has(n.id) ? "query-hit" : "",
+        ]
+          .filter(Boolean)
+          .join(" "),
+    });
+    dispose = () => graph.destroy();
     function paint() {
-      dispose();
       const relations = [...map.edges, ...(contexts?.edges || [])];
       const projection = queryMode
         ? projectQuery(roots, hits, relations)
@@ -88,34 +108,9 @@ export function createKnowledgeView({ dom, state, actions, api }) {
         aside.hidden = true;
         shell.classList.remove("with-detail");
       }
-      const maxUses = Math.max(1, ...roots.map((n) => n.uses));
-      dispose = drawGraph(
-        svg,
-        projection.nodes,
-        projection.edges,
-        zoom,
-        select,
-        {
-          button,
-          showEdgeLabels: false,
-          nodeFill: (n) => usageColor(n.uses, maxUses, n.pending, nodeHue(n)),
-          nodeRadius: (n) => (n.children ? 13 : 8),
-          nodeDashed: (n) => n.pending,
-          nodeRegion: (n) => n.family,
-          regionColor: (n) => `hsl(${nodeHue(n)} 45% 78%)`,
-        },
-      );
-      for (const n of svg.querySelectorAll(".studio-node")) {
-        const node = projection.nodes.find((item) => item.id === n.dataset.id);
-        n.querySelector("title").textContent =
-          `${node.title} · 显式使用 ${node.uses}${node.pending ? " · 待审核" : ""}`;
-        n.classList.toggle("selected", node.id === selected);
-        n.classList.toggle("pending-node", node.pending || node.has_pending);
-        n.classList.toggle(
-          "query-hit",
-          hits.some((h) => h.nodeId === node.id),
-        );
-      }
+      maxUses = Math.max(1, ...roots.map((n) => n.uses));
+      hitIds = new Set(hits.map((hit) => hit.nodeId));
+      graph.update(projection.nodes, projection.edges, { selected });
     }
     async function openReview(node, heading) {
       if (!actions.canLeave()) return;
@@ -142,8 +137,12 @@ export function createKnowledgeView({ dom, state, actions, api }) {
         if (current === ticket) actions.status(error.message);
       }
     }
-    async function select(node) {
-      if (current !== ticket || !actions.canLeave()) return;
+    function select(node) {
+      if (current !== ticket || !actions.canLeave()) return false;
+      void showSelection(node);
+      return true;
+    }
+    async function showSelection(node) {
       draftReview?.destroy();
       revealNode(roots, node.id, expanded);
       selected = node.id;

@@ -383,7 +383,7 @@ test("formula resources load once and settings wait for the stylesheet", async (
   }
 });
 
-test("knowledge refresh does not overlap slow API batches", async () => {
+test("knowledge refresh shares API batches and interactions reuse the renderer", async () => {
   const dom = domFixture(),
     pending = deferred(),
     calls = [],
@@ -399,7 +399,16 @@ test("knowledge refresh does not overlap slow API batches", async () => {
   };
   globalThis.setInterval = (callback) => timers.push(callback);
   globalThis.clearInterval = () => {};
-  const graph = "export function drawGraph() { return () => {}; }";
+  const graphCalls = { created: 0, updated: 0, destroyed: 0 };
+  globalThis.knowledgeGraphCalls = graphCalls;
+  const graph = `export function createGraph(svg, tools, onSelect) {
+    globalThis.knowledgeGraphCalls.created++;
+    globalThis.knowledgeGraphCalls.select = onSelect;
+    return {
+      update() { globalThis.knowledgeGraphCalls.updated++; },
+      destroy() { globalThis.knowledgeGraphCalls.destroyed++; }
+    };
+  }`;
   const modules = {
     graph,
     "knowledge-model": source("studio/knowledge-model.js"),
@@ -412,13 +421,14 @@ test("knowledge refresh does not overlap slow API batches", async () => {
   const result = {
     domains: [], edges: [], entries: [], skills: [], warnings: [],
   };
-  let blocked = false;
+  let blocked = false, canLeave = true;
   try {
     const { createKnowledgeView } = await import(moduleUrl(text));
     const view = createKnowledgeView({
       dom,
       state: { tab: "learning", learn: "graph" },
       actions: {
+        canLeave: () => canLeave,
         status: (message) => {
           throw Error(message);
         },
@@ -432,6 +442,19 @@ test("knowledge refresh does not overlap slow API batches", async () => {
     });
     await view.render();
     assert.equal(calls.length, 4);
+    const shell = dom.$("content").children[0];
+    const controls = shell.children[0].children[1];
+    const search = controls.children[0];
+    for (const value of ["alpha", "beta"]) {
+      search.value = value;
+      search.oninput();
+    }
+    assert.equal(graphCalls.created, 1);
+    assert.equal(graphCalls.updated, 3);
+    canLeave = false;
+    assert.equal(graphCalls.select({ id: "blocked" }), false);
+    assert.equal(graphCalls.updated, 3);
+    canLeave = true;
     blocked = true;
     timers[0]();
     timers[0]();
@@ -441,9 +464,66 @@ test("knowledge refresh does not overlap slow API batches", async () => {
     timers[0]();
     assert.equal(calls.length, 12);
     view.destroy();
+    assert.equal(graphCalls.destroyed, 1);
   } finally {
+    delete globalThis.knowledgeGraphCalls;
     globalThis.document = previous.document;
     globalThis.setInterval = previous.setInterval;
     globalThis.clearInterval = previous.clearInterval;
+  }
+});
+
+test("discussion replay and child expansion update one graph controller", async () => {
+  const dom = domFixture();
+  const previous = { document: globalThis.document, Option: globalThis.Option };
+  const calls = { created: 0, counts: [], destroyed: 0 };
+  globalThis.discussionGraphCalls = calls;
+  globalThis.document = { createElementNS: (_, tag) => new Element(tag) };
+  globalThis.Option = class extends Element {
+    constructor(text, value) {
+      super("option");
+      this.textContent = text;
+      this.value = value;
+    }
+  };
+  const graph = `export function createGraph() {
+    globalThis.discussionGraphCalls.created++;
+    return {
+      update(nodes) { globalThis.discussionGraphCalls.counts.push(nodes.length); },
+      destroy() { globalThis.discussionGraphCalls.destroyed++; }
+    };
+  }`;
+  const text = source("studio/discussion.js").replace(
+    '"./graph.js"', JSON.stringify(moduleUrl(graph)),
+  );
+  try {
+    const { createDiscussionView } = await import(moduleUrl(text));
+    const view = createDiscussionView({
+      dom,
+      state: { view: { entry: "goal" } },
+      actions: { render: () => assert.fail("child expansion recreated the view") },
+      model: {
+        graph: (_, expanded) => ({
+          nodes: Array.from({ length: expanded ? 4 : 2 }, (_, id) => ({ id })),
+          edges: [],
+        }),
+      },
+    });
+    view.render();
+    const stage = dom.$("content").children[0];
+    const tools = stage.children[2];
+    const replay = stage.children[3];
+    tools.children[0].onclick();
+    replay.children[2].value = 1;
+    replay.children[2].oninput();
+    assert.equal(calls.created, 1);
+    assert.deepEqual(calls.counts, [2, 4, 1]);
+    assert.equal(replay.children[2].max, 4);
+    view.destroy();
+    assert.equal(calls.destroyed, 1);
+  } finally {
+    delete globalThis.discussionGraphCalls;
+    globalThis.document = previous.document;
+    globalThis.Option = previous.Option;
   }
 });
