@@ -5,7 +5,7 @@ export function drawGraph(
   edges,
   tools,
   onSelect,
-  { entry, button, nodeFill, nodeRadius, nodeDashed, showEdgeLabels = true },
+  { entry, button, nodeFill, nodeRadius, nodeDashed, nodeRegion, regionColor, showEdgeLabels = true },
 ) {
   const ns = "http://www.w3.org/2000/svg",
     make = (tag, attrs = {}) => {
@@ -42,6 +42,17 @@ export function drawGraph(
     skill: "#a89cc1",
     drafts: "#c2b18b",
   };
+  // Background regions follow explicit catalog families, not invented semantic
+  // community edges. Recompute envelopes as the force layout moves.
+  const grouped = new Map();
+  if (nodeRegion) for (const node of layout.nodes) {
+    const key = nodeRegion(node); if (!key) continue;
+    if (!grouped.has(key)) grouped.set(key, []); grouped.get(key).push(node);
+  }
+  const regions = [...grouped.values()].filter(items => items.length > 1).map(items => {
+    const n = make('ellipse', { fill: regionColor?.(items[0]) || '#dae4f3', opacity: '.18', 'pointer-events': 'none' });
+    layer.append(n); return {items, n};
+  });
   const lines = layout.edges.map((edge) => {
     const n = make("line", {
       stroke: edge.origin === "written_section" ? "#d5dced" : "#dfe5ef",
@@ -109,6 +120,12 @@ export function drawGraph(
     return { node, g, text };
   });
   function draw() {
+    for (const {items, n} of regions) {
+      const xs = items.map(i => i.x), ys = items.map(i => i.y);
+      const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
+      n.setAttribute('cx', (minX + maxX) / 2); n.setAttribute('cy', (minY + maxY) / 2);
+      n.setAttribute('rx', (maxX - minX) / 2 + 38); n.setAttribute('ry', (maxY - minY) / 2 + 38);
+    }
     layer.setAttribute(
       "transform",
       `translate(${width / 2 + panX},${height / 2 + panY}) scale(${zoom})`,

@@ -26,6 +26,7 @@ memory curve reflects real usage, not query frequency.
 from __future__ import annotations
 
 import json
+import hashlib
 import logging
 import math
 from time import perf_counter
@@ -492,6 +493,11 @@ def recall(
         goal_context=goal_context, explain=explain, type_filter=type_filter,
         search_backend=search_backend, diagnostics=diagnostics)
     knowledge_done = perf_counter()
+    from . import linked_sources
+    team_hits, team_warnings = linked_sources.search(repo_root(), query, limit=limit, scope=scope, type_filter=type_filter)
+    team_done = perf_counter()
+    if team_warnings:
+        diagnostics['team_warnings'] = team_warnings
     result = {
         "schema_version": RECALL_RESPONSE_SCHEMA,
         "query": query,
@@ -507,6 +513,7 @@ def recall(
         },
         "episodic": episodic,
         "knowledge": knowledge,
+        "team_knowledge": team_hits,
         "diagnostics": diagnostics,
     }
     # Explicit opt-in: profile identity never implicitly enables private feedback.
@@ -535,24 +542,53 @@ def recall(
         'scope': 'OKS recall only; excludes debug persistence, model and host execution',
         'phase_ms': {key: round((end - begin) * 1000, 3) for key, begin, end in (
             ('task_check', started, checked), ('episodic', checked, episodic_done),
-            ('knowledge', episodic_done, knowledge_done), ('requirements', knowledge_done, finished))},
+            ('knowledge', episodic_done, knowledge_done), ('team_sources', knowledge_done, team_done), ('requirements', team_done, finished))},
         'total_ms': round((finished - started) * 1000, 3),
         'query_utf8_bytes': len(query.encode('utf-8')),
-        'context_utf8_bytes': len(json.dumps({key: result[key] for key in ('knowledge', 'episodic', 'task_context', 'continuation') if key in result}, ensure_ascii=False, default=str).encode('utf-8')),
+        'context_utf8_bytes': len(json.dumps({key: result[key] for key in ('knowledge', 'team_knowledge', 'episodic', 'task_context', 'continuation') if key in result}, ensure_ascii=False, default=str).encode('utf-8')),
         'model_tokens': None, 'host_execution_ms': None,
     }
+    from uuid import uuid4
+    from .vfs_observation import _save
+    phases = [('任务与配置', started, checked), ('原始与背景', checked, episodic_done),
+              ('个人知识召回', episodic_done, knowledge_done), ('团队来源', knowledge_done, team_done),
+              ('任务约束', team_done, finished)]
+    call_trace = {'id':uuid4().hex, 'kind':'recall', 'operation':'recall', 'at':datetime.now(UTC).isoformat(),
+        'status':'complete', 'total_ms':(finished-started)*1000,
+        'query_sha256':hashlib.sha256(query.encode()).hexdigest(),
+        'output_bytes':diagnostics['measurements']['context_utf8_bytes'], 'model_tokens':None,
+        'timing_scope':diagnostics['measurements']['scope'],
+        'hits':[{key:h[key] for key in ('slug','source_path','source_sha256','backend') if key in h}
+                for h in [*knowledge,*team_hits]],
+        'spans':[{'id':0, 'parent_id':None, 'name':'recall', 'start_ms':0,
+                  'duration_ms':(finished-started)*1000, 'status':'complete'}] +
+                [{'id':i, 'parent_id':0, 'name':name, 'start_ms':(begin-started)*1000,
+                  'duration_ms':(end-begin)*1000, 'status':'complete'}
+                 for i,(name,begin,end) in enumerate(phases,1)]}
+    diagnostics['call_trace'] = call_trace
+    try:
+        _save(repo_root(), call_trace)
+    except (OSError, ValueError):
+        diagnostics['trace_persistence_status'] = 'failed'
     if debug_record:
         result["debug_record_id"] = record(repo_root(), query, diagnostics, result["knowledge"])
         for hit in result['knowledge']:
             if hit.get('load_command'):
                 hit['load_command'] += ' --retrieval-id ' + result['debug_record_id']
+    from . import evaluation_feedback
+    try:
+        observation_id = evaluation_feedback.capture(repo_root(), query, result['knowledge'], diagnostics)
+        if observation_id:
+            result['observation_id'] = observation_id
+    except (OSError, ValueError):
+        diagnostics['evaluation_capture_status'] = 'failed'
     return result
 
 
 def compact_context(result: dict, *, explain: bool = False) -> dict:
     """Presentation projection only: retain requirements, provenance and source pointers."""
     selected = {key: result[key] for key in (
-        'query', 'goal', 'knowledge', 'episodic', 'task_context', 'continuation', 'debug_record_id'
+        'query', 'goal', 'knowledge', 'team_knowledge', 'episodic', 'task_context', 'continuation', 'debug_record_id', 'observation_id'
     ) if key in result}
     selected['schema_version'] = 'recall-context/v1'
     redundant = {'schema_version', 'channel', 'rank', 'score', 'backend'}

@@ -3,9 +3,12 @@ import {
   latencyChart,
   pairedChart,
 } from "./evaluation-charts.js";
+import { createEvaluationReview } from './evaluation-review.js';
 
 export function createEvaluationView({ dom, state, actions, api }) {
   const { $, el, button } = dom;
+  const review = createEvaluationReview({dom, state, actions, api});
+  let reviewing = false;
   let ticket = 0,
     timer = null,
     selectedDataset = "",
@@ -18,6 +21,7 @@ export function createEvaluationView({ dom, state, actions, api }) {
   function destroy() {
     ticket++;
     clearTimeout(timer);
+    review.destroy();
   }
   function jsonPost(route, payload) {
     return api.request(route, {
@@ -34,6 +38,12 @@ export function createEvaluationView({ dom, state, actions, api }) {
     const current = ticket,
       host = el("div", "evaluation-workspace");
     $("content").append(host);
+    const navigation = el('div', 'file-tools');
+    for (const [value, title] of [[false, '运行'], [true, '数据审核']]) navigation.append(button(title, () => {
+      reviewing = value; host.remove(); void render();
+    }, reviewing === value ? 'active' : 'soft'));
+    host.append(navigation);
+    if (reviewing) { await review.render(host); return; }
     try {
       catalog = await api.request("/api/evaluation/catalog");
       if (current !== ticket) return;

@@ -231,3 +231,5 @@ OKS runs entirely on your local filesystem. No telemetry, no remote calls from c
 ## License
 
 [MIT](./LICENSE)
+
+Read [linked knowledge and call observability](docs/linked-knowledge-observability.md) for review semantics, version boundaries and timing scope.

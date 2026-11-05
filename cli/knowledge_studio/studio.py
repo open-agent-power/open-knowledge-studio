@@ -200,6 +200,25 @@ def context_catalog(root):
     for entry in entries:
         for target in _references(root, entry['path'], texts[entry['path']], index):
             edges.append({'a': entry['id'], 'b': target, 'type': 'cites'})
+    from . import linked_sources, mail
+    teams = linked_sources.catalog(root)
+    warnings.extend(teams['warnings'])
+    for source in teams['sources']:
+        entries.extend({**e, 'body': e['body'][:12000], 'body_truncated': len(e['body']) > 12000}
+                       for e in source['entries'])
+    for message in islice(mail.iter_messages(root, 'human'), 200):
+        meta = message['meta']
+        identifier = 'mail:' + str(meta['message_id'])
+        body = message.get('body', '')
+        entries.append({'id': identifier, 'type': 'mail', 'family': 'mail', 'title': message['title'],
+            'group': str(meta.get('thread_id') or 'Mail'), 'path': str(message['path'].relative_to(root)),
+            'body': body[:12000], 'body_truncated': len(body) > 12000,
+            'metadata': {**{key:str(meta.get(key,'')) for key in ('from','to','thread_id','reply_to','record_kind')},
+                         **{key:str(value) for key,value in message.get('state',{}).items()}}})
+        for target in _references(root, entries[-1]['path'], body, index):
+            edges.append({'a': identifier, 'b': target, 'type': 'cites'})
+        if meta.get('reply_to'):
+            edges.append({'a': identifier, 'b':'mail:'+str(meta['reply_to']), 'type':'reply_to'})
     return {'entries': entries, 'edges': edges, 'warnings': warnings}
 
 

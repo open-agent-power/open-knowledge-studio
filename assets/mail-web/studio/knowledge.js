@@ -1,4 +1,5 @@
 import { drawGraph } from "./graph.js";
+import { callTimeline } from './call-trace.js';
 import {
   knowledgeTree,
   projectKnowledge,
@@ -94,6 +95,8 @@ export function createKnowledgeView({ dom, state, actions, api }) {
           nodeFill: (n) => usageColor(n.uses, maxUses, n.pending, nodeHue(n)),
           nodeRadius: (n) => (n.children ? 13 : 8),
           nodeDashed: (n) => n.pending,
+          nodeRegion: (n) => n.family,
+          regionColor: (n) => `hsl(${nodeHue(n)} 45% 78%)`,
         },
       );
       for (const n of svg.querySelectorAll(".studio-node")) {
@@ -101,6 +104,7 @@ export function createKnowledgeView({ dom, state, actions, api }) {
         n.querySelector("title").textContent =
           `${node.title} · 显式使用 ${node.uses}${node.pending ? " · 待审核" : ""}`;
         n.classList.toggle("selected", node.id === selected);
+        n.classList.toggle("pending-node", node.pending || node.has_pending);
         n.classList.toggle(
           "query-hit",
           hits.some((h) => h.nodeId === node.id),
@@ -190,6 +194,8 @@ export function createKnowledgeView({ dom, state, actions, api }) {
                       project: "项目",
                       goal: "目标",
                       discuss: "讨论",
+                      team: "团队",
+                      mail: "交接",
                     }[node.type] ||
                     node.review?.label ||
                     "Wiki",
@@ -212,7 +218,15 @@ export function createKnowledgeView({ dom, state, actions, api }) {
             actions.status(error.message);
           }
         }
-        if (node.pending) {
+        if (node.url) {
+          const link = el('a', 'detail-meta', '来源 ↗');
+          link.href = node.url; link.target = '_blank'; link.rel = 'noopener noreferrer'; aside.append(link);
+        }
+        for (const [url, label] of [[node.evidence_url, '证据 ↗'], [node.approval_url, '审核 ↗']]) {
+          if (!url) continue;
+          const link = el('a', 'detail-meta', label); link.href = url; link.target = '_blank'; link.rel = 'noopener noreferrer'; aside.append(link);
+        }
+        if (node.pending && node.type !== 'team') {
           aside.append(
             button(
               "审核",
@@ -303,7 +317,7 @@ export function createKnowledgeView({ dom, state, actions, api }) {
           body: JSON.stringify({ query: text }),
         });
         if (current !== ticket || sequence !== querySequence) return;
-        hits = mapQueryHits(roots, result.knowledge || []);
+        hits = mapQueryHits(roots, [...(result.knowledge || []), ...(result.team_knowledge || [])]);
         queryMode = true;
         for (const hit of hits)
           if (hit.nodeId) revealNode(roots, hit.nodeId, expanded);
@@ -326,6 +340,7 @@ export function createKnowledgeView({ dom, state, actions, api }) {
         aside.append(
           el("div", "detail-meta", `${backend} · ${elapsed} ms（请求往返）`),
         );
+        if (result.diagnostics?.call_trace) aside.append(callTimeline(dom, result.diagnostics.call_trace));
         for (const hit of hits) {
           const row = button(
             hit.title || hit.slug,

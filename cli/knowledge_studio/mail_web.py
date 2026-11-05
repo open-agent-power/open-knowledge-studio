@@ -39,7 +39,7 @@ FILES['/workspace-shell.css'] = ('workspace-shell.css', 'text/css')
 FILES['/knowledge-heatmap.js'] = ('knowledge-heatmap.js', 'text/javascript')
 for _asset in ('studio.html', 'studio.js', 'studio-model.js', 'studio.css'):
     FILES['/' + _asset] = (_asset, 'text/html' if _asset.endswith('.html') else 'text/css' if _asset.endswith('.css') else 'text/javascript')
-for _module in ('api', 'dom', 'state', 'discussion', 'graph', 'goals', 'learning', 'settings', 'formulas', 'knowledge', 'knowledge-model', 'evaluation', 'evaluation-charts'):
+for _module in ('api', 'dom', 'state', 'discussion', 'graph', 'goals', 'learning', 'settings', 'formulas', 'knowledge', 'knowledge-model', 'evaluation', 'evaluation-charts', 'files', 'evaluation-review', 'call-trace'):
     FILES[f'/studio/{_module}.js'] = (f'studio/{_module}.js', 'text/javascript')
 for _style in ('graph', 'goals', 'learning', 'evaluation'):
     FILES[f'/studio/{_style}.css'] = (f'studio/{_style}.css', 'text/css')
@@ -937,6 +937,9 @@ class Handler(BaseHTTPRequestHandler):
                     result = ev.run(self.server.kb_root, query.get('id',[''])[0])
                 elif route == '/api/evaluation/job':
                     result = ev.read(self.server.kb_root, 'jobs/' + ev.identifier(query.get('id',[''])[0]) + '.json')
+                elif route == '/api/evaluation/candidates':
+                    from .evaluation_feedback import candidates
+                    result = candidates(self.server.kb_root)
                 else:
                     self.send_json(404, {'error':'Unknown evaluation view'})
                     return
@@ -957,6 +960,16 @@ class Handler(BaseHTTPRequestHandler):
                     result = studio.read_file(self.server.kb_root, query.get('path', [''])[0])
                 elif route == '/api/studio/contexts':
                     result = studio.context_catalog(self.server.kb_root)
+                elif route == '/api/studio/fs':
+                    from .vfs_observation import execute
+                    result = execute(self.server.kb_root, query.get('operation',['ls'])[0], query.get('uri',['oks://'])[0],
+                        query=query.get('query',[''])[0], offset=int(query.get('offset',['0'])[0]), limit=int(query.get('limit',['20000'])[0]))
+                elif route == '/api/studio/fs-history':
+                    from .vfs_observation import history
+                    result = history(self.server.kb_root)
+                elif route == '/api/studio/calls':
+                    from .vfs_observation import history
+                    result = history(self.server.kb_root, query.get('kind',['recall'])[0])
                 elif route == '/api/studio/skills':
                     result = studio.local_skills(self.server.kb_root)
                 elif route == '/api/studio/usage':
@@ -1276,7 +1289,7 @@ class Handler(BaseHTTPRequestHandler):
             self._reject_post(403, 'same-origin JSON requests required')
             return
         route = self.path.split("?", 1)[0]
-        if route in {'/api/evaluation/import', '/api/evaluation/start', '/api/evaluation/compare'}:
+        if route in {'/api/evaluation/import', '/api/evaluation/start', '/api/evaluation/compare', '/api/evaluation/review', '/api/evaluation/export', '/api/evaluation/preferences'}:
             from . import studio_evaluation as ev
             import yaml
             try:
@@ -1287,7 +1300,9 @@ class Handler(BaseHTTPRequestHandler):
                 payload = self.read_json(max_bytes=ev.MAX_UPLOAD+65536 if route.endswith('/import') else 65536)
                 if payload.get('expected_knowledge_base') != str(self.server.kb_root):
                     raise ValueError('Knowledge base changed; reload before continuing')
-                operation = ev.import_dataset if route.endswith('/import') else ev.start if route.endswith('/start') else ev.compare
+                from . import evaluation_feedback as feedback
+                operation = {'import':ev.import_dataset, 'start':ev.start, 'compare':ev.compare,
+                             'review':feedback.review, 'export':feedback.export, 'preferences':feedback.configure}[route.rsplit('/',1)[1]]
                 self.send_json(200, operation(self.server.kb_root,payload))
             except (OSError, ValueError, KeyError, TypeError, yaml.YAMLError) as exc:
                 self.send_json(400, {'error':str(exc)})

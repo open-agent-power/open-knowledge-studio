@@ -27,6 +27,9 @@ class Mount:
 
 
 MOUNTS: dict[str, Mount] = {
+    "goal": Mount("goal", ("goal",)),
+    "discuss": Mount("discuss", ("discuss",)),
+    "skill": Mount("skill", ("skill",)),
     "profiles": Mount("profiles", ("profiles",)),
     "raw": Mount("raw", ("raw",), (("executions",), (".logs",))),
     "wiki": Mount("wiki", ("wiki",)),

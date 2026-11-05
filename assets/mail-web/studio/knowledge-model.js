@@ -16,6 +16,7 @@ export function knowledgeTree(map, usage, skills, contexts = { entries: [] }) {
     children,
     uses: children.reduce((sum, item) => sum + item.uses, 0),
     pending: children.length > 0 && children.every((item) => item.pending),
+    has_pending: children.some((item) => item.pending || item.has_pending),
   });
   const roots = map.domains.map((domain) =>
     group(
@@ -58,6 +59,8 @@ export function knowledgeTree(map, usage, skills, contexts = { entries: [] }) {
     ["project", "项目"],
     ["goal", "目标"],
     ["discuss", "讨论"],
+    ["team", "团队"],
+    ["mail", "交接"],
   ]) {
     const entries = contexts.entries.filter((e) => e.type === kind);
     if (!entries.length) continue;
@@ -67,7 +70,7 @@ export function knowledgeTree(map, usage, skills, contexts = { entries: [] }) {
         item.date ||
         (["goal", "discuss"].includes(kind) ? "历史未归档" : item.group);
       if (!grouped.has(key)) grouped.set(key, []);
-      grouped.get(key).push({ ...item, uses: 0, pending: false, family: kind });
+      grouped.get(key).push({ ...item, uses: 0, pending: item.pending || false, family: kind });
     }
     roots.push(
       group(
@@ -155,6 +158,8 @@ export function nodeHue(node) {
     goal: 335,
     discuss: 278,
     skill: 263,
+    team: 175,
+    mail: 25,
     computing: 220,
     engineering: 166,
     management: 38,
@@ -193,7 +198,9 @@ export function mapQueryHits(roots, knowledge) {
       (hit.uri?.startsWith("oks://")
         ? decodeURIComponent(hit.uri.slice(6))
         : "");
-    const candidates = path
+    const candidates = hit.channel === 'team'
+      ? leaves.filter(n => n.id === hit.id || n.id === hit.slug)
+      : path
       ? leaves.filter((n) => n.path === path)
       : leaves.filter(
           (n) => n.path?.split("/").pop().replace(/\.md$/, "") === hit.slug,

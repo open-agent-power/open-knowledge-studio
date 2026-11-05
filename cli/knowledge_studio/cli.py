@@ -136,7 +136,8 @@ def _run_vfs(
 ) -> None:
     output_format = _validate_output_format(output_format)
     try:
-        result = call(VfsService())
+        from .vfs_observation import observe_call
+        result = observe_call(VfsService().resolver.root, operation, uri, call)
     except VfsError as exc:
         payload = _vfs_error(operation, uri, exc)
         if output_format == "json":
@@ -190,6 +191,7 @@ hook_app = typer.Typer(help="Optional editor hooks for recall, conflict detectio
 mail_app = typer.Typer(help="Agent-to-agent mail (inbox/sent).")
 registry_app = typer.Typer(help="Terminal registry (agent+cwd -> profile/goal).")
 eval_app = typer.Typer(help="Offline recall evaluation and run comparison.")
+sources_app = typer.Typer(help="Link independent read-only Git knowledge repositories.")
 trace_app = typer.Typer(help="Append-only execution traces and feedback.")
 workbuddy_app = typer.Typer(
     help="WorkBuddy local Agent workflow.", no_args_is_help=True,
@@ -241,6 +243,7 @@ app.add_typer(feedback_app, name="feedback")
 app.add_typer(tasks_app, name="task")
 app.add_typer(registry_app, name="registry")
 app.add_typer(eval_app, name="eval")
+app.add_typer(sources_app, name="sources")
 app.add_typer(trace_app, name="trace")
 app.add_typer(workbuddy_app, name="workbuddy")
 app.add_typer(fs_app, name="fs")
@@ -901,11 +904,84 @@ def recall_cmd(
         console.print("\n本任务要求：" + str(task_context.get("status")), markup=False)
         for candidate in task_context.get("candidates", []):
             console.print(candidate["title"] + ": " + candidate["summary"], markup=False)
-    if not result["episodic"] and not result["knowledge"]:
+    for item in result.get('team_knowledge', []):
+        console.print(Panel(item['body'], title=item['title'], subtitle=item['url'], expand=False))
+    if not result["episodic"] and not result["knowledge"] and not result.get('team_knowledge'):
         console.print("[dim]No results from either path.[/dim]")
 
 
 # --- Offline evaluation --------------------------------------------------
+
+@sources_app.command('link')
+def sources_link(path: Path, name: str = typer.Option(..., '--name'),
+                 repository: str = typer.Option(..., '--repository'), revision: str = typer.Option('HEAD', '--revision')):
+    from .linked_sources import link
+    try:
+        _emit_json(link(_instance_root(None), name, path, repository, revision))
+    except (OSError, ValueError, KeyError) as exc:
+        raise typer.BadParameter(str(exc))
+
+
+@sources_app.command('list')
+def sources_list():
+    from .linked_sources import catalog
+    _emit_json(catalog(_instance_root(None)))
+
+
+@sources_app.command('unlink')
+def sources_unlink(name: str):
+    from .linked_sources import unlink
+    _emit_json(unlink(_instance_root(None), name))
+
+
+@fs_app.command('inspect')
+def fs_inspect(uri: str, operation: str = typer.Option('ls', '--operation'),
+               query: str = typer.Option('', '--query'), offset: int = typer.Option(0), limit: int = typer.Option(20000)):
+    """Execute a measured VFS call and retain real stage timings."""
+    from .vfs_observation import execute
+    try:
+        _emit_json(execute(_instance_root(None), operation, uri, query=query, offset=offset, limit=limit))
+    except (OSError, ValueError) as exc:
+        raise typer.BadParameter(str(exc))
+
+
+@eval_app.command('candidates')
+def eval_candidates():
+    from .evaluation_feedback import candidates
+    _emit_json(candidates(_instance_root(None)))
+
+
+@eval_app.command('capture')
+def eval_capture(enabled: bool = typer.Option(True, '--enabled/--disabled'),
+                 retain_query: bool = typer.Option(False, '--retain-query/--hash-query')):
+    from .evaluation_feedback import configure
+    _emit_json(configure(_instance_root(None), {'values': {'capture_enabled': enabled, 'retain_query': retain_query}}))
+
+
+@eval_app.command('review')
+def eval_review(identifier: str, query: str = typer.Option(..., '--query'),
+                accept: Optional[list[str]] = typer.Option(None, '--accept'),
+                reject: Optional[list[str]] = typer.Option(None, '--reject'),
+                clear: Optional[list[str]] = typer.Option(None, '--clear'),
+                reason: str = typer.Option('', '--reason'), confirm: bool = typer.Option(False, '--confirm'),
+                derived_query: bool = typer.Option(False, '--derived-query')):
+    """Explicitly accept/reject knowledge for one observed query; missing labels remain unknown."""
+    from .evaluation_feedback import review
+    try:
+        _emit_json(review(_instance_root(None), {'id': identifier, 'query': query, 'accept': accept or [],
+            'reject': reject or [], 'clear': clear or [], 'reason': reason, 'confirm': confirm, 'derived_query': derived_query}))
+    except (OSError, ValueError) as exc:
+        raise typer.BadParameter(str(exc))
+
+
+@eval_app.command('export')
+def eval_export(name: str = typer.Option(..., '--name'), kind: str = typer.Option('recall', '--kind'),
+                case: Optional[list[str]] = typer.Option(None, '--case')):
+    from .evaluation_feedback import export
+    try:
+        _emit_json(export(_instance_root(None), {'name': name, 'kind': kind, 'ids': case}))
+    except (OSError, ValueError) as exc:
+        raise typer.BadParameter(str(exc))
 
 @eval_app.command("recall")
 def eval_recall(
@@ -1274,9 +1350,10 @@ def _mark_inject_used(root: Path, slug: str) -> int:
                 rec = json.loads(line)
             except Exception:
                 continue
-            if slug not in rec.get("slugs", []) or rec.get("used"):
+            if slug not in rec.get("slugs", []) or slug in rec.get("used_slugs", []):
                 continue
             rec["used"] = True
+            rec['used_slugs'] = list(dict.fromkeys([*rec.get('used_slugs', []), slug]))
             rec["used_at"] = ts
             lines[i] = json.dumps(rec, ensure_ascii=False)
             return "\n".join(lines) + "\n"
@@ -1312,8 +1389,10 @@ def _append_trace_feedback_jsonl(root: Path, run_id: str, outcome: str, comment:
         pass
 
 
+@app.command('use')
 @wiki_app.command("use")
-def wiki_use(slug: str = typer.Argument(help="Slug of a page that was actually used/injected")):
+def wiki_use(slug: str = typer.Argument(help="Slug of a page that was actually used/injected"),
+             observation: Optional[str] = typer.Option(None, '--observation', help='Exact evaluation observation ID; never inferred')):
     """Record an explicit use of a wiki page — the memory-curve signal.
 
     Recall and search are read-only: a query does not count as a use. Call
@@ -1324,8 +1403,14 @@ def wiki_use(slug: str = typer.Argument(help="Slug of a page that was actually u
     if not store.get_wiki_page(slug):
         console.print(f"[red]Not found:[/red] {slug}")
         raise typer.Exit(1)
-    store.record_access(slug)
     root = _instance_root(None)
+    from . import evaluation_feedback
+    if observation:
+        item = evaluation_feedback.candidate(root, observation)
+        if slug not in {hit.get('slug') for hit in item['hits']}:
+            raise typer.BadParameter('Slug was not returned by this observation')
+    store.record_access(slug)
+    evaluation_feedback.record_use(root, slug, observation)
     used = _mark_inject_used(root, slug)
     updated = store.get_wiki_page(slug)
     console.print(
