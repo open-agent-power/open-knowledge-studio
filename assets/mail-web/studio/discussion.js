@@ -1,19 +1,17 @@
 // View module. State and side effects are supplied explicitly by the controller.
-import { drawGraph as drawForceGraph } from "./graph.js";
+import { createGraph } from "./graph.js";
 export function createDiscussionView({ dom, state, actions, model: M }) {
   const { $, el, button } = dom;
-  const { render, scopeFile } = actions;
+  const { scopeFile } = actions;
   let expanded = false,
     destroyGraph = () => {};
-  const drawGraph = (...args) =>
-    drawForceGraph(...args, { entry: state.view.entry, button });
   function renderDiscussion() {
-    const data = M.graph(state.view, expanded),
-      stage = el("div", "graph-stage");
+    let data = M.graph(state.view, expanded);
+    const stage = el("div", "graph-stage");
     stage.setAttribute("aria-label", "目标及关联知识");
     const ns = "http://www.w3.org/2000/svg",
       svg = document.createElementNS(ns, "svg");
-    svg.setAttribute("role", "img");
+    svg.setAttribute("role", "group");
     svg.setAttribute("aria-label", "目标、判断、知识与来源图谱");
     stage.append(svg);
     const detail = el("div", "graph-detail");
@@ -22,7 +20,12 @@ export function createDiscussionView({ dom, state, actions, model: M }) {
     const tools = el("div", "graph-tools"),
       children = button(expanded ? "收起子目标" : "子目标", () => {
         expanded = !expanded;
-        render();
+        children.textContent = expanded ? "收起子目标" : "子目标";
+        data = M.graph(state.view, expanded);
+        seek.max = Math.max(1, data.nodes.length);
+        seek.value = seek.max;
+        pause();
+        display(data.nodes.length);
       });
     tools.append(children);
     stage.append(tools);
@@ -42,41 +45,39 @@ export function createDiscussionView({ dom, state, actions, model: M }) {
     replay.append(play, speed, seek);
     stage.append(replay);
     $("content").append(stage);
-    let graphDispose = () => {},
-      timer = null,
+    let timer = null,
       playing = false;
+    const graph = createGraph(
+      svg,
+      tools,
+      (node) => {
+        detail.replaceChildren(el("strong", null, node.title));
+        if (node.text) detail.append(el("p", null, node.text));
+        detail.append(el("code", null, node.path));
+        const facts = el(
+          "span",
+          "tiny",
+          node.alignment && node.alignment !== "unspecified"
+            ? "记录状态：" + node.alignment
+            : "",
+        );
+        detail.append(
+          facts,
+          button(
+            node.type === "goal" || node.type === "todo"
+              ? "打开目标文件"
+              : "查看原文",
+            () => scopeFile(node.path),
+          ),
+        );
+        detail.hidden = false;
+      },
+      { entry: state.view.entry, button },
+    );
     const display = (count) => {
-      graphDispose();
       const nodes = data.nodes.slice(0, count),
         ids = new Set(nodes.map((n) => n.id));
-      graphDispose = drawGraph(
-        svg,
-        nodes,
-        data.edges.filter((e) => ids.has(e.from) && ids.has(e.to)),
-        tools,
-        (node) => {
-          detail.replaceChildren(el("strong", null, node.title));
-          if (node.text) detail.append(el("p", null, node.text));
-          detail.append(el("code", null, node.path));
-          const facts = el(
-            "span",
-            "tiny",
-            node.alignment && node.alignment !== "unspecified"
-              ? "记录状态：" + node.alignment
-              : "",
-          );
-          detail.append(
-            facts,
-            button(
-              node.type === "goal" || node.type === "todo"
-                ? "打开目标文件"
-                : "查看原文",
-              () => scopeFile(node.path),
-            ),
-          );
-          detail.hidden = false;
-        },
-      );
+      graph.update(nodes, data.edges.filter((e) => ids.has(e.from) && ids.has(e.to)));
     };
     const pause = () => {
       playing = false;
@@ -119,7 +120,7 @@ export function createDiscussionView({ dom, state, actions, model: M }) {
     display(data.nodes.length);
     destroyGraph = () => {
       pause();
-      graphDispose();
+      graph.destroy();
     };
   }
   return {

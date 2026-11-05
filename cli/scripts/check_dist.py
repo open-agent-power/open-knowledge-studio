@@ -35,6 +35,12 @@ _REQUIRED_MODULES = (
     "knowledge_studio/cli.py",
     "knowledge_studio/evaluation.py",
     "knowledge_studio/evaluation_dataset.py",
+    "knowledge_studio/resources.py",
+    "knowledge_studio/cli_common.py",
+    "knowledge_studio/instance_cli.py",
+    "knowledge_studio/hooks.py",
+    "knowledge_studio/hooks_cli.py",
+    "knowledge_studio/mail_cli.py",
 )
 
 

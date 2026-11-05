@@ -12,6 +12,7 @@ import json
 import os
 import re
 import tempfile
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -55,6 +56,19 @@ def _fsync_dir(path: Path) -> None:
         os.close(fd)
 
 
+def _replace_snapshot(source, target) -> None:
+    """Allow a short Windows reader to close before publishing the snapshot."""
+    deadline = time.monotonic() + 0.15
+    while True:
+        try:
+            os.replace(source, target)
+            return
+        except PermissionError as exc:
+            if os.name != "nt" or exc.winerror != 5 or time.monotonic() >= deadline:
+                raise
+            time.sleep(0.01)
+
+
 def atomic_write_json(path: Path, value: object) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = json.dumps(value, ensure_ascii=False, indent=2) + "\n"
@@ -64,7 +78,7 @@ def atomic_write_json(path: Path, value: object) -> None:
             stream.write(payload)
             stream.flush()
             os.fsync(stream.fileno())
-        os.replace(temporary, path)
+        _replace_snapshot(temporary, path)
         _fsync_dir(path.parent)
     except BaseException:
         Path(temporary).unlink(missing_ok=True)
@@ -79,7 +93,7 @@ def atomic_write_text(path: Path, value: str) -> None:
             stream.write(value)
             stream.flush()
             os.fsync(stream.fileno())
-        os.replace(temporary, path)
+        _replace_snapshot(temporary, path)
         _fsync_dir(path.parent)
     except BaseException:
         Path(temporary).unlink(missing_ok=True)

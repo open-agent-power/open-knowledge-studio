@@ -6,6 +6,7 @@ import re
 from pathlib import Path
 
 from knowledge_studio import store
+from knowledge_studio.resources import asset_root
 
 
 def agent_id(value: str) -> str:
@@ -13,11 +14,6 @@ def agent_id(value: str) -> str:
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,79}", value):
         raise ValueError("Agent ID must contain 1-80 letters, digits, dots, underscores or hyphens")
     return value
-
-
-def asset_root() -> Path:
-    checkout = Path(__file__).resolve().parents[2] / "assets"
-    return checkout if checkout.is_dir() else Path(__file__).parent / "_assets"
 
 
 def validate_root(root: Path) -> Path:

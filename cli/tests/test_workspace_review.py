@@ -49,7 +49,9 @@ def test_rejection_checks_origin_and_exact_version_and_retains_history(ordinary)
     original = candidate.read_bytes()
     with server(root) as request:
         document = request('/api/learning/draft?path=drafts/ordinary.md')
-        body = {'path': document['path'], 'expected_sha256': document['sha256'], 'confirm_reject': True}
+        assert document['knowledge_base'] == str(root)
+        body = {'path': document['path'], 'expected_sha256': document['sha256'],
+                'expected_knowledge_base': document['knowledge_base'], 'confirm_reject': True}
         with pytest.raises(HTTPError) as missing_origin:
             request('/api/learning/reject', body, origin=False)
         assert missing_origin.value.code == 403
@@ -79,6 +81,25 @@ def test_read_only_server_rejects_decision_without_writing(ordinary):
             request('/api/learning/reject', body)
         assert denied.value.code == 403
     assert candidate.read_bytes() == original and not (root / '.oks/draft-reviews').exists()
+
+
+@pytest.mark.parametrize('route', ['/api/learning/promote', '/api/learning/reject'])
+@pytest.mark.parametrize('expected_root', [None, 'another-knowledge-base'])
+def test_draft_decisions_reject_missing_or_changed_instance(ordinary, route, expected_root):
+    root, candidate = ordinary
+    original = candidate.read_bytes()
+    with server(root) as request:
+        body = {'path': 'drafts/ordinary.md', 'expected_sha256': hashlib.sha256(original).hexdigest(),
+                'confirm_review': True, 'confirm_reject': True}
+        if expected_root is not None:
+            body['expected_knowledge_base'] = expected_root
+        with pytest.raises(HTTPError) as denied:
+            request(route, body)
+        assert denied.value.code == 409
+        assert json.load(denied.value)['code'] == 'instance_changed'
+    assert candidate.read_bytes() == original
+    assert not (root / '.oks/draft-reviews').exists()
+    assert not list((root / 'wiki').rglob('*.md'))
 
 
 def test_workspace_overview_and_audit_are_bound_to_server_root(ordinary):

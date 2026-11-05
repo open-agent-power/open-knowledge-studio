@@ -580,7 +580,7 @@ def summary(meta: dict) -> dict:
 
 def bundled_diff(root: Path, identity: str, version: str) -> dict:
     """Compare the selected captured instructions to this installation's bundled Skill."""
-    from .mail_setup import asset_root
+    from .resources import asset_root
     root = _root(root)
     identity = _identifier(identity)
     meta, old_files = _version_snapshot(root, identity, version)
@@ -607,7 +607,7 @@ def bundled_diff(root: Path, identity: str, version: str) -> dict:
 
 def prepare_bundled_update(root: Path, request: dict) -> dict:
     """Explicitly capture a bundled version as a Draft; never overwrite reviewed Wiki."""
-    from .mail_setup import asset_root
+    from .resources import asset_root
     root = _root(root)
     inspected = bundled_diff(root, request.get('id'), request.get('version'))
     if request.get('expected_bundled_version') != inspected['bundled_version']:

@@ -70,7 +70,7 @@ def is_recallable_wiki_page(page: dict[str, Any]) -> bool:
     return status not in _INACTIVE_WIKI_STATUSES and not is_wiki_page_archived(page)
 
 
-def _apply_budget(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _apply_budget(results: list[dict[str, Any]], params: dict | None = None) -> list[dict[str, Any]]:
     """Tier degradation: total body_preview > budget 时降级 L2→L1→L0→截断.
 
     CV from OpenViking ``tiers.py`` — token 超预算自动降级到更浅 tier.
@@ -84,7 +84,7 @@ def _apply_budget(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
     - 截断: 保留 top-N 直到 total < budget
     """
     try:
-        params = load_recall_params()
+        params = load_recall_params() if params is None else params
         budget = int(params.get("inject_budget_chars", 4000))
         per_page = int(params.get("inject_per_page_chars", MAX_BODY_PREVIEW))
         title_floor = float(params.get("inject_title_only_floor", 0.5))
@@ -482,16 +482,17 @@ def recall(
         goal = bound_goal
     diagnostics = {"task": task}
     goal_context = _resolve_goal_context(goal, goal_boost=goal_boost)
+    params = load_recall_params()
     # v0.6.0: CLI 未显式传 search_backend 时读 settings/recall.yaml
     if not search_backend:
-        search_backend = load_recall_params().get("search_backend", "fts5")
+        search_backend = params.get("search_backend", "fts5")
     checked = perf_counter()
     episodic = [] if knowledge_only else recall_episodic(query=query, topic_id=topic_id, limit=limit,
         user_id=user_id, project_slug=project_slug)
     episodic_done = perf_counter()
     knowledge = _recall_knowledge_via_backend(query=query, topic_id=topic_id, limit=limit, scope=scope,
         goal_context=goal_context, explain=explain, type_filter=type_filter,
-        search_backend=search_backend, diagnostics=diagnostics)
+        search_backend=search_backend, diagnostics=diagnostics, params=params)
     knowledge_done = perf_counter()
     from . import linked_sources
     team_hits, team_warnings = linked_sources.search(repo_root(), query, limit=limit, scope=scope, type_filter=type_filter)
@@ -758,6 +759,10 @@ def recall_knowledge(
     explain: bool = False,
     type_filter: str | None = None,
     search_backend: str | None = None,
+    *,
+    candidate_pages: list[dict] | None = None,
+    params: dict | None = None,
+    goal_context: dict | None = None,
 ) -> list[dict[str, Any]]:
     """Find wiki pages relevant to the query via 6+1-factor scoring.
 
@@ -772,8 +777,11 @@ def recall_knowledge(
     does not change ranking and is intended for evaluation and debugging.
 
     type_filter: optional wiki type filter applied before ranking and limit.
+    Internal callers may share candidate_pages, params and a resolved goal_context
+    for one request. Omitting them reads the current knowledge base.
     """
-    goal_context = _resolve_goal_context(goal, goal_boost=goal_boost)
+    if goal_context is None:
+        goal_context = _resolve_goal_context(goal, goal_boost=goal_boost)
     return _recall_knowledge_via_backend(
         query=query,
         topic_id=topic_id,
@@ -783,6 +791,8 @@ def recall_knowledge(
         explain=explain,
         type_filter=type_filter,
         search_backend=search_backend,
+        candidate_pages=candidate_pages,
+        params=params,
     )
 
 
@@ -799,6 +809,8 @@ def _recall_knowledge_via_backend(
     strategy: str = "knowledge",
     category: str | None = None,
     diagnostics: dict | None = None,
+    candidate_pages: list[dict] | None = None,
+    params: dict | None = None,
 ) -> list[dict[str, Any]]:
     """Dispatch knowledge recall — Triple-Layer Recall 召回层 (CONSTITUTION A8).
 
@@ -818,18 +830,15 @@ def _recall_knowledge_via_backend(
     # fusion → 实验位, 灵魂 re-rank 在召回层是负优化 (R@1 0.825→0.805).
     if diagnostics is None:
         diagnostics = {}
+    params = load_recall_params() if params is None else params
     diagnostics.update(strategy=strategy, filtered={})
-    if not search_backend or search_backend in ("native", "legacy"):
-        # v0.6.1: backend None 时读 settings/recall.yaml（CLI recall() 同逻辑）
-        # 之前 None 直接走 native，导致 eval 测不到 fts5/fusion
-        if not search_backend:
-            search_backend = load_recall_params().get("search_backend", "fts5")
-        if search_backend in ("native", "legacy"):
-            if strategy.startswith("capability"):
-                raise ValueError("Capability routing requires fts5; Native is a Wiki experiment only")
-            _logger.warning("Native recall is an explicit experimental control; use fts5 for production")
-            diagnostics.update(requested_backend=search_backend, actual_backends=["native"], experimental=True)
-            return _recall_knowledge_with_context(
+    search_backend = search_backend or params.get("search_backend", "fts5")
+    if search_backend.lower() in ("native", "legacy"):
+        if strategy.startswith("capability"):
+            raise ValueError("Capability routing requires fts5; Native is a Wiki experiment only")
+        _logger.warning("Native recall is an explicit experimental control; use fts5 for production")
+        diagnostics.update(requested_backend=search_backend, actual_backends=["native"], experimental=True)
+        return _recall_knowledge_with_context(
             query=query,
             topic_id=topic_id,
             limit=limit,
@@ -838,6 +847,8 @@ def _recall_knowledge_via_backend(
             explain=explain,
             type_filter=type_filter,
             diagnostics=diagnostics,
+            candidate_pages=candidate_pages,
+            params=params,
         )
 
     from .search import get_backend
@@ -853,9 +864,10 @@ def _recall_knowledge_via_backend(
         backend_kwargs["goal"] = requested
     if type_filter:
         backend_kwargs["type_filter"] = type_filter
-    pages = {p.get("slug"): p for p in list_wiki_pages()}
+    candidate_pages = list_wiki_pages() if candidate_pages is None else candidate_pages
+    pages = {p.get("slug"): p for p in candidate_pages}
     from .memory_policy import admission
-    validity_mode = load_recall_params().get('memory_validity', 'shadow')
+    validity_mode = params.get('memory_validity', 'shadow')
     validity, diagnostics['memory_validity'] = admission(list(pages.values()), validity_mode)
     warned_missing: set[str] = set()
     scope_areas = {s.strip().lower() for s in (scope or "").split(",") if s.strip()}
@@ -900,11 +912,17 @@ def _recall_knowledge_via_backend(
         # bounded by the current Wiki size.
         if limit <= 0:
             return []
+        search_kwargs = backend_kwargs
+        if selected_backend is backend and search_backend.lower() == "fusion":
+            search_kwargs = {**backend_kwargs, 'goal': requested,
+                             'goal_boost': goal_context['mode'] != 'none',
+                             'topic_id': topic_id, 'goal_context': goal_context,
+                             'candidate_pages': candidate_pages, 'params': params}
         fetch_limit = limit
         maximum = max(limit, len(pages))
         while True:
             candidates = selected_backend.search(
-                query, limit=fetch_limit, scope=scope, **backend_kwargs
+                query, limit=fetch_limit, scope=scope, **search_kwargs
             )
             admitted = {}
             for hit in candidates:
@@ -930,7 +948,7 @@ def _recall_knowledge_via_backend(
         len(hits) < max(1, (limit + 1) // 2)
         and strategy == "knowledge"
         and search_backend != "embedding"
-        and load_recall_params().get("embedding_fallback", False)
+        and params.get("embedding_fallback", False)
     ):
         try:
             emb_backend = get_backend("embedding", root=repo_root())
@@ -996,6 +1014,7 @@ def _recall_knowledge_via_backend(
             "confidence": p.get("confidence", 0.8),
             "body_preview": _make_preview(
                 p.get("body", ""),
+                limit=int(params.get("inject_per_page_chars", MAX_BODY_PREVIEW)),
                 # L0 零 read: fts5 hit 带的 abstract 优先 (来自 SQLite, 不读文件);
                 # fallback 到 page frontmatter abstract (list_wiki_pages 已读).
                 abstract=h.abstract or p.get("abstract"),
@@ -1025,7 +1044,7 @@ def _recall_knowledge_via_backend(
             entry["body_preview"] = str(p.get("skill_description") or "")
             entry["load_command"] = f"oks skills load {p['skill_id']} --version {p['skill_version']}"
         results.append(entry)
-    return _apply_budget(results)
+    return _apply_budget(results, params)
 
 
 def _recall_knowledge_with_context(
@@ -1039,10 +1058,12 @@ def _recall_knowledge_with_context(
     type_filter: str | None = None,
     candidate_pages: list[dict] | None = None,
     diagnostics: dict | None = None,
+    params: dict | None = None,
 ) -> list[dict[str, Any]]:
     all_pages = list_wiki_pages() if candidate_pages is None else candidate_pages
+    params = load_recall_params() if params is None else params
     from .memory_policy import admission
-    validity_mode = load_recall_params().get('memory_validity', 'shadow')
+    validity_mode = params.get('memory_validity', 'shadow')
     validity, report = admission(all_pages, validity_mode)
     if diagnostics is not None:
         diagnostics['memory_validity'] = report
@@ -1138,7 +1159,7 @@ def _recall_knowledge_with_context(
             entry["goal_matches"] = components["goal_matches"]
         results.append(entry)
 
-    return _apply_budget(results)
+    return _apply_budget(results, params)
 
 
 def _tokenize(text: str) -> set[str]:

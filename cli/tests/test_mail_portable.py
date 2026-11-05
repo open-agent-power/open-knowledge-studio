@@ -14,7 +14,8 @@ from typer.testing import CliRunner
 
 from knowledge_studio.cli import app
 from knowledge_studio import mail
-from knowledge_studio.mail_setup import asset_root, install_skill
+from knowledge_studio.mail_setup import install_skill
+from knowledge_studio.resources import asset_root
 from knowledge_studio.mail_web import create_server
 
 

@@ -1,4 +1,4 @@
-import { drawGraph } from "./graph.js";
+import { createGraph } from "./graph.js";
 import { callTimeline } from './call-trace.js';
 import {
   knowledgeTree,
@@ -22,12 +22,18 @@ export function createKnowledgeView({ dom, state, actions, api }) {
     queryMode = false,
     querySequence = 0,
     query = "",
-    selected = null;
+    selected = null,
+    draftReview = null;
+  function closeReview() {
+    draftReview?.destroy();
+    draftReview = null;
+  }
   function destroy() {
     ticket++;
     dispose();
     dispose = () => {};
     clearInterval(timer);
+    closeReview();
   }
   async function render() {
     destroy();
@@ -48,6 +54,8 @@ export function createKnowledgeView({ dom, state, actions, api }) {
     search.value = query;
     search.setAttribute("aria-label", "搜索图谱");
     const reset = button("收起", () => {
+      if (!actions.canLeave()) return;
+      closeReview();
       expanded.clear();
       depth = 1;
       selected = null;
@@ -70,49 +78,82 @@ export function createKnowledgeView({ dom, state, actions, api }) {
       skills,
       contexts,
       roots = [],
-      signature = "";
+      signature = "",
+      refreshing = false,
+      maxUses = 1,
+      hitIds = new Set(),
+      selectionSequence = 0,
+      detailNode = null;
+    const graph = createGraph(svg, zoom, select, {
+      button,
+      showEdgeLabels: false,
+      nodeFill: (n) => usageColor(n.uses, maxUses, n.pending, nodeHue(n)),
+      nodeRadius: (n) => (n.children ? 13 : 8),
+      nodeDashed: (n) => n.pending,
+      nodeRegion: (n) => n.family,
+      regionColor: (n) => `hsl(${nodeHue(n)} 45% 78%)`,
+      nodeTitle: (n) =>
+        `${n.title} · 显式使用 ${n.uses}${n.pending ? " · 待审核" : ""}`,
+      nodeClass: (n) =>
+        [
+          n.pending || n.has_pending ? "pending-node" : "",
+          hitIds.has(n.id) ? "query-hit" : "",
+        ]
+          .filter(Boolean)
+          .join(" "),
+    });
+    dispose = () => graph.destroy();
     function paint() {
-      dispose();
       const relations = [...map.edges, ...(contexts?.edges || [])];
       const projection = queryMode
         ? projectQuery(roots, hits, relations)
         : projectKnowledge(roots, expanded, depth, query, relations);
       if (selected && !projection.nodes.some((n) => n.id === selected)) {
+        selectionSequence++;
+        detailNode = null;
         selected = null;
         aside.hidden = true;
+        aside.replaceChildren();
         shell.classList.remove("with-detail");
       }
-      const maxUses = Math.max(1, ...roots.map((n) => n.uses));
-      dispose = drawGraph(
-        svg,
-        projection.nodes,
-        projection.edges,
-        zoom,
-        select,
-        {
-          button,
-          showEdgeLabels: false,
-          nodeFill: (n) => usageColor(n.uses, maxUses, n.pending, nodeHue(n)),
-          nodeRadius: (n) => (n.children ? 13 : 8),
-          nodeDashed: (n) => n.pending,
-          nodeRegion: (n) => n.family,
-          regionColor: (n) => `hsl(${nodeHue(n)} 45% 78%)`,
-        },
-      );
-      for (const n of svg.querySelectorAll(".studio-node")) {
-        const node = projection.nodes.find((item) => item.id === n.dataset.id);
-        n.querySelector("title").textContent =
-          `${node.title} · 显式使用 ${node.uses}${node.pending ? " · 待审核" : ""}`;
-        n.classList.toggle("selected", node.id === selected);
-        n.classList.toggle("pending-node", node.pending || node.has_pending);
-        n.classList.toggle(
-          "query-hit",
-          hits.some((h) => h.nodeId === node.id),
-        );
+      maxUses = Math.max(1, ...roots.map((n) => n.uses));
+      hitIds = new Set(hits.map((hit) => hit.nodeId));
+      graph.update(projection.nodes, projection.edges, { selected });
+    }
+    async function openReview(node, heading) {
+      if (!actions.canLeave()) return;
+      try {
+        const { createDraftReview } = await import("./draft-review.js");
+        if (current !== ticket || selected !== node.id) return;
+        closeReview();
+        draftReview = createDraftReview({
+          api,
+          getContext: () => state.context,
+          onBusy: (busy) => {
+            state.saving = busy;
+          },
+          onDecision: () => {
+            void refresh();
+          },
+        });
+        selected = null;
+        aside.replaceChildren(heading);
+        const host = el("div");
+        aside.append(host);
+        await draftReview.render(host, { path: node.path });
+      } catch (error) {
+        if (current === ticket) actions.status(error.message);
       }
     }
-    async function select(node) {
-      if (current !== ticket) return;
+    function select(node) {
+      if (current !== ticket || !actions.canLeave()) return false;
+      void showSelection(findNode(roots, node.id) || node);
+      return true;
+    }
+    async function showSelection(node) {
+      const sequence = ++selectionSequence;
+      detailNode = node;
+      closeReview();
       revealNode(roots, node.id, expanded);
       selected = node.id;
       aside.hidden = false;
@@ -120,6 +161,8 @@ export function createKnowledgeView({ dom, state, actions, api }) {
       aside.replaceChildren();
       const heading = el("header"),
         close = button("×", () => {
+          if (!actions.canLeave()) return;
+          closeReview();
           selected = null;
           aside.hidden = true;
           shell.classList.remove("with-detail");
@@ -212,11 +255,26 @@ export function createKnowledgeView({ dom, state, actions, api }) {
             const file = await api.request(
               "/api/studio/file?" + new URLSearchParams({ path: node.path }),
             );
-            if (current === ticket && selected === node.id)
+            if (
+              current === ticket &&
+              sequence === selectionSequence &&
+              selected === node.id
+            )
               body.textContent = file.text;
           } catch (error) {
-            actions.status(error.message);
+            if (
+              current === ticket &&
+              sequence === selectionSequence &&
+              selected === node.id
+            )
+              actions.status(error.message);
           }
+          if (
+            current !== ticket ||
+            sequence !== selectionSequence ||
+            selected !== node.id
+          )
+            return;
         }
         if (node.url) {
           const link = el('a', 'detail-meta', '来源 ↗');
@@ -230,15 +288,7 @@ export function createKnowledgeView({ dom, state, actions, api }) {
           aside.append(
             button(
               "审核",
-              () => {
-                aside.replaceChildren(heading);
-                const frame = el("iframe", "knowledge-review");
-                frame.title = "审核 " + node.title;
-                frame.src =
-                  "/review?panel=1&detail=1&draft=" +
-                  encodeURIComponent(node.path);
-                aside.append(frame);
-              },
+              () => openReview(node, heading),
               "soft",
             ),
           );
@@ -290,6 +340,10 @@ export function createKnowledgeView({ dom, state, actions, api }) {
       paint();
     }
     search.oninput = () => {
+      if (!actions.canLeave()) {
+        search.value = query;
+        return;
+      }
       querySequence++;
       query = search.value;
       queryMode = false;
@@ -304,6 +358,8 @@ export function createKnowledgeView({ dom, state, actions, api }) {
       }
     };
     async function runQuery() {
+      if (!actions.canLeave()) return;
+      closeReview();
       const text = search.value.trim();
       if (!text) return;
       const sequence = ++querySequence,
@@ -316,7 +372,13 @@ export function createKnowledgeView({ dom, state, actions, api }) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ query: text }),
         });
-        if (current !== ticket || sequence !== querySequence) return;
+        if (
+          current !== ticket ||
+          sequence !== querySequence ||
+          !actions.canLeave()
+        )
+          return;
+        closeReview();
         hits = mapQueryHits(roots, [...(result.knowledge || []), ...(result.team_knowledge || [])]);
         queryMode = true;
         for (const hit of hits)
@@ -378,6 +440,8 @@ export function createKnowledgeView({ dom, state, actions, api }) {
       }
     }
     async function refresh() {
+      if (refreshing) return;
+      refreshing = true;
       try {
         const result = await Promise.all([
           api.request("/api/mail/knowledge-map"),
@@ -392,20 +456,32 @@ export function createKnowledgeView({ dom, state, actions, api }) {
         )
           return;
         const next = JSON.stringify(result);
-        if (next === signature) return;
-        signature = next;
-        [map, usage, skills, contexts] = result;
-        roots = knowledgeTree(map, usage, skills, contexts);
-        paint();
-        const warnings = [
-          ...(usage.warnings || []),
-          ...(skills.warnings || []),
-          ...(contexts.warnings || []),
-        ];
-        if (map.scope?.truncated) warnings.push("图谱已达读取上限");
-        if (warnings.length) actions.status(warnings.join("；"));
+        if (next !== signature) {
+          signature = next;
+          [map, usage, skills, contexts] = result;
+          roots = knowledgeTree(map, usage, skills, contexts);
+          paint();
+          const warnings = [
+            ...(usage.warnings || []),
+            ...(skills.warnings || []),
+            ...(contexts.warnings || []),
+          ];
+          if (map.scope?.truncated) warnings.push("图谱已达读取上限");
+          if (warnings.length) actions.status(warnings.join("；"));
+        }
+        const node = selected && findNode(roots, selected);
+        if (
+          node &&
+          !node.children &&
+          node !== detailNode &&
+          !draftReview &&
+          !state.saving
+        )
+          void showSelection(node);
       } catch (error) {
         if (current === ticket) actions.status(error.message);
+      } finally {
+        refreshing = false;
       }
     }
     await refresh();

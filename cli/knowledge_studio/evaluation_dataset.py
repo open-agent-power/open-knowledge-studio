@@ -3,10 +3,10 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
-from pathlib import Path
 from typing import Any
 
 from jsonschema import Draft202012Validator, FormatChecker, ValidationError
+from .resources import asset_root
 
 DATASET_V2 = "recall-case/v2"
 RUN_V2 = "recall-eval-run/v2"
@@ -24,8 +24,7 @@ def _instant(value: str) -> datetime:
 
 
 def validate_v2(data: dict[str, Any]) -> None:
-    source = Path(__file__).resolve().parents[2] / "assets"
-    base = source if source.is_dir() else Path(__file__).resolve().parent / "_assets"
+    base = asset_root()
     schema = json.loads((base / "_meta/recall-case-v2.schema.json").read_text(encoding="utf-8"))
     try:
         Draft202012Validator(schema, format_checker=FormatChecker()).validate(data)

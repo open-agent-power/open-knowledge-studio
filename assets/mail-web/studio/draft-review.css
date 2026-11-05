@@ -1,0 +1,129 @@
+.draft-review {
+  color: var(--ink);
+  font-size: 12px;
+  line-height: 1.9;
+  overflow-wrap: anywhere;
+}
+
+.draft-review h2 {
+  font-size: 16px;
+  font-weight: 500;
+  margin: 0 0 12px;
+}
+
+.draft-review h3 {
+  font-size: 13px;
+  margin: 18px 0 8px;
+}
+
+.draft-review p, .draft-review ul, .draft-review ol {
+  margin: 8px 0 14px;
+}
+
+.draft-review a {
+  color: var(--accent, var(--blue));
+}
+
+.draft-review header {
+  display: block;
+  padding: 0;
+}
+
+.draft-review-body {
+  font: inherit;
+  line-height: 1.9;
+  margin: 14px 0;
+}
+
+.draft-review-body pre, .draft-review-integrity pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: 11px/1.7 Consolas, monospace;
+  max-height: 65vh;
+  overflow: auto;
+  background: var(--paper, #f3f5f8);
+  padding: 14px;
+}
+
+.draft-review-body code {
+  font-size: 0.9em;
+}
+
+.draft-review details {
+  margin: 12px 0;
+}
+
+.draft-review summary {
+  cursor: pointer;
+  min-height: 36px;
+  padding: 8px 0;
+}
+
+.draft-review-integrity code {
+  overflow-wrap: anywhere;
+  font-size: 10px;
+}
+
+.draft-review-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 16px 0;
+}
+
+.draft-review-confirm {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  flex-basis: 100%;
+  color: var(--muted);
+}
+
+.draft-review-confirm input {
+  width: 16px;
+  height: 16px;
+  min-width: 16px;
+  min-height: 0;
+  flex: none;
+  padding: 0;
+  margin: 4px 0 0;
+}
+
+.draft-review-body img {
+  max-width: 100%;
+  height: auto;
+}
+
+.draft-review-controls button {
+  padding: 8px 12px;
+  min-height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  color: var(--accent, var(--blue));
+  background: white;
+  font: inherit;
+  cursor: pointer;
+}
+
+.draft-review-controls button:disabled {
+  opacity: 0.48;
+  cursor: default;
+}
+
+.draft-review-note, .draft-review-status {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.draft-review-status[data-state="error"] {
+  color: var(--warning);
+}
+
+.draft-review-controls[hidden] {
+  display: none;
+}
+
+.review-workspace[data-review-mode="draft"] .draft-review header h2,
+.knowledge-detail .draft-review header h2 {
+  display: none;
+}

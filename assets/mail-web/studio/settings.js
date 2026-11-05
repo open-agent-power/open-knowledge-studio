@@ -1,9 +1,38 @@
 import { memoryScore, budgetCap, changeLabel } from "./formulas.js";
 
+let katexReady;
+function loadKatex() {
+  if (!katexReady) {
+    const style = document.createElement("link"),
+      script = document.createElement("script");
+    style.rel = "stylesheet";
+    style.href = "/vendor/katex/katex.min.css";
+    script.src = "/vendor/katex/katex.min.js";
+    katexReady = Promise.all(
+      [style, script].map(
+        (node) =>
+          new Promise((resolve, reject) => {
+            node.onload = resolve;
+            node.onerror = () =>
+              reject(Error("公式组件加载失败，请重新打开参数页"));
+            document.head.append(node);
+          }),
+      ),
+    ).catch((error) => {
+      style.remove();
+      script.remove();
+      katexReady = null;
+      throw error;
+    });
+  }
+  return katexReady;
+}
+
 export function createSettingsView({ dom, state, actions, api }) {
   const { $, el, button } = dom;
   const { writable, status, render } = actions;
   const { request, post } = api;
+  let ticket = 0;
   const names = {
     search_backend: "检索算法",
     recall_topn: "召回数量",
@@ -117,9 +146,18 @@ export function createSettingsView({ dom, state, actions, api }) {
     return section;
   }
   async function renderSettings() {
+    const current = ++ticket;
     try {
-      const data = await request("/api/studio/settings");
-      if (state.tab !== "learning" || state.learn !== "settings") return;
+      const [data] = await Promise.all([
+        request("/api/studio/settings"),
+        loadKatex(),
+      ]);
+      if (
+        current !== ticket ||
+        state.tab !== "learning" ||
+        state.learn !== "settings"
+      )
+        return;
       state.settingsDirty = false;
       const form = el("form", "algorithm-settings"),
         inputs = {},
@@ -275,10 +313,12 @@ export function createSettingsView({ dom, state, actions, api }) {
             ),
             expected_sha256: data.sha256,
           });
+          if (current !== ticket) return;
           state.settingsDirty = false;
           status("");
           render();
         } catch (error) {
+          if (current !== ticket) return;
           status(error.message);
           save.disabled = false;
         }
@@ -286,7 +326,7 @@ export function createSettingsView({ dom, state, actions, api }) {
       $("content").append(form);
       updateBudget();
     } catch (error) {
-      status(error.message);
+      if (current === ticket) status(error.message);
     }
   }
   function read(input) {
@@ -296,5 +336,10 @@ export function createSettingsView({ dom, state, actions, api }) {
         ? Number(input.value)
         : input.value;
   }
-  return { render: renderSettings };
+  return {
+    render: renderSettings,
+    destroy: () => {
+      ticket++;
+    },
+  };
 }

@@ -179,13 +179,6 @@
   border-bottom: 1px solid var(--line);
   line-height: 1.7;
 }
-.knowledge-review {
-  display: block;
-  border: 0;
-  width: 100%;
-  height: calc(100% - 75px);
-  min-height: 550px;
-}
 .knowledge-stage .studio-node.selected circle {
   stroke: #526fae;
   stroke-width: 2.5;

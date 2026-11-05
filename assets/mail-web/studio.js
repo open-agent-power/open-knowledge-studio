@@ -4,7 +4,6 @@ import { createStudioApi } from "./studio/api.js";
 import { createDiscussionView } from "./studio/discussion.js";
 import { createGoalsView } from "./studio/goals.js";
 import { createLearningView } from "./studio/learning.js";
-import { createSettingsView } from "./studio/settings.js";
 /* The Studio owns navigation and file selection. Existing feature pages own
    knowledge reading, review, execution records, versions and telemetry. */
 (() => {
@@ -36,12 +35,6 @@ import { createSettingsView } from "./studio/settings.js";
     scopeFile,
     inspect,
   };
-  const settingsView = createSettingsView({
-    dom,
-    state,
-    actions,
-    api,
-  });
   const discussionView = createDiscussionView({
     dom,
     state,
@@ -59,11 +52,14 @@ import { createSettingsView } from "./studio/settings.js";
     state,
     actions,
     api,
-    settingsView,
   });
   const renderDiscussion = () => discussionView.render();
   const renderGoals = () => goalsView.render();
   const renderLearning = () => learningView.render();
+  let scopesRequest = null,
+    navigation = 0,
+    listingTick = 0,
+    refreshing = false;
   function updateRoute() {
     const p = new URLSearchParams({ tab: state.tab });
     if (state.scope) p.set("scope", state.scope);
@@ -114,8 +110,24 @@ import { createSettingsView } from "./studio/settings.js";
       "graph";
   }
   async function loadScopes() {
+    if (state.tab === "learning") return;
+    const tab = state.tab,
+      context = state.context;
     const kind = state.tab === "discuss" ? "discuss" : "goal";
-    const data = await request("/api/studio/scopes?kind=" + kind);
+    if (scopesRequest?.tab !== tab || scopesRequest?.context !== context)
+      scopesRequest = {
+        tab,
+        context,
+        promise: request("/api/studio/scopes?kind=" + kind),
+      };
+    const pending = scopesRequest;
+    let data;
+    try {
+      data = await pending.promise;
+    } finally {
+      if (scopesRequest === pending) scopesRequest = null;
+    }
+    if (tab !== state.tab || context !== state.context) return;
     state.scopes = data.scopes;
     const select = $("scope");
     select.replaceChildren(new Option("选择日期 / 文件", ""));
@@ -142,7 +154,8 @@ import { createSettingsView } from "./studio/settings.js";
     select.value = state.scope;
     if (data.warnings.length) status(data.warnings.join("；"));
   }
-  async function loadView(force = false) {
+  async function loadView(force = false, afterSave = false) {
+    if (state.tab === "learning") return;
     if (state.viewLoading && !force) return;
     if (!state.scope) {
       state.view = null;
@@ -150,7 +163,9 @@ import { createSettingsView } from "./studio/settings.js";
       return;
     }
     const ticket = ++state.loading,
-      at = state.scope;
+      at = state.scope,
+      tab = state.tab,
+      context = state.context;
     state.viewLoading = true;
     let next;
     try {
@@ -160,14 +175,20 @@ import { createSettingsView } from "./studio/settings.js";
     } finally {
       if (ticket === state.loading) state.viewLoading = false;
     }
-    if (ticket !== state.loading || at !== state.scope) return;
+    if (
+      ticket !== state.loading ||
+      at !== state.scope ||
+      tab !== state.tab ||
+      context !== state.context
+    )
+      return;
     if (next.knowledge_base !== state.context.knowledge_base) {
       window.OksWorkspace.recovery();
       status("知识库已切换，请重新连接");
       return;
     }
     if ($("connectionRecovery")) $("connectionRecovery").hidden = true;
-    if (state.dirty || state.saving) {
+    if (state.dirty || (state.saving && !afterSave)) {
       if (state.view && next.version !== state.view.version)
         status("文件已有更新，请先保存或重新读取");
       return;
@@ -184,10 +205,22 @@ import { createSettingsView } from "./studio/settings.js";
         state.view.files[state.selected].kind !== "goal"
       )
         state.selected = state.view.entry;
-      if (state.tab !== "learning") render();
+      render();
     }
     if (!state.settingsDirty && !state.dirty)
       status(next.warnings.length ? next.warnings.join("；") : "");
+  }
+  async function loadCurrent() {
+    const current = ++navigation;
+    state.loading++;
+    state.viewLoading = false;
+    listingTick = 0;
+    if (state.tab === "learning") {
+      if (!state.settingsDirty) render();
+      return;
+    }
+    if (!state.dirty && !state.saving) await loadScopes();
+    if (current === navigation) await loadView(true);
   }
   function render() {
     discussionView.destroy();
@@ -229,9 +262,11 @@ import { createSettingsView } from "./studio/settings.js";
     if (state.view?.files[path]?.kind === "goal") {
       if (!canLeave()) return;
       state.selected = path;
+      state.scope = path;
       state.mode = "list";
       state.tab = "goals";
       render();
+      void loadCurrent().catch((error) => status(error.message));
     } else void inspect(path);
   }
   async function inspect(path) {
@@ -250,20 +285,39 @@ import { createSettingsView } from "./studio/settings.js";
     if (state.saving) return;
     status("保存中…");
     state.saving = true;
+    const surface = $("goalDocument");
+    if (surface) {
+      surface.inert = true;
+      surface.setAttribute("aria-busy", "true");
+    }
+    const knowledgeBase = state.context.knowledge_base;
     try {
       await post("/api/studio/file", {
         path: file.path,
         text,
         expected_sha256: file.sha256,
       });
+      if (knowledgeBase !== state.context.knowledge_base) return;
       state.dirty = false;
-      state.saving = false;
-      await loadView(true);
-      status("");
+      await loadView(true, true);
+      if (knowledgeBase === state.context.knowledge_base) status("");
     } catch (e) {
-      state.saving = false;
+      if (knowledgeBase !== state.context.knowledge_base) return;
       state.dirty = true;
       status(e.message);
+    } finally {
+      if (surface) {
+        surface.inert = false;
+        surface.removeAttribute("aria-busy");
+      }
+      if (knowledgeBase === state.context.knowledge_base) {
+        state.saving = false;
+        const currentSurface = $("goalDocument");
+        if (currentSurface) {
+          currentSurface.inert = false;
+          currentSurface.removeAttribute("aria-busy");
+        }
+      }
     }
   }
   function openNew() {
@@ -291,7 +345,8 @@ import { createSettingsView } from "./studio/settings.js";
   $("closeFile").onclick = () => $("fileDialog").close();
   $("newForm").onsubmit = async (event) => {
     event.preventDefault();
-    const path = $("newPath").value.trim();
+    const path = $("newPath").value.trim(),
+      knowledgeBase = state.context.knowledge_base;
     try {
       await post("/api/studio/file", {
         path,
@@ -299,12 +354,12 @@ import { createSettingsView } from "./studio/settings.js";
         create: true,
         expected_sha256: null,
       });
+      if (knowledgeBase !== state.context.knowledge_base) return;
       $("newDialog").close();
       state.selected = path;
       state.scope = path;
       state.tab = path.startsWith("discuss/") ? "discuss" : "goals";
-      await loadScopes();
-      await loadView(true);
+      await loadCurrent();
     } catch (e) {
       $("newError").textContent = e.message;
     }
@@ -317,10 +372,9 @@ import { createSettingsView } from "./studio/settings.js";
         if (state.tab !== "learning") {
           state.scope = "";
           state.selected = "";
-          await loadScopes();
-          await loadView(true);
+          state.view = null;
         }
-        render();
+        await loadCurrent();
       }),
   );
   $("scope").onchange = async (event) => {
@@ -339,7 +393,7 @@ import { createSettingsView } from "./studio/settings.js";
     }
   };
   window.addEventListener("beforeunload", (event) => {
-    if (state.dirty || state.settingsDirty) {
+    if (state.dirty || state.settingsDirty || state.saving) {
       event.preventDefault();
       event.returnValue = "";
     }
@@ -350,25 +404,20 @@ import { createSettingsView } from "./studio/settings.js";
       return;
     }
     restore();
-    void (async () => {
-      await loadScopes();
-      if (state.scope) await loadView(true);
-      else render();
-      if (state.tab === "learning") render();
-    })().catch((e) => status(e.message));
+    void loadCurrent().catch((e) => status(e.message));
   });
   document.addEventListener("visibilitychange", () => {
-    if (!document.hidden) void loadView().catch((e) => status(e.message));
+    if (!document.hidden && state.tab !== "learning")
+      void loadView().catch((e) => status(e.message));
   });
   document.addEventListener("oks:reconnected", async (event) => {
     state.context = event.detail.context;
     if (event.detail.changedRoot) {
-      state.dirty = state.settingsDirty = false;
+      state.dirty = state.settingsDirty = state.saving = false;
       state.view = null;
       state.scope = state.selected = "";
-      await loadScopes();
     }
-    await loadView(true);
+    await loadCurrent();
   });
   restore();
   void (async () => {
@@ -378,22 +427,26 @@ import { createSettingsView } from "./studio/settings.js";
       .split(/[\\/]/)
       .pop();
     $("instance").title = state.context.knowledge_base;
-    await loadScopes();
-    if (state.scope) await loadView(true);
-    else render();
-    if (state.tab === "learning") render();
+    await loadCurrent();
   })().catch((e) => status(e.message));
-  let listingTick = 0;
   setInterval(() => {
-    if (document.hidden || state.settingsDirty) return;
+    if (
+      document.hidden ||
+      !state.context ||
+      state.tab === "learning" ||
+      state.settingsDirty ||
+      refreshing
+    )
+      return;
+    refreshing = true;
     void (async () => {
-      if (
-        !state.dirty &&
-        !state.saving &&
-        (++listingTick % 5 === 0 || !state.scope)
-      )
+      if (!state.dirty && !state.saving && ++listingTick % 5 === 0)
         await loadScopes();
-      if (state.scope) await loadView();
-    })().catch((e) => status(e.message));
+      if (state.scope || state.view) await loadView();
+    })()
+      .catch((e) => status(e.message))
+      .finally(() => {
+        refreshing = false;
+      });
   }, 2000);
 })();

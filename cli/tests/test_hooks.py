@@ -12,7 +12,7 @@ from pathlib import Path
 
 from typer.testing import CliRunner
 
-from knowledge_studio import cli as cli_module
+from knowledge_studio import hooks as hook_service, resources
 from knowledge_studio.cli import app
 
 
@@ -49,7 +49,7 @@ def _collaboration_handlers(target, editor, event):
         handler
         for group in hooks.get("hooks", {}).get(event, [])
         for handler in group.get("hooks", [])
-        if cli_module._hook_handler_matches_script(
+        if hook_service._hook_handler_matches_script(
             handler, "subagent-collaboration.py"
         )
     ]
@@ -264,7 +264,7 @@ def test_subagent_collaboration_install_is_opt_in_and_idempotent(tmp_path, edito
             "matcher" not in group
             for group in installed["hooks"][event]
             if any(
-                cli_module._hook_handler_matches_script(
+                hook_service._hook_handler_matches_script(
                     handler, "subagent-collaboration.py"
                 )
                 for handler in group.get("hooks", [])
@@ -337,7 +337,7 @@ def test_collaboration_opt_in_survives_instance_upgrade(tmp_path, editor):
     assert upgraded.exit_code == 0, upgraded.output
     after = json.loads(settings_path.read_text(encoding="utf-8"))
     assert after == before
-    bundled = cli_module._asset_source() / "hooks" / "subagent-collaboration.py"
+    bundled = resources.asset_root() / "hooks" / "subagent-collaboration.py"
     assert script_path.read_bytes() == bundled.read_bytes()
     for event in ("SubagentStart", "SubagentStop"):
         assert len(_collaboration_handlers(target, editor, event)) == 1
@@ -763,7 +763,7 @@ def test_hook_recall_cli_forces_utf8_for_chinese_bridge(tmp_path, monkeypatch):
         encoding="utf-8",
     )
 
-    result = cli_module._run_hook_recall(
+    result = hook_service._run_hook_recall(
         target,
         "请基于晋升 Wiki 生成技术申报书",
         "dsh-oks",
@@ -793,8 +793,8 @@ def test_hook_recall_cli_forces_utf8_child_environment(tmp_path, monkeypatch):
         captured.update(kwargs["env"])
         return Completed()
 
-    monkeypatch.setattr(cli_module.subprocess, "run", fake_run)
-    result = cli_module._run_hook_recall(target, "中文提示", "session", "C:/host", "dsh-oks")
+    monkeypatch.setattr(hook_service.subprocess, "run", fake_run)
+    result = hook_service._run_hook_recall(target, "中文提示", "session", "C:/host", "dsh-oks")
 
     assert result["status"] == "skipped_minlen"
     assert captured["PYTHONIOENCODING"] == "utf-8"
@@ -813,8 +813,8 @@ def test_hook_recall_cli_rejects_malformed_success_envelope(tmp_path, monkeypatc
             "trace": None,
         })
 
-    monkeypatch.setattr(cli_module.subprocess, "run", lambda *args, **kwargs: Completed())
-    result = cli_module._run_hook_recall(target, "safe prompt", "session", "C:/host", "dsh-oks")
+    monkeypatch.setattr(hook_service.subprocess, "run", lambda *args, **kwargs: Completed())
+    result = hook_service._run_hook_recall(target, "safe prompt", "session", "C:/host", "dsh-oks")
 
     assert result == {
         "schema": "hook-recall-response/v1",
@@ -833,14 +833,14 @@ def test_hook_recall_diagnostics_are_opt_in(tmp_path, monkeypatch):
         stdout = ""
         stderr = "child hook failed: import error"
 
-    monkeypatch.setattr(cli_module.subprocess, "run", lambda *args, **kwargs: Completed())
-    without_diagnostics = cli_module._run_hook_recall(
+    monkeypatch.setattr(hook_service.subprocess, "run", lambda *args, **kwargs: Completed())
+    without_diagnostics = hook_service._run_hook_recall(
         target, "safe prompt", "session", "C:/host", "dsh-oks"
     )
     assert "diagnostic" not in without_diagnostics
 
     monkeypatch.setenv("OKS_HOOK_DIAGNOSTICS", "1")
-    with_diagnostics = cli_module._run_hook_recall(
+    with_diagnostics = hook_service._run_hook_recall(
         target, "safe prompt", "session", "C:/host", "dsh-oks"
     )
     assert with_diagnostics["diagnostic"] == (
@@ -992,7 +992,7 @@ def test_hook_install_refreshes_an_outdated_wrapper_body(tmp_path):
     refreshed = wrapper.read_text(encoding="utf-8")
     assert "exec " not in refreshed
     assert baked in refreshed
-    bundled = (cli_module._asset_source() / "hooks" / "user-prompt-recall.sh").read_text(
+    bundled = (resources.asset_root() / "hooks" / "user-prompt-recall.sh").read_text(
         encoding="utf-8"
     )
     assert refreshed == bundled.replace('"${OKS_PYTHON:-python3}"', baked)

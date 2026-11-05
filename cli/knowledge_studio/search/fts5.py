@@ -182,13 +182,17 @@ class FTS5Backend:
         self._conn.execute("PRAGMA synchronous=NORMAL")
         self._use_fts5 = _check_fts5()
         self._init_db()
-        self._indexed = False
+        # Explicit overrides apply to this instance while its source is unchanged.
+        self._source_fingerprint: str | None = None
 
     def _init_db(self) -> None:
         # Serialize schema inspection and ALTERs across simultaneous Hook starts.
         # DDL must share the transaction so a failed upgrade rolls back cleanly.
         with self._conn:
             self._conn.execute("BEGIN IMMEDIATE")
+            tables = {row[0] for row in self._conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            )}
             # node-v2 text rows are compatible; add only metadata columns in place.
             self._conn.execute(
                 "CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT)"
@@ -228,9 +232,6 @@ class FTS5Backend:
             self._conn.execute(
                 "INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', 'node-v4')"
             )
-            self._conn.execute(
-                "CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT)"
-            )
             if self._use_fts5:
                 self._conn.execute(
                     "CREATE VIRTUAL TABLE IF NOT EXISTS wiki_fts USING fts5("
@@ -244,10 +245,17 @@ class FTS5Backend:
                 )
             engine = "fts5" if self._use_fts5 else "like"
             prior_engine = self._conn.execute("SELECT value FROM meta WHERE key='index_engine'").fetchone()
-            if prior_engine and prior_engine[0] != engine:
-                # A LIKE-only refresh could update metadata without updating FTS
-                # rows. Rebuild from source when FTS support returns.
+            required = {"pages", "wiki_fts", "skill_fts"} if self._use_fts5 else {"pages"}
+            missing_tables = not required.issubset(tables) and self._conn.execute(
+                "SELECT 1 FROM meta WHERE key='wiki_fingerprint'"
+            ).fetchone()
+            if missing_tables or (prior_engine and prior_engine[0] != engine):
+                # Recreated tables and an engine switch invalidate persisted
+                # freshness. Replace text rows when rebuilding from the source.
                 self._conn.execute("UPDATE pages SET content_hash=''")
+                if self._use_fts5:
+                    self._conn.execute("DELETE FROM wiki_fts")
+                    self._conn.execute("DELETE FROM skill_fts")
                 self._conn.execute("DELETE FROM meta WHERE key='wiki_fingerprint'")
             self._conn.execute("INSERT OR REPLACE INTO meta VALUES ('index_engine', ?)", (engine,))
 
@@ -259,6 +267,11 @@ class FTS5Backend:
         """
         from ..recall import is_wiki_page_archived
 
+        source_snapshot = self._conn.execute(
+            "SELECT value FROM meta WHERE key='wiki_fingerprint'"
+        ).fetchone()
+        # Retain the marker's existence so deleting wiki/ still refreshes its cache.
+        self._conn.execute("UPDATE meta SET value='' WHERE key='wiki_fingerprint'")
         seen_slugs: set[str] = set()
         for page in pages:
             slug = page.get("slug") or page.get("path", "").replace(".md", "")
@@ -353,7 +366,8 @@ class FTS5Backend:
         if self._use_fts5:
             self._conn.execute("DELETE FROM skill_fts WHERE slug NOT IN (SELECT slug FROM pages)")
         self._conn.commit()
-        self._indexed = True
+        if source_snapshot and source_snapshot[0]:
+            self._source_fingerprint = source_snapshot[0]
 
     def _wiki_fingerprint(self) -> str:
         """所有 wiki 文件 path+mtime+size 的 hash——变了就 stale。
@@ -408,15 +422,25 @@ class FTS5Backend:
             "SELECT value FROM meta WHERE key='wiki_fingerprint'"
         ).fetchone()
         stored = row[0] if row else ""
-        if current == stored and self._indexed:
+        if current == stored or current == self._source_fingerprint:
             return  # 新鲜，跳过
         from ..store import parse_wiki_file
 
-        pages = [
-            page for path in (Path(root) / "wiki").rglob("*.md")
-            if path.name != "INDEX.md" and (page := parse_wiki_file(path))
-        ]
+        pages, complete = [], True
+        for path in (Path(root) / "wiki").rglob("*.md"):
+            if path.name == "INDEX.md":
+                continue
+            try:
+                page = parse_wiki_file(path, strict=True)
+            except OSError:
+                complete = False
+                continue
+            if page:
+                pages.append(page)
         self.index(pages, complete=True)
+        self._source_fingerprint = None
+        if not complete:
+            return
         self._conn.execute(
             "INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)",
             ("wiki_fingerprint", current),

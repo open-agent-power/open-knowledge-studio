@@ -1,13 +1,39 @@
+from pathlib import Path
+
 import pytest
 from knowledge_studio.vfs import VfsError
 from knowledge_studio.vfs_observation import execute, history
+
+
+def test_utf8_history_roundtrip_with_cp1252_default_reads(tmp_path, monkeypatch):
+    (tmp_path / "wiki").mkdir()
+    (tmp_path / "wiki/a.md").write_text("# Evidence\n中文内容", encoding="utf-8")
+    first = execute(tmp_path, "read", "oks://wiki/a.md")
+    path = tmp_path / "records/observability/vfs.json"
+    read_text = Path.read_text
+
+    def cp1252_read_text(file, encoding=None, errors=None, **kwargs):
+        return read_text(file, encoding=encoding or "cp1252", errors=errors, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", cp1252_read_text)
+    with pytest.raises(UnicodeDecodeError):
+        path.read_text()
+
+    assert history(tmp_path)["records"][0]["id"] == first["trace"]["id"]
+    second = execute(tmp_path, "read", "oks://wiki/a.md")
+    records = history(tmp_path)["records"]
+    assert [record["id"] for record in records] == [
+        first["trace"]["id"], second["trace"]["id"],
+    ]
+    assert records[0]["spans"][1]["name"] == "VFS 读取"
+    assert "persistence_status" not in second["trace"]
 
 
 def test_read_is_equivalent_with_nested_real_spans_and_private_content_not_logged(
     tmp_path,
 ):
     (tmp_path / "wiki").mkdir()
-    (tmp_path / "wiki/a.md").write_text("# private\n中文 content")
+    (tmp_path / "wiki/a.md").write_text("# private\n中文 content", encoding="utf-8")
     data = execute(tmp_path, "compare", "oks://wiki/a.md", offset=2, limit=7)
     assert data["result"]["content"] == "private"
     record = data["trace"]
@@ -19,7 +45,7 @@ def test_read_is_equivalent_with_nested_real_spans_and_private_content_not_logge
         s["start_ms"] + s["duration_ms"] <= record["total_ms"] for s in record["spans"]
     )
     assert all(s["parent_id"] is not None for s in record["spans"][1:])
-    assert "private" not in (tmp_path / "records/observability/vfs.json").read_text()
+    assert "private" not in (tmp_path / "records/observability/vfs.json").read_text(encoding="utf-8")
     assert history(tmp_path)["records"][0]["id"] == record["id"]
 
 
@@ -45,7 +71,7 @@ def test_ordinary_fs_cli_has_observation_without_changing_schema(tmp_path, monke
     from knowledge_studio.cli import app
 
     (tmp_path / "wiki").mkdir()
-    (tmp_path / "wiki/a.md").write_text("# evidence")
+    (tmp_path / "wiki/a.md").write_text("# evidence", encoding="utf-8")
     monkeypatch.setenv("OKS_ROOT", str(tmp_path))
     result = CliRunner().invoke(
         app, ["fs", "read", "oks://wiki/a.md", "--format", "json"]
@@ -65,7 +91,8 @@ def test_recall_exposes_real_spans_without_persisting_query_or_using_wiki(
 
     (tmp_path / "wiki").mkdir()
     (tmp_path / "wiki/a.md").write_text(
-        "---\ntitle: Evidence\ntype: concept\narea: computing\n---\nQuartz evidence"
+        "---\ntitle: Evidence\ntype: concept\narea: computing\n---\nQuartz evidence",
+        encoding="utf-8",
     )
     monkeypatch.setenv("OKS_ROOT", str(tmp_path))
     result = recall(
@@ -83,6 +110,6 @@ def test_recall_exposes_real_spans_without_persisting_query_or_using_wiki(
     assert history(tmp_path, "recall")["records"][0]["id"] == trace["id"]
     assert (
         "private-query"
-        not in (tmp_path / "records/observability/recall.json").read_text()
+        not in (tmp_path / "records/observability/recall.json").read_text(encoding="utf-8")
     )
     assert not (tmp_path / ".oks/access.json").exists()

@@ -7,6 +7,7 @@ import yaml
 import typer
 
 from knowledge_studio import skills
+from knowledge_studio import resources
 
 app = typer.Typer(help="Manage Skills under Wiki: import, review, search and load on demand.")
 
@@ -149,8 +150,7 @@ def router_cmd(
 ):
     """Install one compact OKS entry; legacy skills-install remains available."""
     def execute():
-        from knowledge_studio.cli import _asset_source
-        source = _asset_source()
+        source = resources.asset_source()
         if source is None:
             raise ValueError("No bundled Skill assets available")
         return skills.install_router(source, host=target, compact=compact)
