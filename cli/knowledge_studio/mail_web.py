@@ -40,7 +40,7 @@ FILES['/workspace-shell.css'] = ('workspace-shell.css', 'text/css')
 FILES['/knowledge-heatmap.js'] = ('knowledge-heatmap.js', 'text/javascript')
 for _asset in ('studio.html', 'studio.js', 'studio-model.js', 'studio.css'):
     FILES['/' + _asset] = (_asset, 'text/html' if _asset.endswith('.html') else 'text/css' if _asset.endswith('.css') else 'text/javascript')
-for _module in ('api', 'dom', 'state', 'discussion', 'graph', 'goals', 'learning', 'settings', 'formulas', 'knowledge', 'knowledge-model', 'evaluation', 'evaluation-charts', 'files', 'evaluation-review', 'call-trace', 'timeline', 'mindmap', 'onboarding', 'libraries'):
+for _module in ('api', 'dom', 'state', 'discussion', 'graph', 'goals', 'learning', 'settings', 'formulas', 'knowledge', 'knowledge-model', 'workflow', 'evaluation', 'evaluation-charts', 'files', 'evaluation-review', 'call-trace', 'timeline', 'mindmap', 'onboarding', 'libraries'):
     FILES[f'/studio/{_module}.js'] = (f'studio/{_module}.js', 'text/javascript')
 for _style in ('graph', 'goals', 'learning', 'evaluation'):
     FILES[f'/studio/{_style}.css'] = (f'studio/{_style}.css', 'text/css')
@@ -967,6 +967,9 @@ class Handler(BaseHTTPRequestHandler):
                     result = studio.activity(self.kb_root,query.get('date',[''])[0])
                 elif route == '/api/studio/file':
                     result = studio.read_file(self.kb_root, query.get('path', [''])[0])
+                elif route == '/api/studio/workflow':
+                    from .studio_workflow import workflow
+                    result = workflow(self.kb_root, query.get('path', [''])[0])
                 elif route == '/api/studio/contexts':
                     result = studio.context_catalog(self.kb_root)
                 elif route == '/api/studio/fs':

@@ -3,8 +3,8 @@ export function knowledgeTree(map, usage, skills, contexts = { entries: [] }) {
   const counts = new Map(usage.entries.map((item) => [item.slug, item.count]));
   const leaf = (point) => ({
     ...point,
-    type: point.kind === "candidate" ? "drafts" : "wiki",
-    uses: counts.get(point.path.split("/").pop().replace(/\.md$/, "")) || 0,
+    type: point.kind === "candidate" ? "drafts" : point.path?.startsWith('raw/') ? 'raw' : "wiki",
+    uses: point.kind === 'wiki' ? counts.get(point.path.split("/").pop().replace(/\.md$/, "")) || 0 : 0,
     pending: point.kind === "candidate",
   });
   const group = (id, title, children, level, family = "wiki") => ({
@@ -145,30 +145,64 @@ export function projectKnowledge(
 }
 export function usageColor(uses, maxUses, pending = false, hue = 220) {
   if (pending) return "#e3e6ec";
-  if (!uses) return `hsl(${hue} 42% 86%)`;
+  if (!uses) return `hsl(${hue} 54% 76%)`;
   const lightness =
-    82 - (35 * Math.log1p(uses)) / Math.log1p(Math.max(maxUses, 1));
-  return `hsl(${hue} 42% ${lightness}%)`;
+    74 - 30 * Math.min(1, Math.log1p(Math.max(0, uses)) / Math.log1p(Math.max(maxUses, 1)));
+  return `hsl(${hue} 54% ${lightness}%)`;
 }
 
 export function nodeHue(node) {
   const hues = {
-    profile: 36,
-    project: 155,
-    goal: 335,
-    discuss: 278,
+    profile: 174,
+    project: 195,
+    goal: 145,
+    discuss: 30,
     skill: 263,
-    team: 175,
-    mail: 25,
-    computing: 220,
-    engineering: 166,
-    management: 38,
+    team: 325,
+    mail: 15,
+    wiki: 220,
+    raw: 210,
+    drafts: 43,
   };
-  const key = node.family || node.type;
-  if (key in hues) return hues[key];
-  return [220, 160, 275, 35, 330][
-    [...key].reduce((s, c) => s + c.charCodeAt(0), 0) % 5
-  ];
+  return hues[nodeCategory(node)] ?? hues.wiki;
+}
+
+export const categoryLabels = {wiki:'知识', drafts:'待审核', raw:'来源', skill:'技能', profile:'画像', project:'项目', goal:'目标', discuss:'讨论', team:'团队', mail:'交接'};
+export function knowledgeOverview(roots) {
+  const domains = roots.filter(n => nodeCategory(n) === 'wiki');
+  if (!domains.length) return roots;
+  return [{id:'overview:wiki',title:'知识',type:'group',family:'wiki',children:domains,
+    uses:domains.reduce((sum,n)=>sum+n.uses,0),has_pending:domains.some(n=>n.pending||n.has_pending)},
+    ...roots.filter(n => nodeCategory(n) !== 'wiki')];
+}
+export function nodeCategory(node) {
+  if (node.type !== 'group') return node.type;
+  if (node.id === 'materials') return 'raw';
+  return node.family in categoryLabels ? node.family : 'wiki';
+}
+export function nodeSize(node) {
+  if (!node.children) return 8;
+  const count = n => n.children ? n.children.reduce((sum, child) => sum + count(child), 0) : 1;
+  return 13 + Math.min(9, Math.log2(1 + count(node)) * 1.5);
+}
+// View filters preserve ancestor paths, but never turn a hidden item into evidence.
+export function filterKnowledge(roots, {categories = null, state = 'all', hidden = new Set(), only = null} = {}) {
+  const visit = node => {
+    if (hidden.has(node.id)) return [];
+    if (node.children) {
+      const children = node.children.flatMap(visit);
+      return children.length ? [{...node, children, uses:children.reduce((sum,child)=>sum+(child.uses||0),0),
+        pending:children.every(child=>child.pending),has_pending:children.some(child=>child.pending||child.has_pending)}] : [];
+    }
+    if (categories && !categories.has(nodeCategory(node))) return [];
+    if (state === 'pending' && !node.pending || state === 'used' && !node.uses) return [];
+    if (only && !only.has(node.id)) return [];
+    return [node];
+  };
+  return roots.flatMap(visit);
+}
+export function subtreeIds(node) {
+  return [node.id, ...(node.children || []).flatMap(subtreeIds)];
 }
 export function findNode(roots, id) {
   for (const node of roots) {

@@ -1,5 +1,6 @@
 import { drawGraph } from "./graph.js";
 import { callTimeline } from './call-trace.js';
+import { showWorkflow } from './workflow.js';
 import {
   knowledgeTree,
   projectKnowledge,
@@ -9,6 +10,7 @@ import {
   findNode,
   revealNode,
   mapQueryHits,
+  categoryLabels, nodeCategory, nodeSize, filterKnowledge, subtreeIds, knowledgeOverview,
 } from "./knowledge-model.js";
 
 export function createKnowledgeView({ dom, state, actions, api }) {
@@ -43,14 +45,22 @@ export function createKnowledgeView({ dom, state, actions, api }) {
     stage.append(svg);
     const tools = el("div", "knowledge-controls"),
       search = el("input");
+    const categories = new Set(Object.keys(categoryLabels)), hidden = new Set();
+    let only = null, visibleState = 'all', selection = [];
     search.type = "search";
     search.placeholder = "搜索";
     search.value = query;
     search.setAttribute("aria-label", "搜索图谱");
-    const reset = button("收起", () => {
+    const reset = button("重置", () => {
       expanded.clear();
       depth = 1;
       selected = null;
+      querySequence++; query = ''; queryMode = false; hits = []; search.value = ''; info.textContent = '';
+      hidden.clear(); only = null; selection = []; visibleState = 'all';
+      categories.clear(); Object.keys(categoryLabels).forEach(k => categories.add(k));
+      stateFilter.value = 'all';
+      filters.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', 'true'));
+      selectionTools.hidden = true;
       aside.hidden = true;
       shell.classList.remove("with-detail");
       paint();
@@ -61,6 +71,30 @@ export function createKnowledgeView({ dom, state, actions, api }) {
     info.setAttribute("role", "status");
     tools.append(search, run, reset, info);
     stage.append(tools);
+    const filters = el('div', 'knowledge-filters');
+    for (const [kind, label] of Object.entries(categoryLabels)) {
+      const b = button(label, () => {
+        categories.has(kind) ? categories.delete(kind) : categories.add(kind);
+        b.setAttribute('aria-pressed', String(categories.has(kind))); paint();
+      });
+      b.setAttribute('aria-pressed', 'true');
+      b.style.setProperty('--category-color', kind === 'raw' ? '#7d8a9d' : `hsl(${nodeHue({type:kind})} 48% 49%)`);
+      filters.append(b);
+    }
+    const stateFilter = el('select');
+    stateFilter.setAttribute('aria-label','图谱状态');
+    for (const [value, label] of [['all','全部'],['pending','待审核'],['used','已使用']]) {
+      const option = el('option', null, label); option.value = value; stateFilter.append(option);
+    }
+    stateFilter.onchange = () => {visibleState = stateFilter.value; paint();};
+    filters.append(stateFilter);
+    stage.append(filters);
+    const selectionTools = el('div', 'knowledge-selection'); selectionTools.hidden = true;
+    const selectedIds = () => new Set(selection.flatMap(subtreeIds));
+    selectionTools.append(button('仅看选中', () => {only = selectedIds(); selectionTools.hidden=true; paint();}), button('隐藏选中', () => {selectedIds().forEach(id => hidden.add(id)); selectionTools.hidden=true; paint();}));
+    stage.append(selectionTools);
+    const legend = el('div','knowledge-key','颜色 · 类型　深浅 · 显式使用　大小 · 条目数　虚线 · 待审核');
+    stage.append(legend);
     const zoom = el("div", "graph-tools");
     stage.append(zoom);
     shell.append(stage, aside);
@@ -73,17 +107,20 @@ export function createKnowledgeView({ dom, state, actions, api }) {
       roots = [],
       signature = "";
     function paint() {
+      if (!map) return;
+      selection = []; selectionTools.hidden = true;
       dispose();
       const relations = [...map.edges, ...(contexts?.edges || [])];
+      const filtered = filterKnowledge(roots, {categories, state:visibleState, hidden, only});
       const projection = queryMode
-        ? projectQuery(roots, hits, relations)
-        : projectKnowledge(roots, expanded, depth, query, relations);
+        ? projectQuery(filtered, hits, relations)
+        : projectKnowledge(filtered, expanded, depth, query, relations);
       if (selected && !projection.nodes.some((n) => n.id === selected)) {
         selected = null;
         aside.hidden = true;
         shell.classList.remove("with-detail");
       }
-      const maxUses = Math.max(1, ...roots.map((n) => n.uses));
+      const maxUses = Math.max(1, ...projection.nodes.filter(n => !n.children).map((n) => n.uses));
       dispose = drawGraph(
         svg,
         projection.nodes,
@@ -92,12 +129,22 @@ export function createKnowledgeView({ dom, state, actions, api }) {
         select,
         {
           button,
+          entry: selected,
           showEdgeLabels: false,
-          nodeFill: (n) => usageColor(n.uses, maxUses, n.pending, nodeHue(n)),
-          nodeRadius: (n) => (n.children ? 13 : 8),
+          nodeFill: (n) => nodeCategory(n) === 'raw' ? '#d0d6df' : usageColor(n.uses, maxUses, false, nodeHue(n)),
+          nodeRadius: nodeSize,
           nodeDashed: (n) => n.pending,
-          nodeRegion: (n) => n.family,
+          nodeRegion: nodeCategory,
           regionColor: (n) => `hsl(${nodeHue(n)} 45% 78%)`,
+          separated: true,
+          screenSize: true,
+          insetTop: 110,
+          insetBottom: 35,
+          onLasso: nodes => {
+            selection = nodes;
+            selectionTools.hidden = !nodes.length;
+            selectionTools.setAttribute('aria-label', `已圈选 ${nodes.length} 个节点`);
+          },
         },
       );
       for (const n of svg.querySelectorAll(".studio-node")) {
@@ -143,6 +190,12 @@ export function createKnowledgeView({ dom, state, actions, api }) {
         );
         const branchTools = el("div", "branch-tools");
         branchTools.append(
+          button('仅看本区', () => {
+            only = new Set(subtreeIds(findNode(roots,node.id) || node));
+            expanded.add(node.id);
+            queryMode = false; query = ''; search.value = ''; hits = [];
+            paint();
+          }, 'soft'),
           button(
             "展开本区",
             () => {
@@ -246,6 +299,18 @@ export function createKnowledgeView({ dom, state, actions, api }) {
           );
         }
         aside.append(body);
+        if (['goal','skill','discuss'].includes(node.type)) {
+          const flow = el('details','knowledge-workflow');
+          const content = el('div');
+          flow.append(el('summary',null,'流程与执行'),content);
+          let loaded = false;
+          flow.ontoggle = () => {
+            if (!flow.open || loaded) return;
+            loaded = true;
+            showWorkflow(content,node,{el,button,api,active:()=>current===ticket && selected===node.id});
+          };
+          body.before(flow);
+        }
         if (node.metadata || node.governance) {
           const attrs = el("details", "node-attributes");
           attrs.append(el("summary", null, "属性"));
@@ -398,7 +463,7 @@ export function createKnowledgeView({ dom, state, actions, api }) {
         if (next === signature) return;
         signature = next;
         [map, usage, skills, contexts, activity] = result;
-        roots = knowledgeTree(map, usage, skills, contexts);
+        roots = knowledgeOverview(knowledgeTree(map, usage, skills, contexts));
         paint();
         const warnings = [
           ...(usage.warnings || []),

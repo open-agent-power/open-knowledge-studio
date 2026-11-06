@@ -5,7 +5,7 @@ export function drawGraph(
   edges,
   tools,
   onSelect,
-  { entry, button, nodeFill, nodeRadius, nodeDashed, nodeRegion, regionColor, showEdgeLabels = true },
+  { entry, button, nodeFill, nodeRadius, nodeDashed, nodeRegion, regionColor, showEdgeLabels = true, separated = false, onLasso, insetTop = 0, insetBottom = 0, screenSize = false },
 ) {
   const ns = "http://www.w3.org/2000/svg",
     make = (tag, attrs = {}) => {
@@ -15,9 +15,12 @@ export function drawGraph(
     };
   svg.replaceChildren();
   tools.querySelectorAll("[data-zoom]").forEach((n) => n.remove());
+  const families = [...new Set(nodes.map(n => nodeRegion?.(n)).filter(Boolean))];
+  const anchors = new Map(families.map((key, i) => [key, {x:(i % 3 - Math.min(2, families.length - 1) / 2) * 650, y:(Math.floor(i / 3) - Math.floor((families.length - 1) / 3) / 2) * 500}]));
   const layout = window.createForceLayout(nodes, edges, {
       distance: 160,
       repel: 3300,
+      ...(separated ? {center:.035, anchor:n => anchors.get(nodeRegion?.(n))} : {}),
     }),
     layer = make("g");
   svg.append(layer);
@@ -28,7 +31,11 @@ export function drawGraph(
     panY = 0,
     raf = 0,
     dead = false,
-    gesture = null;
+    gesture = null,
+    lasso = false;
+  const centerY = () => (height + insetTop - insetBottom) / 2;
+  const selection = make('path', {class:'graph-lasso', fill:'#6386c51a', stroke:'#6386c5', 'stroke-width':1.5, 'stroke-dasharray':'5 4', 'pointer-events':'none'});
+  svg.append(selection);
   const colors = {
     goal: "#67a18b",
     todo: "#a6c7b7",
@@ -117,7 +124,7 @@ export function drawGraph(
       }
     };
     layer.append(g);
-    return { node, g, text };
+    return { node, g, text, dot, hit, radius:Number(dot.getAttribute('r')) };
   });
   function draw() {
     for (const {items, n} of regions) {
@@ -128,7 +135,7 @@ export function drawGraph(
     }
     layer.setAttribute(
       "transform",
-      `translate(${width / 2 + panX},${height / 2 + panY}) scale(${zoom})`,
+      `translate(${width / 2 + panX},${centerY() + panY}) scale(${zoom})`,
     );
     for (const { edge, n } of lines) {
       n.setAttribute("x1", edge.source.x);
@@ -140,25 +147,31 @@ export function drawGraph(
       n.setAttribute("x", (edge.source.x + edge.target.x) / 2);
       n.setAttribute("y", (edge.source.y + edge.target.y) / 2 - 5);
     }
-    for (const { node, g } of dots)
+    for (const { node, g, dot, hit, radius } of dots) {
       g.setAttribute("transform", `translate(${node.x},${node.y})`);
+      if (screenSize) {
+        dot.setAttribute('r', Math.max(node.children ? 12 : 5, radius * zoom) / zoom);
+        hit.setAttribute('r', Math.max(20, radius * zoom + 5) / zoom);
+      }
+    }
     if (window.OksGraphLabels) {
-      const screen = dots.map(({ node, text }) => {
+      const screen = dots.map(({ node, text, radius }) => {
         text.style.display = "";
         text.style.fontSize = 11 / zoom + "px";
         return {
           id: node.id,
           x: width / 2 + panX + node.x * zoom,
-          y: height / 2 + panY + node.y * zoom,
+          y: centerY() + panY + node.y * zoom,
           width: text.getComputedTextLength() * zoom,
-          priority: node.id === entry ? 10 : 0,
+          radius: screenSize ? Math.max(node.children ? 12 : 5, radius * zoom) + 3 : 15,
+          priority: node.id === entry ? 10 : node.children ? 5 : 0,
         };
       });
       const obstacles = screen.map((n) => ({
-        left: n.x - 15,
-        right: n.x + 15,
-        top: n.y - 15,
-        bottom: n.y + 15,
+        left: n.x - n.radius,
+        right: n.x + n.radius,
+        top: n.y - n.radius,
+        bottom: n.y + n.radius,
       }));
       const positions = window.OksGraphLabels.graphLabelPositions(
         screen,
@@ -171,7 +184,7 @@ export function drawGraph(
         text.style.display = pos ? "" : "none";
         if (pos) {
           text.setAttribute("x", (pos.x - width / 2 - panX) / zoom - node.x);
-          text.setAttribute("y", (pos.y - height / 2 - panY) / zoom - node.y);
+          text.setAttribute("y", (pos.y - centerY() - panY) / zoom - node.y);
         }
       }
     }
@@ -199,7 +212,7 @@ export function drawGraph(
       y1 = Math.max(...ys) + 80;
     zoom = Math.max(
       0.2,
-      Math.min(1.2, (width - 35) / (x1 - x0), (height - 65) / (y1 - y0)),
+      Math.min(1.2, (width - 35) / (x1 - x0), (height - insetTop - insetBottom - 65) / (y1 - y0)),
     );
     panX = (-(x0 + x1) / 2) * zoom;
     panY = (-(y0 + y1) / 2) * zoom;
@@ -221,12 +234,29 @@ export function drawGraph(
     draw();
   });
   addZoom("⌾", fit);
+  let lassoButton;
+  if (onLasso) {
+    lassoButton = button('圈选', () => {
+      lasso = !lasso;
+      lassoButton.setAttribute('aria-pressed', String(lasso));
+      svg.classList.toggle('lasso-mode', lasso);
+      selection.setAttribute('d', '');
+    });
+    lassoButton.dataset.zoom = '1';
+    lassoButton.setAttribute('aria-pressed', 'false');
+    tools.append(lassoButton);
+  }
   const point = (e) => {
     const r = svg.getBoundingClientRect();
     return { x: e.clientX - r.left, y: e.clientY - r.top };
   };
   const down = (e) => {
     if (e.button !== 0) return;
+    if (lasso) {
+      gesture = {id:e.pointerId, points:[point(e)]};
+      svg.setPointerCapture(e.pointerId);
+      e.preventDefault(); return;
+    }
     const p = point(e),
       node = layout.nodes.find(
         (n) => n.id === e.target.closest(".studio-node")?.dataset.id,
@@ -241,6 +271,12 @@ export function drawGraph(
   };
   const move = (e) => {
     if (!gesture || gesture.id !== e.pointerId) return;
+    if (gesture.points) {
+      const p = point(e), last = gesture.points.at(-1);
+      if (Math.hypot(p.x-last.x,p.y-last.y) > 3) gesture.points.push(p);
+      selection.setAttribute('d', gesture.points.map((p,i) => `${i?'L':'M'}${p.x},${p.y}`).join(' ')+' Z');
+      return;
+    }
     const p = point(e),
       dx = p.x - gesture.p.x,
       dy = p.y - gesture.p.y;
@@ -248,7 +284,7 @@ export function drawGraph(
     if (!gesture.moved) return;
     if (gesture.node) {
       gesture.node.fx = (p.x - width / 2 - panX) / zoom;
-      gesture.node.fy = (p.y - height / 2 - panY) / zoom;
+      gesture.node.fy = (p.y - centerY() - panY) / zoom;
       gesture.node.x = gesture.node.fx;
       gesture.node.y = gesture.node.fy;
     } else {
@@ -259,6 +295,16 @@ export function drawGraph(
   };
   const up = (e) => {
     if (!gesture || gesture.id !== e.pointerId) return;
+    if (gesture.points) {
+      const polygon = gesture.points;
+      const chosen = e.type === 'pointerup' && polygon.length > 2 ? dots.filter(({node}) => insidePolygon({x:width/2+panX+node.x*zoom,y:centerY()+panY+node.y*zoom}, polygon)) : [];
+      dots.forEach(dot => dot.g.classList.toggle('lasso-selected', chosen.includes(dot)));
+      gesture = null; lasso = false;
+      svg.classList.remove('lasso-mode');
+      lassoButton.setAttribute('aria-pressed','false');
+      if (svg.hasPointerCapture(e.pointerId)) svg.releasePointerCapture(e.pointerId);
+      onLasso(chosen.map(dot => dot.node)); return;
+    }
     if (gesture.node) {
       gesture.node.fx = null;
       gesture.node.fy = null;
@@ -292,10 +338,20 @@ export function drawGraph(
     dead = true;
     cancelAnimationFrame(raf);
     observer.disconnect();
+    svg.classList.remove('lasso-mode');
     svg.removeEventListener("pointerdown", down);
     svg.removeEventListener("pointermove", move);
     svg.removeEventListener("pointerup", up);
     svg.removeEventListener("pointercancel", up);
     svg.removeEventListener("wheel", wheel);
   };
+}
+
+export function insidePolygon(point, polygon) {
+  let inside = false;
+  for (let i=0,j=polygon.length-1; i<polygon.length; j=i++) {
+    const a=polygon[i],b=polygon[j];
+    if ((a.y>point.y)!==(b.y>point.y) && point.x<(b.x-a.x)*(point.y-a.y)/(b.y-a.y)+a.x) inside=!inside;
+  }
+  return inside;
 }

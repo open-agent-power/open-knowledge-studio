@@ -228,7 +228,7 @@ def _references(root, path, text, wiki_index):
     body = _visible_markdown(body)
     tokens = re.findall(r'(?<!\\)\[\[([^\]|]+)(?:\|[^\]]+)?\]\]', body)
     tokens += re.findall(r'(?<!!)\[[^\]]*\]\(([^\s)]+)\)', body)
-    for key in ('sources', 'source_refs', 'goals', 'knowledge', 'relates_to', 'related'):
+    for key in ('sources', 'source_refs', 'goals', 'knowledge', 'skills', 'relates_to', 'related'):
         values = meta.get(key, [])
         if isinstance(values, str):
             values = [values]

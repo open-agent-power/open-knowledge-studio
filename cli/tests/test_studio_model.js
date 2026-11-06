@@ -6,6 +6,27 @@ async function standaloneModule(name){
  const source=fs.readFileSync(path.join(__dirname,'../../assets/mail-web/studio',name),'utf8');
  return import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
 }
+test('graph filters keep ancestry, distinguish pending from used and never mutate source',async()=>{
+ const {filterKnowledge,subtreeIds,nodeHue,nodeSize}=await standaloneModule('knowledge-model.js');
+ const roots=[{id:'root',type:'group',family:'computing',children:[
+  {id:'a',type:'wiki',family:'computing',uses:4},
+  {id:'b',type:'drafts',family:'computing',uses:0,pending:true}]}];
+ assert.deepEqual(filterKnowledge(roots,{state:'pending'})[0].children.map(n=>n.id),['b']);
+ assert.equal(filterKnowledge(roots,{state:'pending'})[0].uses,0);
+ assert.deepEqual(filterKnowledge(roots,{categories:new Set(['wiki'])})[0].children.map(n=>n.id),['a']);
+ assert.equal(filterKnowledge(roots,{hidden:new Set(['root'])}).length,0);
+ assert.deepEqual(filterKnowledge(roots,{only:new Set(['a'])})[0].children.map(n=>n.id),['a']);
+ assert.equal(roots[0].children.length,2);
+ assert.deepEqual(subtreeIds(roots[0]),['root','a','b']);
+ assert.equal(nodeHue(roots[0].children[0]),nodeHue({type:'wiki',family:'engineering'}));
+ assert.notEqual(nodeHue(roots[0].children[0]),nodeHue(roots[0].children[1]));
+ assert.ok(nodeSize(roots[0])>nodeSize(roots[0].children[0]));
+ const {insidePolygon}=await standaloneModule('graph.js');
+ const polygon=[{x:0,y:0},{x:10,y:0},{x:10,y:10},{x:0,y:10}];
+ assert.equal(insidePolygon({x:5,y:5},polygon),true);
+ assert.equal(insidePolygon({x:15,y:5},polygon),false);
+ assert.equal(insidePolygon({x:5,y:5},[]),false);
+});
 test('modular transport binds writes to the current instance and respects read-only mode',async()=>{
  const {createStudioApi}=await standaloneModule('api.js');
  let context={knowledge_base:'/kb/one',local_edit:false},sent=null;

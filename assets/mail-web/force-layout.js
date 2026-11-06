@@ -12,7 +12,7 @@
   const strength=edge=>edge.type==='shared_tag'?.3/Math.sqrt(Math.max(tagDegrees.get(edge.from),tagDegrees.get(edge.to))):1;
   let alpha=1,steps=0,quiet=0;
   function step(){
-   nodes.forEach(n=>{n.vx-=n.x*config.center*alpha;n.vy-=n.y*config.center*alpha;});
+   nodes.forEach(n=>{const target=config.anchor?.(n)||{x:0,y:0};n.vx-=(n.x-target.x)*config.center*alpha;n.vy-=(n.y-target.y)*config.center*alpha;});
    for(let i=0;i<nodes.length;i++)for(let j=i+1;j<nodes.length;j++){
     const a=nodes[i],b=nodes[j];let dx=b.x-a.x,dy=b.y-a.y;
     if(Math.abs(dx)+Math.abs(dy)<.01){dx=.2*(j+1);dy=.13*(i+1);}
