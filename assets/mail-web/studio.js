@@ -1,3 +1,4 @@
+import { createLibrariesView } from "./studio/libraries.js";
 import { renderOnboarding } from "./studio/onboarding.js";
 import { createStudioState } from "./studio/state.js";
 import { $, el, button } from "./studio/dom.js";
@@ -38,6 +39,8 @@ import { createSettingsView } from "./studio/settings.js";
     inspect,
     navigate,
   };
+  const librariesView = createLibrariesView({ dom, actions, api });
+  $("instance").onclick = () => librariesView.open();
   const settingsView = createSettingsView({
     dom,
     state,

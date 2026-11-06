@@ -1,0 +1,7 @@
+{
+  "repository": "https://github.com/open-agent-power/oks-connector",
+  "revision": "07324788a9c7615b31fdec17cd54ad0c281df25b",
+  "license": "Apache-2.0",
+  "integrated_on": "2026-11-06",
+  "note": "In-tree component of open-knowledge-studio; upstream license retained. Local integration changes tracked in the OKS Git history."
+}

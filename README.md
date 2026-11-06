@@ -233,3 +233,7 @@ OKS runs entirely on your local filesystem. No telemetry, no remote calls from c
 Read [linked knowledge and call observability](docs/linked-knowledge-observability.md) for review semantics, version boundaries and timing scope.
 
 See [instance layout and daily revision history](docs/instance-layout.md) for canonical paths, timeline semantics and optional onboarding.
+
+### Personal and team repositories
+
+See [knowledge repository boundaries](docs/knowledge-repositories.md). Connector acquisition and built-in code/embedding search now ship in the same distribution; heavy extraction/model dependencies remain opt-in. The `oks-connector` command remains available for compatibility.

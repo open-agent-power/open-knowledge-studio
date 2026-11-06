@@ -7,6 +7,7 @@ from datetime import date, datetime, time, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from socketserver import TCPServer
+from threading import RLock
 from urllib.parse import parse_qs, urlsplit
 
 from knowledge_studio import identity, mail, mail_media, store
@@ -39,7 +40,7 @@ FILES['/workspace-shell.css'] = ('workspace-shell.css', 'text/css')
 FILES['/knowledge-heatmap.js'] = ('knowledge-heatmap.js', 'text/javascript')
 for _asset in ('studio.html', 'studio.js', 'studio-model.js', 'studio.css'):
     FILES['/' + _asset] = (_asset, 'text/html' if _asset.endswith('.html') else 'text/css' if _asset.endswith('.css') else 'text/javascript')
-for _module in ('api', 'dom', 'state', 'discussion', 'graph', 'goals', 'learning', 'settings', 'formulas', 'knowledge', 'knowledge-model', 'evaluation', 'evaluation-charts', 'files', 'evaluation-review', 'call-trace', 'timeline', 'mindmap', 'onboarding'):
+for _module in ('api', 'dom', 'state', 'discussion', 'graph', 'goals', 'learning', 'settings', 'formulas', 'knowledge', 'knowledge-model', 'evaluation', 'evaluation-charts', 'files', 'evaluation-review', 'call-trace', 'timeline', 'mindmap', 'onboarding', 'libraries'):
     FILES[f'/studio/{_module}.js'] = (f'studio/{_module}.js', 'text/javascript')
 for _style in ('graph', 'goals', 'learning', 'evaluation'):
     FILES[f'/studio/{_style}.css'] = (f'studio/{_style}.css', 'text/css')
@@ -923,6 +924,7 @@ def render_wiki_page(item: dict, embed: bool = False, return_to: str = "/#view=k
 
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
+        self.kb_root = getattr(self.server, "kb_root", None)
         if self.headers.get("Host") != f"127.0.0.1:{self.server.server_port}":
             self.send_json(403, {"error": "loopback Host required"})
             return
@@ -932,14 +934,14 @@ class Handler(BaseHTTPRequestHandler):
             query = parse_qs(urlsplit(self.path).query)
             try:
                 if route == '/api/evaluation/catalog':
-                    result = ev.catalog(self.server.kb_root)
+                    result = ev.catalog(self.kb_root)
                 elif route == '/api/evaluation/run':
-                    result = ev.run(self.server.kb_root, query.get('id',[''])[0])
+                    result = ev.run(self.kb_root, query.get('id',[''])[0])
                 elif route == '/api/evaluation/job':
-                    result = ev.read(self.server.kb_root, 'jobs/' + ev.identifier(query.get('id',[''])[0]) + '.json')
+                    result = ev.read(self.kb_root, 'jobs/' + ev.identifier(query.get('id',[''])[0]) + '.json')
                 elif route == '/api/evaluation/candidates':
                     from .evaluation_feedback import candidates
-                    result = candidates(self.server.kb_root)
+                    result = candidates(self.kb_root)
                 else:
                     self.send_json(404, {'error':'Unknown evaluation view'})
                     return
@@ -953,36 +955,39 @@ class Handler(BaseHTTPRequestHandler):
             query = parse_qs(urlsplit(self.path).query)
             try:
                 if route == '/api/studio/scopes':
-                    result = studio.scopes(self.server.kb_root, query.get("kind", ["goal"])[0])
+                    result = studio.scopes(self.kb_root, query.get("kind", ["goal"])[0])
                 elif route == '/api/studio/view':
-                    result = studio.day_view(self.server.kb_root, query.get('kind',['goal'])[0], query['date'][0]) if 'date' in query else studio.view(self.server.kb_root, query.get('scope', [''])[0])
+                    result = studio.day_view(self.kb_root, query.get('kind',['goal'])[0], query['date'][0]) if 'date' in query else studio.view(self.kb_root, query.get('scope', [''])[0])
                 elif route == '/api/studio/revision':
-                    result = studio.revision_view(self.server.kb_root, query.get('id',[''])[0])
+                    result = studio.revision_view(self.kb_root, query.get('id',[''])[0])
                 elif route == '/api/studio/onboarding':
                     from .studio_history import onboarding
-                    result = onboarding(self.server.kb_root)
+                    result = onboarding(self.kb_root)
                 elif route == '/api/studio/activity':
-                    result = studio.activity(self.server.kb_root,query.get('date',[''])[0])
+                    result = studio.activity(self.kb_root,query.get('date',[''])[0])
                 elif route == '/api/studio/file':
-                    result = studio.read_file(self.server.kb_root, query.get('path', [''])[0])
+                    result = studio.read_file(self.kb_root, query.get('path', [''])[0])
                 elif route == '/api/studio/contexts':
-                    result = studio.context_catalog(self.server.kb_root)
+                    result = studio.context_catalog(self.kb_root)
                 elif route == '/api/studio/fs':
                     from .vfs_observation import execute
-                    result = execute(self.server.kb_root, query.get('operation',['ls'])[0], query.get('uri',['oks://'])[0],
+                    result = execute(self.kb_root, query.get('operation',['ls'])[0], query.get('uri',['oks://'])[0],
                         query=query.get('query',[''])[0], offset=int(query.get('offset',['0'])[0]), limit=int(query.get('limit',['20000'])[0]))
                 elif route == '/api/studio/fs-history':
                     from .vfs_observation import history
-                    result = history(self.server.kb_root)
+                    result = history(self.kb_root)
                 elif route == '/api/studio/calls':
                     from .vfs_observation import history
-                    result = history(self.server.kb_root, query.get('kind',['recall'])[0])
+                    result = history(self.kb_root, query.get('kind',['recall'])[0])
                 elif route == '/api/studio/skills':
-                    result = studio.local_skills(self.server.kb_root)
+                    result = studio.local_skills(self.kb_root)
                 elif route == '/api/studio/usage':
-                    result = studio.usage(self.server.kb_root)
+                    result = studio.usage(self.kb_root)
+                elif route == '/api/studio/libraries':
+                    from .studio_libraries import libraries
+                    result = libraries(self.kb_root)
                 elif route == '/api/studio/settings':
-                    result = studio.settings(self.server.kb_root)
+                    result = studio.settings(self.kb_root)
                 else:
                     self.send_json(404, {'error': 'Unknown workspace view'})
                     return
@@ -994,7 +999,7 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 from . import daily_capture, daily_learning
                 query = parse_qs(urlsplit(self.path).query)
-                result = daily_learning.overview(self.server.kb_root) if route.endswith('/overview') else daily_capture.entry(self.server.kb_root, query.get('id', [''])[0])
+                result = daily_learning.overview(self.kb_root) if route.endswith('/overview') else daily_capture.entry(self.kb_root, query.get('id', [''])[0])
                 self.send_json(200, result)
             except (OSError, ValueError, KeyError, TypeError, UnicodeError):
                 self.send_json(400, {'error': '来源记录暂时无法读取；原文保留。'})
@@ -1003,10 +1008,10 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 if route.endswith('/overview'):
                     from .workspace_home import build
-                    result = build(self.server.kb_root)
+                    result = build(self.kb_root)
                 else:
                     from .retrieval_audit import report
-                    result = report(self.server.kb_root)
+                    result = report(self.kb_root)
                 self.send_json(200, result)
             except (OSError, ValueError, KeyError, TypeError, UnicodeError):
                 self.send_json(400, {'error': '无法完整读取工作区；原记录保留。'})
@@ -1016,48 +1021,48 @@ class Handler(BaseHTTPRequestHandler):
             query = parse_qs(urlsplit(self.path).query)
             try:
                 if route == '/api/workspace':
-                    result = workspace.diagnostics(self.server.kb_root, port=self.server.server_port,
+                    result = workspace.diagnostics(self.kb_root, port=self.server.server_port,
                         local_review=self.server.local_review, local_edit=self.server.local_edit)
                 elif route.startswith('/api/skills/') and route.rsplit('/', 1)[-1] in ('catalog', 'source', 'merge-preview'):
                     action = route.rsplit('/', 1)[-1]
                     payload = {} if action == 'catalog' else {'ref': {'id': query.get('id', [''])[0], 'version': query.get('version', [''])[0]}} if action == 'source' else {
                         'ours': {'id': query.get('id', [''])[0], 'version': query.get('version', [''])[0]},
                         'theirs': {'id': query.get('upstream_id', [''])[0], 'version': query.get('upstream_version', [''])[0]}}
-                    result = workspace.invoke(self.server.kb_root, {'catalog':'skill-catalog', 'source':'skill-detail', 'merge-preview':'skill-merge-preview'}[action], payload)
+                    result = workspace.invoke(self.kb_root, {'catalog':'skill-catalog', 'source':'skill-detail', 'merge-preview':'skill-merge-preview'}[action], payload)
                 elif route == '/api/tasks/work-review':
                     from .work_review import build
-                    result = build(self.server.kb_root, period=query.get('period', ['week'])[0], date=query.get('date', [None])[0])
+                    result = build(self.kb_root, period=query.get('period', ['week'])[0], date=query.get('date', [None])[0])
                 elif route == '/api/tasks/workflow':
                     from .task_workflow import overview
-                    result = overview(self.server.kb_root, query.get('id', [''])[0])
+                    result = overview(self.kb_root, query.get('id', [''])[0])
                 elif route == '/api/tasks/options':
-                    result = workspace.task_options(self.server.kb_root)
+                    result = workspace.task_options(self.kb_root)
                 elif route == '/api/tasks/goal':
-                    result = workspace.goal(self.server.kb_root, query.get('path', [''])[0])
+                    result = workspace.goal(self.kb_root, query.get('path', [''])[0])
                 elif route == '/api/tasks/reminders':
                     from .reminders import listing
-                    result = listing(self.server.kb_root, query.get('id', [''])[0])
+                    result = listing(self.kb_root, query.get('id', [''])[0])
                 elif route == '/api/tasks/overview':
                     from .tasks import overview
-                    result = overview(self.server.kb_root)
+                    result = overview(self.kb_root)
                 elif route == '/api/tasks/review':
-                    result = workspace.task_review(self.server.kb_root, query.get('id', [''])[0])
+                    result = workspace.task_review(self.kb_root, query.get('id', [''])[0])
                 elif route == '/api/tasks/handoff':
-                    result = workspace.task_handoff(self.server.kb_root, query.get('id', [''])[0], int(query.get('revision', ['0'])[0]))
+                    result = workspace.task_handoff(self.kb_root, query.get('id', [''])[0], int(query.get('revision', ['0'])[0]))
                 elif route == '/api/tasks/sources':
-                    result = workspace.task_sources(self.server.kb_root, query.get('id', [''])[0], int(query.get('revision', ['0'])[0]))
+                    result = workspace.task_sources(self.kb_root, query.get('id', [''])[0], int(query.get('revision', ['0'])[0]))
                 elif route == '/api/tasks/source':
-                    result = workspace.artifact_source(self.server.kb_root, query.get('id', [''])[0], query.get('path', [''])[0],
+                    result = workspace.artifact_source(self.kb_root, query.get('id', [''])[0], query.get('path', [''])[0],
                         int(query.get('revision', ['0'])[0]), query.get('source', [''])[0])
                     reading = re.sub(r'^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)', '', result['text'], count=1)
                     result['body_html'] = md_to_html(reading) if result['format'] == 'markdown' else '<pre>' + html.escape(result['text']) + '</pre>'
                 elif route == '/api/tasks/artifact':
-                    result = workspace.artifact(self.server.kb_root, query.get('id', [''])[0],
+                    result = workspace.artifact(self.kb_root, query.get('id', [''])[0],
                                                 query.get('path', [''])[0], int(query.get('revision', ['0'])[0]))
-                    result['source_links'] = workspace.artifact_source_links(self.server.kb_root, result['path'], result['text'])
+                    result['source_links'] = workspace.artifact_source_links(self.kb_root, result['path'], result['text'])
                     result['body_html'] = md_to_html(result['text']) if result['format'] == 'markdown' else '<pre>' + html.escape(result['text']) + '</pre>'
                 elif route == '/api/learning/draft':
-                    result = workspace.draft(self.server.kb_root, query.get('path', [''])[0], query.get('revision', [None])[0])
+                    result = workspace.draft(self.kb_root, query.get('path', [''])[0], query.get('revision', [None])[0])
                     raw = result['text'].lstrip('\ufeff')
                     front = re.match(r'^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)', raw)
                     body = raw[front.end():] if front else raw
@@ -1067,7 +1072,7 @@ class Handler(BaseHTTPRequestHandler):
                     result['body_html'] = md_to_html(body)
                 else:
                     operation = 'bundled-diff' if route.endswith('/bundled-diff') else 'diff' if route.endswith('/diff') else 'versions'
-                    result = workspace.invoke(self.server.kb_root, operation,
+                    result = workspace.invoke(self.kb_root, operation,
                                               {key: query.get(key, [''])[0] for key in ('id', 'from', 'to', 'version')})
                 self.send_json(200, result)
             except (OSError, ValueError, KeyError, TypeError, UnicodeError):
@@ -1077,8 +1082,8 @@ class Handler(BaseHTTPRequestHandler):
             from knowledge_studio import tasks
             try:
                 identifier = parse_qs(urlsplit(self.path).query).get('id', [''])[0]
-                self.send_json(200, {'tasks': tasks.list_tasks(self.server.kb_root)} if route == '/api/tasks' else {
-                    **tasks.show(self.server.kb_root, identifier), 'knowledge_base': str(self.server.kb_root)})
+                self.send_json(200, {'tasks': tasks.list_tasks(self.kb_root)} if route == '/api/tasks' else {
+                    **tasks.show(self.kb_root, identifier), 'knowledge_base': str(self.kb_root)})
             except (OSError, ValueError, KeyError, TypeError):
                 self.send_json(400, {'error': 'Cannot read task; existing records preserved'})
             return
@@ -1089,7 +1094,7 @@ class Handler(BaseHTTPRequestHandler):
                 task_id = query.get('task', [None])[0]
                 if task_id is not None and not re.fullmatch(r'[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}', task_id):
                     raise ValueError('Invalid task filter')
-                self.send_json(200, overview(self.server.kb_root, task_id=task_id))
+                self.send_json(200, overview(self.kb_root, task_id=task_id))
             except (OSError, ValueError):
                 self.send_json(400, {"error": "Cannot read local debug storage"})
             return
@@ -1100,8 +1105,8 @@ class Handler(BaseHTTPRequestHandler):
                 "local_review": bool(getattr(self.server, 'local_review', False)),
                 "local_edit": bool(getattr(self.server, 'local_edit', False)),
                 "viewer": "@human",
-                "knowledge_base": str(self.server.kb_root),
-                "knowledge_base_name": self.server.kb_root.name,
+                "knowledge_base": str(self.kb_root),
+                "knowledge_base_name": self.kb_root.name,
                 "wake_supported": False,
                 "server_id": getattr(self.server, "background_id", ""),
                 "server_pid": getattr(self.server, "background_pid", None),
@@ -1111,7 +1116,7 @@ class Handler(BaseHTTPRequestHandler):
             query = parse_qs(urlsplit(self.path).query)
             try:
                 result = mail_observation.overview_data(
-                    self.server.kb_root, UI_AGENT,
+                    self.kb_root, UI_AGENT,
                     filter_kind=query.get("filter", ["all"])[0],
                     query=query.get("q", [""])[0],
                     limit=int(query.get("limit", ["50"])[0]),
@@ -1126,7 +1131,7 @@ class Handler(BaseHTTPRequestHandler):
             query = parse_qs(urlsplit(self.path).query)
             try:
                 data, mime = mail_media.read_image(
-                    self.server.kb_root,
+                    self.kb_root,
                     query.get("path", [""])[0],
                     query.get("asset", [""])[0],
                 )
@@ -1143,15 +1148,15 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.write(data)
             return
         if route == "/api/mail/activity":
-            self.send_json(200, activity_data(self.server.kb_root, UI_AGENT))
+            self.send_json(200, activity_data(self.kb_root, UI_AGENT))
             return
         if route == "/api/mail/thread":
             thread_id = parse_qs(urlsplit(self.path).query).get("id", [""])[0]
-            rows = mail.thread_messages(self.server.kb_root, thread_id, UI_AGENT)
+            rows = mail.thread_messages(self.kb_root, thread_id, UI_AGENT)
             if not rows:
                 self.send_json(404, {"error": "thread not found"})
                 return
-            deliveries = delivery_records(self.server.kb_root, rows)
+            deliveries = delivery_records(self.kb_root, rows)
             messages = []
             for row in rows:
                 meta = row["meta"]
@@ -1161,33 +1166,33 @@ class Handler(BaseHTTPRequestHandler):
                                  "deliveries": deliveries.get(str(meta.get("message_id")), [])})
             self.send_json(200, {"thread_id": thread_id, "messages": messages,
                                  "title": rows[0].get("title", "未命名对话"),
-                                 "observation": mail_observation.thread_observation(self.server.kb_root, rows),
+                                 "observation": mail_observation.thread_observation(self.kb_root, rows),
                                  "state": "archived" if all((row.get("state") or {}).get("archived_at") for row in rows) else "open"})
             return
         if route == "/api/mail/status":
-            self.send_json(200, connection_status(self.server.kb_root, UI_AGENT))
+            self.send_json(200, connection_status(self.kb_root, UI_AGENT))
             return
         if route == "/api/mail/team":
-            self.send_json(200, team_sync.status(self.server.kb_root))
+            self.send_json(200, team_sync.status(self.kb_root))
             return
         if route in {"/api/mail/members", "/api/members"}:
-            self.send_json(200, member_profiles(self.server.kb_root))
+            self.send_json(200, member_profiles(self.kb_root))
             return
         if route in {"/api/memory", "/api/mail/memory"}:
-            self.send_json(200, memory_status(self.server.kb_root))
+            self.send_json(200, memory_status(self.kb_root))
             return
         if route in {"/api/memory/item", "/api/mail/memory/item"}:
             query = parse_qs(urlsplit(self.path).query)
             relative = query.get("path", [""])[0]
             try:
-                self.send_json(200, _memory_item(self.server.kb_root, relative, full=query.get("full", [""])[0] in {"1", "true"}))
+                self.send_json(200, _memory_item(self.kb_root, relative, full=query.get("full", [""])[0] in {"1", "true"}))
             except FileNotFoundError as exc:
                 self.send_json(404, {"error": str(exc)})
             except ValueError as exc:
                 self.send_json(400, {"error": str(exc)})
             return
         if route == "/api/mail/snapshot":
-            self.send_json(200, mail.snapshot_data(self.server.kb_root, UI_AGENT))
+            self.send_json(200, mail.snapshot_data(self.kb_root, UI_AGENT))
             return
         if route == "/api/mail/timeline":
             query = parse_qs(urlsplit(self.path).query)
@@ -1196,20 +1201,20 @@ class Handler(BaseHTTPRequestHandler):
                 limit = int(raw_limit) if raw_limit not in (None, "") else mail_timeline.DEFAULT_LIMIT
             except (TypeError, ValueError):
                 limit = mail_timeline.DEFAULT_LIMIT
-            self.send_json(200, mail_timeline.timeline_data(self.server.kb_root, UI_AGENT, limit))
+            self.send_json(200, mail_timeline.timeline_data(self.kb_root, UI_AGENT, limit))
             return
         if route == "/api/mail/knowledge-map":
             source = self.server.knowledge_source
             query = parse_qs(urlsplit(self.path).query)
             snapshot = source.snapshot(force=query.get("refresh", [""])[0] == "1") if source is not None else None
-            self.send_json(200, mail_knowledge.knowledge_map(self.server.kb_root, worker_snapshot=snapshot))
+            self.send_json(200, mail_knowledge.knowledge_map(self.kb_root, worker_snapshot=snapshot))
             return
         if route in {"/api/mail/wiki-page", "/wiki-page"}:
             query = parse_qs(urlsplit(self.path).query)
             relative = query.get("path", [""])[0]
             embed = query.get("embed", ["0"])[0] in {"1", "true", "yes"}
             try:
-                item = _memory_item(self.server.kb_root, relative, full=not embed)
+                item = _memory_item(self.kb_root, relative, full=not embed)
             except FileNotFoundError as exc:
                 self.send_html(404, f"<p>{html.escape(str(exc))}</p>")
                 return
@@ -1220,8 +1225,8 @@ class Handler(BaseHTTPRequestHandler):
             return
         if route == "/api/connection-guide":
             self.send_json(200, {
-                "knowledge_base": str(self.server.kb_root),
-                "guide": connection_guide(self.server.kb_root),
+                "knowledge_base": str(self.kb_root),
+                "guide": connection_guide(self.kb_root),
             })
             return
         entry = FILES.get(route)
@@ -1291,11 +1296,34 @@ class Handler(BaseHTTPRequestHandler):
         self.send_json(status, {"error": message, **details})
 
     def do_POST(self):
+        self.kb_root = getattr(self.server, "kb_root", None)
         allowed_origin = f"http://127.0.0.1:{self.server.server_port}"
         if self.headers.get('Host') != f'127.0.0.1:{self.server.server_port}' or self.headers.get('Origin', allowed_origin) != allowed_origin or self.headers.get('Content-Type', '').split(';')[0] != 'application/json':
             self._reject_post(403, 'same-origin JSON requests required')
             return
         route = self.path.split("?", 1)[0]
+        if route == '/api/studio/libraries':
+            if not getattr(self.server, 'local_edit', False) or self.headers.get('Origin') != allowed_origin:
+                self._reject_post(403, 'Local editing and an explicit same-origin request are required')
+                return
+            from . import studio_libraries
+            import yaml
+            try:
+                payload = self.read_json()
+                with self.server.library_lock:
+                    if payload.get('expected_knowledge_base') != str(self.server.kb_root):
+                        self.send_json(409, {'error': '知识库已切换，请重新打开。', 'code': 'instance_changed'})
+                        return
+                    if payload.get('action') == 'switch':
+                        result = studio_libraries.switch_personal(self.server, payload)
+                    elif payload.get('action') == 'sources':
+                        result = studio_libraries.save_sources(self.kb_root, payload)
+                    else:
+                        raise ValueError('Unknown library configuration action')
+                self.send_json(200, result)
+            except (OSError, ValueError, TypeError, UnicodeError, yaml.YAMLError) as exc:
+                self.send_json(400, {'error': str(exc)})
+            return
         if route in {'/api/evaluation/import', '/api/evaluation/start', '/api/evaluation/compare', '/api/evaluation/review', '/api/evaluation/export', '/api/evaluation/preferences'}:
             from . import studio_evaluation as ev
             import yaml
@@ -1305,12 +1333,12 @@ class Handler(BaseHTTPRequestHandler):
                         self._reject_post(403, 'Local editing and explicit same-origin requests are required')
                         return
                 payload = self.read_json(max_bytes=ev.MAX_UPLOAD+65536 if route.endswith('/import') else 65536)
-                if payload.get('expected_knowledge_base') != str(self.server.kb_root):
+                if payload.get('expected_knowledge_base') != str(self.kb_root):
                     raise ValueError('Knowledge base changed; reload before continuing')
                 from . import evaluation_feedback as feedback
                 operation = {'import':ev.import_dataset, 'start':ev.start, 'compare':ev.compare,
                              'review':feedback.review, 'export':feedback.export, 'preferences':feedback.configure}[route.rsplit('/',1)[1]]
-                self.send_json(200, operation(self.server.kb_root,payload))
+                self.send_json(200, operation(self.kb_root,payload))
             except (OSError, ValueError, KeyError, TypeError, yaml.YAMLError) as exc:
                 self.send_json(400, {'error':str(exc)})
             return
@@ -1325,12 +1353,12 @@ class Handler(BaseHTTPRequestHandler):
             import yaml
             try:
                 request = self.read_json()
-                if request.get('expected_knowledge_base') != str(self.server.kb_root):
+                if request.get('expected_knowledge_base') != str(self.kb_root):
                     self.send_json(409, {'error': '知识库已切换，请重新读取。', 'code': 'instance_changed'})
                     return
                 from .studio_history import onboarding
                 operation = studio.save_file if route.endswith('/file') else onboarding if route.endswith('/onboarding') else studio.save_settings
-                self.send_json(200, operation(self.server.kb_root, request))
+                self.send_json(200, operation(self.kb_root, request))
             except (OSError, ValueError, KeyError, TypeError, UnicodeError, yaml.YAMLError) as exc:
                 self.send_json(409, {'error': str(exc) if isinstance(exc, ValueError) else '保存失败，原文件保留。'})
             return
@@ -1344,27 +1372,27 @@ class Handler(BaseHTTPRequestHandler):
             from . import workspace
             try:
                 request = self.read_json()
-                if request.get('expected_knowledge_base') != str(self.server.kb_root):
+                if request.get('expected_knowledge_base') != str(self.kb_root):
                     self.send_json(409, {'error': '知识库已切换，请重试连接后重新查看。', 'code': 'instance_changed'})
                     return
                 if route in ('/api/skills/derive', '/api/skills/merge-prepare'):
-                    result = workspace.invoke(self.server.kb_root, 'skill-derive' if route.endswith('/derive') else 'skill-merge-prepare', request)
+                    result = workspace.invoke(self.kb_root, 'skill-derive' if route.endswith('/derive') else 'skill-merge-prepare', request)
                 elif route == '/api/tasks/correction':
-                    result = workspace.propose_task_correction(self.server.kb_root, request)
+                    result = workspace.propose_task_correction(self.kb_root, request)
                 elif route == '/api/tasks/accept-sources':
-                    result = workspace.accept_task_sources(self.server.kb_root, request)
+                    result = workspace.accept_task_sources(self.kb_root, request)
                 elif route == '/api/tasks/progress':
-                    result = workspace.save_task_progress(self.server.kb_root, request)
+                    result = workspace.save_task_progress(self.kb_root, request)
                 elif route == '/api/tasks/lifecycle':
                     from .tasks import transition
-                    result = transition(self.server.kb_root, request.get('task_id'), request.get('expected_revision'), request.get('action'), request.get('reason'))
+                    result = transition(self.kb_root, request.get('task_id'), request.get('expected_revision'), request.get('action'), request.get('reason'))
                 elif route == '/api/tasks/reminders':
                     from . import reminders
-                    result = reminders.add(self.server.kb_root, request) if request.get('action') == 'add' else reminders.update(self.server.kb_root, request)
+                    result = reminders.add(self.kb_root, request) if request.get('action') == 'add' else reminders.update(self.kb_root, request)
                 else:
-                    result = workspace.create_task(self.server.kb_root, request) if route.endswith('/create') else workspace.invoke(self.server.kb_root, 'import-bundled', request)
+                    result = workspace.create_task(self.kb_root, request) if route.endswith('/create') else workspace.invoke(self.kb_root, 'import-bundled', request)
                 if isinstance(result, dict) and 'agreement' in result:
-                    result = {**result, 'knowledge_base': str(self.server.kb_root)}
+                    result = {**result, 'knowledge_base': str(self.kb_root)}
                 self.send_json(201, result)
             except (OSError, ValueError, KeyError, TypeError) as exc:
                 self.send_json(409, {'error': str(exc) if isinstance(exc, ValueError) else 'Cannot save; inspect the current state before retrying'})
@@ -1372,7 +1400,7 @@ class Handler(BaseHTTPRequestHandler):
         if route == '/api/workspace/query':
             from . import workspace
             try:
-                self.send_json(200, workspace.invoke(self.server.kb_root, 'query', self.read_json()))
+                self.send_json(200, workspace.invoke(self.kb_root, 'query', self.read_json()))
             except (OSError, ValueError, KeyError, TypeError) as exc:
                 self.send_json(400, {'error': str(exc)})
             return
@@ -1381,7 +1409,7 @@ class Handler(BaseHTTPRequestHandler):
             from knowledge_studio.feedback import inspect
             try:
                 request = self.read_json()
-                self.send_json(200, inspect(self.server.kb_root, request.get("scope")))
+                self.send_json(200, inspect(self.kb_root, request.get("scope")))
             except (OSError, ValueError, KeyError, TypeError):
                 self.send_json(400, {"error": "Cannot read this exact private scope; data preserved"})
             return
@@ -1397,15 +1425,15 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 request = self.read_json()
                 if route == '/api/learning/promote':
-                    result = workspace.invoke(self.server.kb_root, 'promote', request)
+                    result = workspace.invoke(self.kb_root, 'promote', request)
                 elif route == '/api/learning/reject':
-                    result = workspace.invoke(self.server.kb_root, 'reject', request)
+                    result = workspace.invoke(self.kb_root, 'reject', request)
                 elif route == '/api/feedback/export':
-                    result = feedback.export(self.server.kb_root, request, confirm_share=request.get('confirm_share') is True)
+                    result = feedback.export(self.kb_root, request, confirm_share=request.get('confirm_share') is True)
                 elif route == '/api/feedback/withdraw-candidate':
-                    result = feedback.withdraw_candidate(self.server.kb_root, request)
+                    result = feedback.withdraw_candidate(self.kb_root, request)
                 else:
-                    result = feedback.review(self.server.kb_root, request)
+                    result = feedback.review(self.kb_root, request)
                 self.send_json(200, result)
             except (OSError, ValueError, KeyError, TypeError) as exc:
                 self.send_json(409, {'error': str(exc) if isinstance(exc, ValueError) else 'Operation failed; inspect current state before retrying'})
@@ -1423,7 +1451,7 @@ class Handler(BaseHTTPRequestHandler):
             payload = self.read_json()
             if route == "/api/mail/team/sync":
                 result = team_sync.sync(
-                    self.server.kb_root,
+                    self.kb_root,
                     push=bool(payload.get("push", False)),
                     message=str(payload.get("message", "同步 OKS 团队资料")),
                 )
@@ -1444,7 +1472,7 @@ class Handler(BaseHTTPRequestHandler):
                     raise ValueError("unsupported delivery reason")
                 evidence_refs = mail.normalise_evidence_refs(payload.get("evidence_refs", []))
                 result = mail.write_message(
-                    self.server.kb_root,
+                    self.kb_root,
                     body=body,
                     sender=UI_AGENT,
                     sender_kind="human",
@@ -1464,9 +1492,9 @@ class Handler(BaseHTTPRequestHandler):
                 body = str(payload.get("body", "")).strip()
                 if not thread_id or not body:
                     raise ValueError("thread_id and body are required")
-                recipients, latest = reply_recipients(self.server.kb_root, thread_id)
+                recipients, latest = reply_recipients(self.kb_root, thread_id)
                 result = mail.write_message(
-                    self.server.kb_root,
+                    self.kb_root,
                     body=body,
                     sender=UI_AGENT,
                     sender_kind="human",
@@ -1490,7 +1518,7 @@ class Handler(BaseHTTPRequestHandler):
                     raise ValueError("thread_id, recipient and body are required")
                 if recipient.lower() in {"human", "all", "unknown"}:
                     raise ValueError("Invite a named Agent, not human, all or unknown")
-                messages = mail.thread_messages(self.server.kb_root, thread_id, UI_AGENT)
+                messages = mail.thread_messages(self.kb_root, thread_id, UI_AGENT)
                 if not messages:
                     raise ValueError("thread not found")
                 latest = messages[-1]
@@ -1505,7 +1533,7 @@ class Handler(BaseHTTPRequestHandler):
                     raise ValueError("Agent is already in this Thread")
                 recipients = sorted(participants)
                 result = mail.write_message(
-                    self.server.kb_root,
+                    self.kb_root,
                     body=body,
                     sender=UI_AGENT,
                     sender_kind="human",
@@ -1528,7 +1556,7 @@ class Handler(BaseHTTPRequestHandler):
                 if not target:
                     raise ValueError("thread_id or message_id is required")
                 selected = [
-                    item for item in mail.iter_messages(self.server.kb_root, UI_AGENT)
+                    item for item in mail.iter_messages(self.kb_root, UI_AGENT)
                     if item["meta"].get("thread_id") == target or item["meta"].get("message_id") == target
                 ]
                 if not selected:
@@ -1537,11 +1565,11 @@ class Handler(BaseHTTPRequestHandler):
                 for message in selected:
                     message_id = str(message["meta"].get("message_id"))
                     changes = {"archived_at": archived_at, "thread_state": "closed"}
-                    if message["path"].parent != mail.messages_dir(self.server.kb_root):
+                    if message["path"].parent != mail.messages_dir(self.kb_root):
                         # A legacy Markdown file is shared by all recipients.
                         # Seed a new recipient projection from its old read
                         # marker, but never rewrite the shared file.
-                        state_path = mail.recipient_state_path(self.server.kb_root, UI_AGENT, message_id)
+                        state_path = mail.recipient_state_path(self.kb_root, UI_AGENT, message_id)
                         if not state_path.is_file() and str(message["meta"].get("read", "false")).lower() == "true":
                             changes["read_at"] = (
                                 message["meta"].get("read_at")
@@ -1549,7 +1577,7 @@ class Handler(BaseHTTPRequestHandler):
                                 or mail.iso_now()
                             )
                     mail.update_recipient_state(
-                        self.server.kb_root, UI_AGENT, message_id, **changes,
+                        self.kb_root, UI_AGENT, message_id, **changes,
                     )
                 self.send_json(200, {"status": "archived", "target": target, "count": len(selected)})
                 return
@@ -1560,7 +1588,7 @@ class Handler(BaseHTTPRequestHandler):
                 if not target:
                     raise ValueError("thread_id or message_id is required")
                 selected = [
-                    item for item in mail.iter_messages(self.server.kb_root, UI_AGENT)
+                    item for item in mail.iter_messages(self.kb_root, UI_AGENT)
                     if item["meta"].get("thread_id") == target or item["meta"].get("message_id") == target
                 ]
                 if not selected:
@@ -1568,20 +1596,20 @@ class Handler(BaseHTTPRequestHandler):
                 for message in selected:
                     message_id = str(message["meta"].get("message_id"))
                     mail.update_recipient_state(
-                        self.server.kb_root, UI_AGENT, message_id,
+                        self.kb_root, UI_AGENT, message_id,
                         archived_at=None, thread_state="open",
                     )
                 self.send_json(200, {"status": "unarchived", "target": target, "count": len(selected)})
                 return
             if route == "/api/mail/read":
-                message = visible_message(self.server.kb_root, str(payload.get("message_id", "")).strip())
+                message = visible_message(self.kb_root, str(payload.get("message_id", "")).strip())
                 if not message:
                     raise ValueError("message not found")
                 message_id = str(message["meta"].get("message_id", ""))
                 # Read state is per-recipient: even for a legacy shared Markdown
                 # file, persist the transition in this Agent's projection only —
                 # the shared file is never rewritten.
-                state = mail.update_recipient_state(self.server.kb_root, UI_AGENT, message_id, read_at=mail.iso_now())
+                state = mail.update_recipient_state(self.kb_root, UI_AGENT, message_id, read_at=mail.iso_now())
                 self.send_json(200, {"status": "read", "message_id": message_id, "state": state})
                 return
             self._reject_post(404, "unknown POST route")
@@ -1614,6 +1642,7 @@ def create_server(root: Path, port: int = 3182, *, mode: str = "reader", knowled
     root = validate_root(root)
     server = _LoopbackHTTPServer(("127.0.0.1", port), Handler)
     server.kb_root = root
+    server.library_lock = RLock()
     server.mode = mode
     server.local_review = bool(local_review or local_edit)
     server.local_edit = bool(local_edit)

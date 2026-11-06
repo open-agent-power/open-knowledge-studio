@@ -28,7 +28,7 @@
         ><button data-tab="goals">目标</button
         ><button data-tab="learning">学习</button>
       </nav>
-      <span id="instance"></span
+      <button id="instance" aria-label="知识库配置"></button
       ><button id="showGuide" aria-label="使用引导">?</button>
     </header>
     <aside id="onboarding" hidden></aside>
@@ -45,6 +45,31 @@
       </div>
       <section id="content" tabindex="-1"></section>
     </main>
+    <dialog id="libraryDialog" aria-labelledby="libraryTitle">
+      <header>
+        <span id="libraryTitle">知识库</span
+        ><button id="closeLibraries" aria-label="关闭知识库配置">×</button>
+      </header>
+      <label for="personalLibrary">个人知识库</label>
+      <div class="library-personal">
+        <input
+          id="personalLibrary"
+          spellcheck="false"
+          autocomplete="off"
+        /><button id="switchLibrary" type="button">切换</button>
+      </div>
+      <div class="library-heading">
+        <span>团队知识库</span
+        ><button id="addTeamLibrary" type="button" aria-label="添加团队知识库">
+          ＋
+        </button>
+      </div>
+      <div id="teamLibraries"></div>
+      <p id="libraryError" role="alert"></p>
+      <footer>
+        <button id="saveTeamLibraries" type="button">保存</button>
+      </footer>
+    </dialog>
     <dialog id="fileDialog">
       <header>
         <span id="fileTitle"></span

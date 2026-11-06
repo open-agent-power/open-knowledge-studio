@@ -1,0 +1,4 @@
+av==18.0.0
+faster-whisper==1.2.1
+Pillow==12.3.0
+scenedetect==0.7

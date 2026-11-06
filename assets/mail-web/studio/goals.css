@@ -177,10 +177,6 @@
 .close-node {
   margin-left: auto;
 }
-.day-timeline input[type="range"] {
-  min-width: 90px;
-  width: 120px;
-}
 .day-timeline select {
   border: 0;
   background: none;

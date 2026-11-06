@@ -7,7 +7,7 @@ name = "open-knowledge-studio"
 version = "0.6.23"
 description = "File-based knowledge engineering CLI for Claude Code"
 readme = "README.md"
-license = {text = "MIT"}
+license = {text = "MIT AND Apache-2.0"}
 requires-python = ">=3.12"
 authors = [{ name = "open-agent-power" }]
 keywords = ["knowledge-base", "memory", "cli", "claude", "agent", "recall"]
@@ -16,6 +16,7 @@ classifiers = [
     "Environment :: Console",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
@@ -31,10 +32,10 @@ dependencies = [
     "gitpython>=3",
     "pyyaml>=6",
     "jsonschema>=4.20",
-    "oks-connector>=0.3.0",
 ]
 
 [project.optional-dependencies]
+embedding = ["sentence-transformers>=2.2", "numpy>=1.24"]
 document = ["markitdown[docx,pptx]==0.1.6"]
 pdf-lite = ["pymupdf4llm==0.0.27", "pymupdf==1.28.0"]
 pdf = ["mineru[pipeline]==3.4.4", "six==1.17.0"]
@@ -65,11 +66,18 @@ Documentation = "https://open-agent-power.github.io/open-knowledge-studio/"
 
 [project.scripts]
 oks = "knowledge_studio.cli:app"
-# oks-connector console script 由 PyPI 包 oks-connector 提供 (>=0.2.0)
+oks-connector = "oks_connector.raw_bundle_adapter:main"
+
+[project.entry-points."oks_search_backend"]
+code = "oks_connector.search.code:CodeSearchBackend"
+embedding = "oks_connector.search.embedding:EmbeddingBackend"
 
 [tool.setuptools]
 include-package-data = false
 packages = [
+    "oks_connector",
+    "oks_connector.extractors",
+    "oks_connector.search",
     "knowledge_studio",
     "knowledge_studio.capabilities",
     "knowledge_studio.providers",
@@ -88,6 +96,7 @@ packages = [
 "knowledge_studio.security" = "knowledge_studio/security"
 
 [tool.setuptools.package-data]
+oks_connector = ["*.txt", "LICENSE", "UPSTREAM.json"]
 knowledge_studio = ["_assets/**/*"]
 "knowledge_studio.capabilities" = ["*.yaml"]
 "knowledge_studio.providers" = ["*/provider.yaml", "*/SKILL.md", "*/normalize.py"]

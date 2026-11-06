@@ -43,7 +43,7 @@ from knowledge_studio.handoff_cli import app as handoff_app
 from knowledge_studio.feedback_cli import app as feedback_app
 from knowledge_studio.tasks_cli import app as tasks_app
 
-# ── ingest: connector is a regular PyPI dependency (oks-connector>=0.2.0) ──
+# ── ingest: in-tree connector, shipped in the same OKS distribution ──
 from oks_connector.raw_bundle_adapter import (
     build_parser as _connector_parser,
     run_ingest as _connector_run_ingest,
@@ -649,7 +649,7 @@ def _connector_install_hint() -> str:
 
 
 def _connector_command() -> str | None:
-    """Connector is the PyPI ``oks-connector`` package (>=0.2.0) — no separate binary needed."""
+    """Connector ships inside open-knowledge-studio; no separate distribution needed."""
     return "built-in" if _connector_available else None
 
 
@@ -676,7 +676,7 @@ def ingest(
     formula_secondary: bool = typer.Option(False, "--formula-secondary", help="Run PaddleOCR PP-FormulaNet on PDF equation crops."),
     formula_max_regions: int = typer.Option(20, "--formula-max-regions", help="Cap equation blocks for formula secondary extraction."),
 ):
-    """Acquire one source through the installed oks-connector dependency; no Wiki promotion occurs here."""
+    """Acquire one source through the built-in connector; no Wiki promotion occurs here."""
     if mode not in {"quick", "forensic"}:
         raise typer.BadParameter("--mode must be quick or forensic")
     connector = _connector_command()

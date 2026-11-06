@@ -7,8 +7,8 @@ physical separation instead of ignore rules.
 
 Building from a git checkout copies `assets/` into `knowledge_studio/_assets/`,
 so source installs, sdists and PyPI wheels are identical. The connector
-package (`oks_connector`) is a regular PyPI dependency (>=0.2.0), no longer
-vendored from `scripts/`. When building from an sdist the repo root is absent
+package (`oks_connector`) is maintained in this distribution alongside the CLI.
+When building from an sdist the repo root is absent
 and the assets tree already exists — skip silently.
 """
 from __future__ import annotations
@@ -77,6 +77,6 @@ class sdist_with_assets(sdist):
 
 # Materialize generated package assets before setuptools validates the package
 # list. In a clean checkout, knowledge_studio/_assets does not exist until the
-# build hook vendors it. The separately packaged oks-connector is never copied.
+# build hook vendors it. Connector sources already live inside cli/.
 _sync_from_checkout()
 setup(cmdclass={"build_py": build_py_with_assets, "sdist": sdist_with_assets})

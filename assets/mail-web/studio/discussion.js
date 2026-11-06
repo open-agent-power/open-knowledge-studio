@@ -27,25 +27,8 @@ export function createDiscussionView({ dom, state, actions, model: M, api }) {
       });
     tools.append(children);
     stage.append(tools);
-    const replay = el("div", "replay-tools"),
-      play = button("▶", () => {}),
-      speed = el("select"),
-      seek = el("input");
-    play.setAttribute("aria-label", "逐步展开当前图谱");
-    for (const n of [0.5, 1, 2, 4]) speed.append(new Option(n + "×", n));
-    speed.value = "1";
-    speed.setAttribute("aria-label", "展开倍速");
-    seek.type = "range";
-    seek.min = 1;
-    seek.max = Math.max(1, data.nodes.length);
-    seek.value = seek.max;
-    seek.setAttribute("aria-label", "展开进度");
-    replay.append(play, speed, seek);
-    stage.append(replay);
     $("content").append(stage);
-    let graphDispose = () => {},
-      timer = null,
-      playing = false;
+    let graphDispose = () => {};
     const display = (count) => {
       graphDispose();
       const nodes = data.nodes.slice(0, count),
@@ -79,68 +62,25 @@ export function createDiscussionView({ dom, state, actions, model: M, api }) {
         },
       );
     };
-    const pause = () => {
-      playing = false;
-      clearTimeout(timer);
-      play.textContent = "▶";
-    };
-    const tick = () => {
-      if (!playing) return;
-      let n = Number(seek.value) + 1;
-      if (n > data.nodes.length) {
-        pause();
-        return;
-      }
-      seek.value = n;
-      display(n);
-      timer = setTimeout(tick, 1000 / Number(speed.value));
-    };
-    play.onclick = () => {
-      if (playing) {
-        pause();
-        return;
-      }
-      if (!data.nodes.length) return;
-      seek.value = 1;
-      display(1);
-      playing = true;
-      play.textContent = "Ⅱ";
-      timer = setTimeout(tick, 1000 / Number(speed.value));
-    };
-    seek.oninput = () => {
-      pause();
-      display(Number(seek.value));
-    };
-    speed.onchange = () => {
-      if (playing) {
-        clearTimeout(timer);
-        timer = setTimeout(tick, 1000 / Number(speed.value));
-      }
-    };
     display(data.nodes.length);
     const timeline = createTimeline({
       dom,
       api,
+      canLeave: actions.canLeave,
       events: state.view.timeline,
       onSelect: (frame) => {
-        pause();
         data = M.graph(frame, true);
-        seek.max = Math.max(1, data.nodes.length);
-        seek.value = seek.max;
         display(data.nodes.length);
         detail.hidden = true;
       },
       onCurrent: () => {
         data = M.graph(state.view, expanded);
-        seek.max = Math.max(1, data.nodes.length);
-        seek.value = seek.max;
         display(data.nodes.length);
       },
     });
     $("content").append(timeline.element);
     destroyGraph = () => {
       timeline.destroy();
-      pause();
       graphDispose();
     };
   }

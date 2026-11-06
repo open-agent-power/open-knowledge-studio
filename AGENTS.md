@@ -186,7 +186,7 @@ oks config init | show | set <key> <value>
 
 - **raw/** is human-collected or tool-processed. Tools preserve maximum fidelity — they convert format, not knowledge. LLM does not write knowledge to raw/.
 - **wiki/** is LLM-written, human-approved via drafts/ review.
-- **Intake is Agent-orchestrated** — `/ingest` is the recommended path. `oks ingest run` is a compatibility entry point that delegates mechanical acquisition and extraction to the separately packaged `oks-connector`.
+- **Intake is Agent-orchestrated** — `/ingest` is the recommended path. `oks ingest run` is a compatibility entry point that delegates mechanical acquisition and extraction to the built-in `oks_connector` component (shipped with OKS).
 - **Global config** (`~/.oks/config.json`) enables cross-project access — `oks recall` works from any directory (resolution: `OKS_ROOT` env → config `knowledge_base_path` → cwd).
 - **Code repo vs instance repo** — THIS repo is the reusable tool/template: it ships clean (wiki/ & drafts/ gitignored) so others can use it. Your personal knowledge lives in a separate instance created by `oks init <path>`, which TRACKS memory in git. Practices proven in an instance flow back here as PRs.
 - **Git IS the migration** — no database, schema changes versioned through _meta/.

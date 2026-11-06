@@ -1,0 +1,7 @@
+# Install in an isolated Python 3.12 environment.
+paddlepaddle==3.2.0
+paddleocr==3.7.0
+# MinerU 3.4.4 allows >=0.22.0,<=0.23.0; 0.23.0 is not published for the
+# supported index. Keep in sync with cli/pyproject.toml and cli._CAPABILITIES.
+tokenizers==0.22.1
+ftfy==6.3.1

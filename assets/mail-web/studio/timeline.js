@@ -11,7 +11,6 @@ export function createTimeline({
     host = el("div", "day-timeline"),
     play = button("▶", () => {}),
     speed = el("select"),
-    seek = el("input"),
     clock = el("span", "tiny");
   let timer = null,
     index = -1,
@@ -22,12 +21,6 @@ export function createTimeline({
   for (const n of [1, 2, 4, 8]) speed.append(new Option(n + "×", n));
   speed.title = "1×：每秒推进一分钟";
   speed.setAttribute("aria-label", "时间轴回放倍速");
-  seek.type = "range";
-  seek.min = 0;
-  seek.max = Math.max(0, rows.length - 1);
-  seek.value = seek.max;
-  seek.disabled = !rows.length;
-  seek.setAttribute("aria-label", "时间轴");
   function pause() {
     generation++;
     playing = false;
@@ -45,7 +38,6 @@ export function createTimeline({
       );
       if (!alive || requested !== generation || !canLeave()) return false;
       index = i;
-      seek.value = i;
       clock.textContent = new Date(event.at).toLocaleTimeString([], {
         hour12: false,
       });
@@ -99,16 +91,9 @@ export function createTimeline({
     play.textContent = "Ⅱ";
     void tick();
   };
-  seek.oninput = () => {
-    pause();
-    void show(Number(seek.value)).then((ok) => {
-      if (!ok) seek.value = index < 0 ? seek.max : index;
-    });
-  };
   host.append(
     play,
     speed,
-    seek,
     clock,
     button(
       "当前",

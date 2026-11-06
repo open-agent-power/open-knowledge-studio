@@ -293,13 +293,90 @@ dialog form > button {
   .graph-detail {
     max-width: 230px;
   }
-  .replay-tools input {
-    width: 55px;
-  }
   .graph-tools {
     gap: 4px;
   }
   .learning-frame {
     height: calc(100vh - 170px);
   }
+}
+
+/* Repository settings: compact shell dialog, without extra navigation. */
+#instance {
+  margin-left: auto;
+  max-width: 30vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  border: 0;
+  background: transparent;
+}
+#instance:hover {
+  color: var(--ink);
+  background: var(--soft);
+}
+#libraryDialog {
+  width: min(660px, calc(100vw - 32px));
+  padding: 20px;
+}
+#libraryDialog header,
+.library-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+#libraryDialog header {
+  margin-bottom: 22px;
+}
+#libraryDialog label,
+.library-heading {
+  font-size: 13px;
+}
+.library-personal {
+  display: flex;
+  gap: 8px;
+  margin: 8px 0 22px;
+}
+.library-personal input {
+  flex: 1;
+  min-width: 0;
+}
+.library-source {
+  display: grid;
+  grid-template-columns: minmax(90px, 150px) minmax(0, 1fr) 30px;
+  gap: 8px;
+  margin-top: 8px;
+}
+.library-source input {
+  min-width: 0;
+  width: 100%;
+}
+#libraryDialog input {
+  font-size: 12px;
+}
+#libraryDialog footer {
+  display: flex;
+  justify-content: flex-end;
+}
+#libraryError {
+  color: #ad4e59;
+  font-size: 12px;
+  min-height: 16px;
+  margin: 10px 0;
+}
+@media (max-width: 520px) {
+  .library-source {
+    grid-template-columns: 70px minmax(0, 1fr) 28px;
+    gap: 4px;
+  }
+}
+
+.library-folder {
+  align-self: center;
+  font-size: 12px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }

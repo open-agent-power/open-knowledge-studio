@@ -76,6 +76,14 @@ def get_backend(name: str = "fts5", root: str | None = None, **kwargs: Any) -> S
         from .fusion import FusionBackend
 
         return FusionBackend(root=root, **kwargs)
+    if n == "code":
+        from oks_connector.search.code import CodeSearchBackend
+
+        return CodeSearchBackend(root=root, **kwargs)
+    if n == "embedding":
+        from oks_connector.search.embedding import EmbeddingBackend
+
+        return EmbeddingBackend(root=root, **kwargs)
     # connector 扩展点：第三方 entry_points
     try:
         from importlib.metadata import entry_points
