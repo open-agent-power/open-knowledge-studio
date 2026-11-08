@@ -42,6 +42,10 @@ for _asset in ('studio.html', 'studio.js', 'studio-model.js', 'studio.css'):
     FILES['/' + _asset] = (_asset, 'text/html' if _asset.endswith('.html') else 'text/css' if _asset.endswith('.css') else 'text/javascript')
 for _module in ('api', 'dom', 'state', 'discussion', 'graph', 'goals', 'learning', 'settings', 'formulas', 'knowledge', 'knowledge-model', 'workflow', 'evaluation', 'evaluation-charts', 'files', 'evaluation-review', 'call-trace', 'timeline', 'mindmap', 'onboarding', 'libraries'):
     FILES[f'/studio/{_module}.js'] = (f'studio/{_module}.js', 'text/javascript')
+for _module in ('graph-pixi', 'graph-camera', 'graph-controls', 'graph-layout', 'graph-renderer'):
+    FILES[f'/studio/{_module}.js'] = (f'studio/{_module}.js', 'text/javascript')
+for _asset in ('pixi.min.js', 'layout.worker.js', 'edge-mesh.js', 'position-smoothing.js'):
+    FILES[f'/vendor/graph-engine/{_asset}'] = (f'vendor/graph-engine/{_asset}', 'text/javascript')
 for _style in ('graph', 'goals', 'learning', 'evaluation'):
     FILES[f'/studio/{_style}.css'] = (f'studio/{_style}.css', 'text/css')
 FILES['/studio-theme.css'] = ('studio-theme.css', 'text/css')

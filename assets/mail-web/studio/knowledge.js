@@ -1,16 +1,22 @@
-import { drawGraph } from "./graph.js";
-import { callTimeline } from './call-trace.js';
-import { showWorkflow } from './workflow.js';
+import { createGraph } from "./graph-pixi.js";
+import { callTimeline } from "./call-trace.js";
 import {
   knowledgeTree,
   projectKnowledge,
+  projectDocuments,
+  documentNeighborhood,
+  knowledgeRelations,
   projectQuery,
   usageColor,
   nodeHue,
   findNode,
   revealNode,
   mapQueryHits,
-  categoryLabels, nodeCategory, nodeSize, filterKnowledge, subtreeIds, knowledgeOverview,
+  nodeCategory,
+  nodeSize,
+  filterKnowledge,
+  subtreeIds,
+  knowledgeOverview,
 } from "./knowledge-model.js";
 
 export function createKnowledgeView({ dom, state, actions, api }) {
@@ -20,11 +26,14 @@ export function createKnowledgeView({ dom, state, actions, api }) {
     ticket = 0,
     expanded = new Set(),
     depth = 1,
+    projectionMode = "documents",
+    filterScope = "",
     hits = [],
     queryMode = false,
     querySequence = 0,
     query = "",
-    selected = null;
+    selected = null,
+    localFocus = null;
   function destroy() {
     ticket++;
     dispose();
@@ -38,144 +47,306 @@ export function createKnowledgeView({ dom, state, actions, api }) {
       stage = el("div", "graph-stage knowledge-stage"),
       aside = el("aside", "knowledge-detail");
     aside.hidden = true;
-    aside.setAttribute("aria-label", "知识详情");
-    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-    svg.setAttribute("aria-label", "知识、草稿与技能分层图谱");
-    svg.setAttribute("role", "group");
-    stage.append(svg);
+    aside.setAttribute("aria-label", "Wiki 正文");
+    const canvasHost = el("div", "graph-canvas-host");
+    canvasHost.setAttribute("aria-label", "Wiki 文档图谱");
+    canvasHost.setAttribute("role", "group");
+    stage.append(canvasHost);
     const tools = el("div", "knowledge-controls"),
       search = el("input");
-    const categories = new Set(Object.keys(categoryLabels)), hidden = new Set();
-    let only = null, visibleState = 'all', selection = [];
+    const categories = new Set(["wiki", "raw"]),
+      hidden = new Set();
+    let only = null,
+      visibleState = "all",
+      selection = [];
     search.type = "search";
-    search.placeholder = "搜索";
+    search.placeholder = "搜索文件、标题或标签";
     search.value = query;
     search.setAttribute("aria-label", "搜索图谱");
     const reset = button("重置", () => {
+      if (!actions.canLeave()) return;
       expanded.clear();
       depth = 1;
-      selected = null;
-      querySequence++; query = ''; queryMode = false; hits = []; search.value = ''; info.textContent = '';
-      hidden.clear(); only = null; selection = []; visibleState = 'all';
-      categories.clear(); Object.keys(categoryLabels).forEach(k => categories.add(k));
-      stateFilter.value = 'all';
-      filters.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', 'true'));
+      query = "";
+      localFocus = null;
+      search.value = "";
+      queryMode = false;
+      hits = [];
+      info.textContent = "";
+      filterScope = "";
+      sourceFilter.value = "";
+      hidden.clear();
+      only = null;
+      selection = [];
+      visibleState = "all";
+      stateFilter.value = "all";
       selectionTools.hidden = true;
-      aside.hidden = true;
-      shell.classList.remove("with-detail");
+      clearSelection(false);
       paint();
+      graph.fit();
     });
     const run = button("Query", runQuery, "soft");
     run.title = "执行现有 Wiki 召回；耗时包含请求往返";
     const info = el("span", "query-status");
     info.setAttribute("role", "status");
-    tools.append(search, run, reset, info);
-    stage.append(tools);
-    const filters = el('div', 'knowledge-filters');
-    for (const [kind, label] of Object.entries(categoryLabels)) {
-      const b = button(label, () => {
-        categories.has(kind) ? categories.delete(kind) : categories.add(kind);
-        b.setAttribute('aria-pressed', String(categories.has(kind))); paint();
+    const filterMenu = el("details", "knowledge-filter-menu"),
+      filterPanel = el("div", "knowledge-filter-panel");
+    filterMenu.append(el("summary", null, "筛选"), filterPanel);
+    const localBar = el("div", "knowledge-local"),
+      localTitle = el("span"),
+      globalButton = button("返回全图", () => {
+        if (!actions.canLeave()) return;
+        localFocus = null;
+        paint();
+        graph.fit();
       });
-      b.setAttribute('aria-pressed', 'true');
-      b.style.setProperty('--category-color', kind === 'raw' ? '#7d8a9d' : `hsl(${nodeHue({type:kind})} 48% 49%)`);
-      filters.append(b);
+    localBar.hidden = true;
+    localBar.append(globalButton, localTitle);
+    tools.append(search, reset, filterMenu, info, localBar);
+    const mode = el("select");
+    mode.setAttribute("aria-label", "图谱视图");
+    for (const [value, label] of [
+      ["documents", "文档关系"],
+      ["hierarchy", "分类层级"],
+    ]) {
+      const option = el("option", null, label);
+      option.value = value;
+      mode.append(option);
     }
-    const stateFilter = el('select');
-    stateFilter.setAttribute('aria-label','图谱状态');
-    for (const [value, label] of [['all','全部'],['pending','待审核'],['used','已使用']]) {
-      const option = el('option', null, label); option.value = value; stateFilter.append(option);
+    mode.value = projectionMode;
+    mode.onchange = () => {
+      if (!actions.canLeave()) {
+        mode.value = projectionMode;
+        return;
+      }
+      projectionMode = mode.value;
+      localFocus = null;
+      clearSelection(false);
+      paint();
+      graph.fit();
+    };
+    const sourceFilter = el("select");
+    sourceFilter.setAttribute("aria-label", "筛选 Wiki 分类");
+    sourceFilter.onchange = () => {
+      if (!actions.canLeave()) {
+        sourceFilter.value = filterScope;
+        return;
+      }
+      filterScope = sourceFilter.value;
+      localFocus = null;
+      clearSelection(false);
+      paint();
+      graph.fit();
+    };
+    filterPanel.append(mode, sourceFilter);
+    const filters = el("div", "knowledge-filters");
+    const stateFilter = el("select");
+    stateFilter.setAttribute("aria-label", "图谱状态");
+    for (const [value, label] of [
+      ["all", "全部"],
+      ["used", "已使用"],
+    ]) {
+      const option = el("option", null, label);
+      option.value = value;
+      stateFilter.append(option);
     }
-    stateFilter.onchange = () => {visibleState = stateFilter.value; paint();};
+    stateFilter.value = visibleState;
+    stateFilter.onchange = () => {
+      if (!actions.canLeave()) {
+        stateFilter.value = visibleState;
+        return;
+      }
+      visibleState = stateFilter.value;
+      clearSelection(false);
+      paint();
+    };
     filters.append(stateFilter);
-    stage.append(filters);
-    const selectionTools = el('div', 'knowledge-selection'); selectionTools.hidden = true;
+    filterPanel.append(filters, run);
+    stage.append(tools);
+    const selectionTools = el("div", "knowledge-selection");
+    selectionTools.hidden = true;
     const selectedIds = () => new Set(selection.flatMap(subtreeIds));
-    selectionTools.append(button('仅看选中', () => {only = selectedIds(); selectionTools.hidden=true; paint();}), button('隐藏选中', () => {selectedIds().forEach(id => hidden.add(id)); selectionTools.hidden=true; paint();}));
+    selectionTools.append(
+      button("仅看选中", () => {
+        if (!actions.canLeave()) return;
+        only = selectedIds();
+        clearSelection(false);
+        paint();
+      }),
+      button("隐藏选中", () => {
+        if (!actions.canLeave()) return;
+        selectedIds().forEach((id) => hidden.add(id));
+        clearSelection(false);
+        paint();
+      }),
+    );
     stage.append(selectionTools);
-    const legend = el('div','knowledge-key','颜色 · 类型　深浅 · 显式使用　大小 · 条目数　虚线 · 待审核');
+    const legend = el("div", "knowledge-key");
     stage.append(legend);
     const zoom = el("div", "graph-tools");
     stage.append(zoom);
+    const summary = el("div", "graph-summary");
+    summary.setAttribute("aria-live", "polite");
+    const empty = el("div", "graph-empty");
+    const emptyMessage = el("p", null, "正在读取图谱…");
+    const retry = button("重新读取", () => void refresh());
+    retry.hidden = true;
+    empty.append(emptyMessage, retry);
+    const inputs = [search, run, reset, mode, sourceFilter, stateFilter];
+    for (const input of inputs) input.disabled = true;
+    stage.append(summary, empty);
     shell.append(stage, aside);
     $("content").append(shell);
     let map,
       usage,
-      skills,
-      contexts,
-      activity = {queried_paths:[],used_slugs:[]},
+      activity = { queried_paths: [], used_slugs: [] },
       roots = [],
-      signature = "";
+      signature = "",
+      refreshing = false,
+      maxUses = 1,
+      hitIds = new Set(),
+      selectionSequence = 0,
+      detailNode = null;
+    const graph = createGraph(canvasHost, zoom, select, {
+      button,
+      showEdgeLabels: false,
+      onBackground: clearSelection,
+      nodeFill: (n) =>
+        nodeCategory(n) === "raw"
+          ? "#8795a9"
+          : usageColor(n.uses, maxUses, false, nodeHue(n)),
+      nodeRadius: nodeSize,
+      nodeDashed: (n) => n.pending,
+      nodeRegion: (node) =>
+        projectionMode === "hierarchy" ? nodeCategory(node) : null,
+      regionColor: (n) => `hsl(${nodeHue(n)} 45% 78%)`,
+      separated: true,
+      screenSize: true,
+      insetTop: 82,
+      insetBottom: 35,
+      fitPadding: 24,
+      onLasso: (nodes) => {
+        if (!actions.canLeave()) return;
+        invalidateQuery();
+        selection = nodes;
+        selectionTools.hidden = !nodes.length;
+        selectionTools.setAttribute(
+          "aria-label",
+          `已圈选 ${nodes.length} 个节点`,
+        );
+      },
+      nodeTitle: (n) =>
+        `${n.title} · 显式使用 ${n.uses}${n.pending ? " · 待审核" : ""}`,
+      nodeClass: (n) =>
+        [
+          n.pending || n.has_pending ? "pending-node" : "",
+          hitIds.has(n.id) ? "query-hit" : "",
+          activity.queried_paths.includes(n.path) ||
+          activity.used_slugs.includes(
+            n.path?.split("/").pop().replace(/\.md$/, ""),
+          )
+            ? "day-active"
+            : "",
+        ]
+          .filter(Boolean)
+          .join(" "),
+    });
+    dispose = () => graph.destroy();
+    function invalidateQuery() {
+      querySequence++;
+      run.disabled = false;
+      if (info.textContent === "查询中…") info.textContent = "";
+    }
+    function clearSelection(redraw = true) {
+      if (!actions.canLeave()) return false;
+      invalidateQuery();
+      selectionSequence++;
+      detailNode = null;
+      selected = null;
+      aside.hidden = true;
+      aside.replaceChildren();
+      shell.classList.remove("with-detail");
+      if (redraw) paint();
+      return true;
+    }
     function paint() {
+      legend.textContent = `大小 · ${projectionMode === "documents" ? "关联数" : "条目数"}`;
       if (!map) return;
-      selection = []; selectionTools.hidden = true;
-      dispose();
-      const relations = [...map.edges, ...(contexts?.edges || [])];
-      const filtered = filterKnowledge(roots, {categories, state:visibleState, hidden, only});
-      const projection = queryMode
-        ? projectQuery(filtered, hits, relations)
-        : projectKnowledge(filtered, expanded, depth, query, relations);
+      selection = [];
+      selectionTools.hidden = true;
+      const relations = knowledgeRelations(map);
+      const scopeRoots = filterScope
+        ? roots.filter((root) => root.id === filterScope)
+        : roots;
+      const scoped = filterKnowledge(scopeRoots, {
+          categories,
+          state: visibleState,
+          hidden,
+          only,
+        }),
+        hierarchy = filterScope ? scoped : knowledgeOverview(scoped);
+      let projection =
+        projectionMode === "documents"
+          ? projectDocuments(
+              scoped,
+              relations,
+              queryMode ? "" : query,
+              queryMode ? new Set(hits.map((hit) => hit.nodeId)) : null,
+            )
+          : queryMode
+            ? projectQuery(hierarchy, hits, relations)
+            : projectKnowledge(hierarchy, expanded, depth, query, relations);
+      if (
+        localFocus &&
+        !projection.nodes.some((node) => node.id === localFocus)
+      )
+        localFocus = null;
+      if (localFocus) projection = documentNeighborhood(projection, localFocus);
+      localBar.hidden = !localFocus;
+      localTitle.textContent = localFocus
+        ? findNode(roots, localFocus)?.title || ""
+        : "";
       if (selected && !projection.nodes.some((n) => n.id === selected)) {
+        selectionSequence++;
+        detailNode = null;
         selected = null;
         aside.hidden = true;
+        aside.replaceChildren();
         shell.classList.remove("with-detail");
       }
-      const maxUses = Math.max(1, ...projection.nodes.filter(n => !n.children).map((n) => n.uses));
-      dispose = drawGraph(
-        svg,
-        projection.nodes,
-        projection.edges,
-        zoom,
-        select,
-        {
-          button,
-          entry: selected,
-          showEdgeLabels: false,
-          nodeFill: (n) => nodeCategory(n) === 'raw' ? '#d0d6df' : usageColor(n.uses, maxUses, false, nodeHue(n)),
-          nodeRadius: nodeSize,
-          nodeDashed: (n) => n.pending,
-          nodeRegion: nodeCategory,
-          regionColor: (n) => `hsl(${nodeHue(n)} 45% 78%)`,
-          separated: true,
-          screenSize: true,
-          insetTop: 110,
-          insetBottom: 35,
-          onLasso: nodes => {
-            selection = nodes;
-            selectionTools.hidden = !nodes.length;
-            selectionTools.setAttribute('aria-label', `已圈选 ${nodes.length} 个节点`);
-          },
-        },
+      maxUses = Math.max(
+        1,
+        ...projection.nodes.filter((n) => !n.children).map((n) => n.uses),
       );
-      for (const n of svg.querySelectorAll(".studio-node")) {
-        const node = projection.nodes.find((item) => item.id === n.dataset.id);
-        n.querySelector("title").textContent =
-          `${node.title} · 显式使用 ${node.uses}${node.pending ? " · 待审核" : ""}`;
-        n.classList.toggle("selected", node.id === selected);
-        n.classList.toggle("pending-node", node.pending || node.has_pending);
-        n.classList.toggle('day-active', activity.queried_paths.includes(node.path) || activity.used_slugs.includes(node.path?.split('/').pop().replace(/\.md$/,'')));
-        n.classList.toggle(
-          "query-hit",
-          hits.some((h) => h.nodeId === node.id),
-        );
-      }
+      hitIds = new Set(hits.map((hit) => hit.nodeId));
+      graph.update(projection.nodes, projection.edges, { selected });
+      graph.setQuery?.(queryMode ? "" : query);
+      empty.hidden = projection.nodes.length > 0;
+      emptyMessage.textContent = "当前筛选没有 Wiki 文档";
+      retry.hidden = true;
+      summary.textContent = `${projection.nodes.length} ${projectionMode === "documents" ? "份文档" : "个节点"} · ${projection.edges.length} 条关系`;
     }
-    async function select(node) {
-      if (current !== ticket) return;
+    function select(node) {
+      if (current !== ticket || !actions.canLeave()) return false;
+      invalidateQuery();
+      if (localFocus) localFocus = node.id;
+      void showSelection(findNode(roots, node.id) || node);
+      return true;
+    }
+    async function showSelection(node) {
+      const sequence = ++selectionSequence;
+      detailNode = node;
       revealNode(roots, node.id, expanded);
       selected = node.id;
       aside.hidden = false;
       shell.classList.add("with-detail");
       aside.replaceChildren();
       const heading = el("header"),
-        close = button("×", () => {
-          selected = null;
-          aside.hidden = true;
-          shell.classList.remove("with-detail");
-          paint();
-        });
+        close = button("×", clearSelection);
       close.setAttribute("aria-label", "关闭详情");
-      heading.append(el("h2", null, node.title), close);
+      const detailHeading = el("h2", null, node.title);
+      detailHeading.title = node.title;
+      heading.append(detailHeading, close);
       aside.append(heading);
       if (node.children) {
         expanded.has(node.id)
@@ -190,12 +361,6 @@ export function createKnowledgeView({ dom, state, actions, api }) {
         );
         const branchTools = el("div", "branch-tools");
         branchTools.append(
-          button('仅看本区', () => {
-            only = new Set(subtreeIds(findNode(roots,node.id) || node));
-            expanded.add(node.id);
-            queryMode = false; query = ''; search.value = ''; hits = [];
-            paint();
-          }, 'soft'),
           button(
             "展开本区",
             () => {
@@ -205,9 +370,12 @@ export function createKnowledgeView({ dom, state, actions, api }) {
                   n.children.forEach(open);
                 }
               };
+              invalidateQuery();
               queryMode = false;
               query = "";
               search.value = "";
+              hits = [];
+              info.textContent = "";
               open(findNode(roots, node.id) || node);
               paint();
             },
@@ -220,9 +388,12 @@ export function createKnowledgeView({ dom, state, actions, api }) {
                 expanded.delete(n.id);
                 n.children?.forEach(fold);
               };
+              invalidateQuery();
               queryMode = false;
               query = "";
               search.value = "";
+              hits = [];
+              info.textContent = "";
               fold(findNode(roots, node.id) || node);
               paint();
             },
@@ -235,118 +406,127 @@ export function createKnowledgeView({ dom, state, actions, api }) {
             button(child.title, () => select(child), "knowledge-child"),
           );
       } else {
-        aside.append(
-          el(
-            "div",
-            "detail-meta",
-            [
-              node.pending
-                ? "待审核"
-                : node.type === "skill"
-                  ? "Skill"
-                  : {
-                      profile: "画像",
-                      project: "项目",
-                      goal: "目标",
-                      discuss: "讨论",
-                      team: "团队",
-                      mail: "交接",
-                    }[node.type] ||
-                    node.review?.label ||
-                    "Wiki",
-              `显式使用 ${node.uses}`,
-            ].join(" · "),
+        const documentTools = el("div", "branch-tools");
+        documentTools.append(
+          button(
+            "只看直接关联",
+            () => {
+              if (!actions.canLeave()) return;
+              projectionMode = "documents";
+              mode.value = projectionMode;
+              query = search.value = "";
+              queryMode = false;
+              hits = [];
+              info.textContent = "";
+              localFocus = node.id;
+              paint();
+              graph.fit();
+            },
+            "soft",
           ),
+        );
+        const label = el("p", "knowledge-kind", node.review?.label || "Wiki");
+        const body = el("article", "knowledge-body markdown-body");
+        body.setAttribute("aria-label", "文档正文");
+        body.textContent = "正在读取正文…";
+        const metadata = el("details", "node-attributes");
+        metadata.append(
+          el("summary", null, "文件信息"),
           el("code", "detail-path", node.path),
         );
+        if (node.uses)
+          metadata.append(el("span", "detail-meta", `显式使用 ${node.uses}`));
         if (node.tags?.length)
-          aside.append(el("div", "detail-meta", node.tags.join(" · ")));
-        const body = el("pre", "knowledge-body", node.body || "");
-        if (node.type === "skill") {
+          metadata.append(el("span", "detail-meta", node.tags.join(" · ")));
+        for (const [key, value] of Object.entries(
+          node.metadata || node.governance || {},
+        )) {
+          const row = el("div", "attribute-row");
+          row.append(el("span", null, key), el("span", null, String(value)));
+          metadata.append(row);
+        }
+        const links = el("div", "knowledge-reading-links");
+        for (const [url, title] of [
+          [node.url, "来源"],
+          [node.evidence_url, "依据"],
+          [node.approval_url, "审核记录"],
+        ]) {
+          if (!url) continue;
+          const link = el("a", null, title);
+          link.href = url;
+          link.target = "_blank";
+          link.rel = "noopener noreferrer";
+          links.append(link);
+        }
+        // Reading leads; graph actions and file internals remain secondary.
+        aside.append(label, body, links, metadata, documentTools);
+        const active = () =>
+          current === ticket &&
+          sequence === selectionSequence &&
+          selected === node.id;
+        const loadBody = async () => {
+          body.textContent = "正在读取正文…";
           try {
             const file = await api.request(
-              "/api/studio/file?" + new URLSearchParams({ path: node.path }),
+              "/api/mail/memory/item?" +
+                new URLSearchParams({ path: node.path, full: "1" }),
             );
-            if (current === ticket && selected === node.id)
-              body.textContent = file.text;
+            if (!active()) return;
+            if (typeof file.body_html !== "string")
+              throw Error("正文格式不完整，请重试");
+            body.innerHTML = file.body_html;
+            const first = body.firstElementChild;
+            if (
+              /^H[1-6]$/.test(first?.tagName) &&
+              first.textContent.trim() === node.title.trim()
+            )
+              first.remove();
+            if (!file.body?.trim())
+              body.append(el("p", "detail-meta", "这篇 Wiki 暂无正文。"));
+            if (file.truncated)
+              body.append(
+                el("p", "detail-meta", "正文超出读取上限，当前显示部分内容。"),
+              );
           } catch (error) {
-            actions.status(error.message);
+            if (!active()) return;
+            body.replaceChildren(
+              el("p", null, "正文读取失败：" + error.message),
+              button("重试", loadBody, "soft"),
+            );
           }
-        }
-        if (node.url) {
-          const link = el('a', 'detail-meta', '来源 ↗');
-          link.href = node.url; link.target = '_blank'; link.rel = 'noopener noreferrer'; aside.append(link);
-        }
-        for (const [url, label] of [[node.evidence_url, '证据 ↗'], [node.approval_url, '审核 ↗']]) {
-          if (!url) continue;
-          const link = el('a', 'detail-meta', label); link.href = url; link.target = '_blank'; link.rel = 'noopener noreferrer'; aside.append(link);
-        }
-        if (node.pending && node.type !== 'team') {
-          aside.append(
-            button(
-              "审核",
-              () => {
-                aside.replaceChildren(heading);
-                const frame = el("iframe", "knowledge-review");
-                frame.title = "审核 " + node.title;
-                frame.src =
-                  "/review?panel=1&detail=1&draft=" +
-                  encodeURIComponent(node.path);
-                aside.append(frame);
-              },
-              "soft",
-            ),
-          );
-        }
-        aside.append(body);
-        if (['goal','skill','discuss'].includes(node.type)) {
-          const flow = el('details','knowledge-workflow');
-          const content = el('div');
-          flow.append(el('summary',null,'流程与执行'),content);
-          let loaded = false;
-          flow.ontoggle = () => {
-            if (!flow.open || loaded) return;
-            loaded = true;
-            showWorkflow(content,node,{el,button,api,active:()=>current===ticket && selected===node.id});
-          };
-          body.before(flow);
-        }
-        if (node.metadata || node.governance) {
-          const attrs = el("details", "node-attributes");
-          attrs.append(el("summary", null, "属性"));
-          for (const [key, value] of Object.entries(
-            node.metadata || node.governance,
-          )) {
-            const row = el("div", "attribute-row");
-            row.append(el("span", null, key), el("span", null, String(value)));
-            attrs.append(row);
-          }
-          aside.append(attrs);
-        }
-        if (node.body_truncated)
-          aside.append(el("small", "detail-meta", "正文已截断"));
+        };
+        await loadBody();
+        if (!active()) return;
         if (current !== ticket) return;
-        const related = (node.relations || []).filter((item) => item.resolved);
+        const neighborIds = new Set();
+        for (const edge of knowledgeRelations(map)) {
+          if (edge.type === "shared_tag") continue;
+          if (edge.a === node.id) neighborIds.add(edge.b);
+          if (edge.b === node.id) neighborIds.add(edge.a);
+        }
+        const related = [...neighborIds]
+          .map((id) => findNode(roots, id))
+          .filter(Boolean);
         if (related.length) {
-          aside.append(el("div", "detail-meta", "关联"));
-          for (const relation of related) {
-            const other = map.domains
-              .flatMap((d) => d.clusters.flatMap((c) => c.points))
-              .find((p) => p.id === relation.target_id);
+          aside.append(
+            el("div", "detail-meta", `直接关联 · ${related.length}`),
+          );
+          for (const other of related) {
             if (other)
               aside.append(
                 button(
                   other.title,
                   () => {
-                    const find = (items) => {
-                      for (const item of items) {
-                        if (item.id === other.id) return item;
-                        const found = item.children && find(item.children);
-                        if (found) return found;
-                      }
-                    };
-                    const target = find(roots);
-                    if (target) select(target);
+                    if (!actions.canLeave()) return;
+                    query = search.value = "";
+                    queryMode = false;
+                    hits = [];
+                    filterScope = sourceFilter.value = "";
+                    visibleState = stateFilter.value = "all";
+                    projectionMode = mode.value = "documents";
+                    only = null;
+                    hidden.delete(other.id);
+                    select(other);
                   },
                   "knowledge-child",
                 ),
@@ -357,8 +537,13 @@ export function createKnowledgeView({ dom, state, actions, api }) {
       paint();
     }
     search.oninput = () => {
-      querySequence++;
+      if (!actions.canLeave()) {
+        search.value = query;
+        return;
+      }
+      invalidateQuery();
       query = search.value;
+      localFocus = null;
       queryMode = false;
       hits = [];
       info.textContent = "";
@@ -371,6 +556,7 @@ export function createKnowledgeView({ dom, state, actions, api }) {
       }
     };
     async function runQuery() {
+      if (!actions.canLeave()) return;
       const text = search.value.trim();
       if (!text) return;
       const sequence = ++querySequence,
@@ -383,9 +569,18 @@ export function createKnowledgeView({ dom, state, actions, api }) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ query: text }),
         });
-        if (current !== ticket || sequence !== querySequence) return;
-        hits = mapQueryHits(roots, [...(result.knowledge || []), ...(result.team_knowledge || [])]);
+        if (
+          current !== ticket ||
+          sequence !== querySequence ||
+          !actions.canLeave()
+        )
+          return;
+        hits = mapQueryHits(roots, [
+          ...(result.knowledge || []),
+          ...(result.team_knowledge || []),
+        ]);
         queryMode = true;
+        localFocus = null;
         for (const hit of hits)
           if (hit.nodeId) revealNode(roots, hit.nodeId, expanded);
         selected = null;
@@ -393,10 +588,7 @@ export function createKnowledgeView({ dom, state, actions, api }) {
         shell.classList.add("with-detail");
         aside.replaceChildren();
         const header = el("header");
-        const close = button("×", () => {
-          aside.hidden = true;
-          shell.classList.remove("with-detail");
-        });
+        const close = button("×", clearSelection);
         close.setAttribute("aria-label", "关闭详情");
         header.append(el("h2", null, text), close);
         aside.append(header);
@@ -407,7 +599,8 @@ export function createKnowledgeView({ dom, state, actions, api }) {
         aside.append(
           el("div", "detail-meta", `${backend} · ${elapsed} ms（请求往返）`),
         );
-        if (result.diagnostics?.call_trace) aside.append(callTimeline(dom, result.diagnostics.call_trace));
+        if (result.diagnostics?.call_trace)
+          aside.append(callTimeline(dom, result.diagnostics.call_trace));
         for (const hit of hits) {
           const row = button(
             hit.title || hit.slug,
@@ -436,22 +629,26 @@ export function createKnowledgeView({ dom, state, actions, api }) {
         aside.append(diagnostics);
         paint();
       } catch (error) {
-        if (current === ticket) {
+        if (current === ticket && sequence === querySequence) {
           info.textContent = "查询失败";
           actions.status(error.message);
         }
       } finally {
-        if (current === ticket) run.disabled = false;
+        if (current === ticket && sequence === querySequence)
+          run.disabled = false;
       }
     }
     async function refresh() {
+      if (refreshing) return;
+      refreshing = true;
       try {
         const result = await Promise.all([
           api.request("/api/mail/knowledge-map"),
           api.request("/api/studio/usage"),
-          api.request("/api/studio/skills"),
-          api.request("/api/studio/contexts"),
-          api.request("/api/studio/activity?" + new URLSearchParams({date:state.date})),
+          api.request(
+            "/api/studio/activity?" +
+              new URLSearchParams({ date: state.date || "" }),
+          ),
         ]);
         if (
           current !== ticket ||
@@ -460,20 +657,59 @@ export function createKnowledgeView({ dom, state, actions, api }) {
         )
           return;
         const next = JSON.stringify(result);
-        if (next === signature) return;
-        signature = next;
-        [map, usage, skills, contexts, activity] = result;
-        roots = knowledgeOverview(knowledgeTree(map, usage, skills, contexts));
-        paint();
-        const warnings = [
-          ...(usage.warnings || []),
-          ...(skills.warnings || []),
-          ...(contexts.warnings || []),
-        ];
-        if (map.scope?.truncated) warnings.push("图谱已达读取上限");
-        if (warnings.length) actions.status(warnings.join("；"));
+        if (next !== signature) {
+          signature = next;
+          if (!map) for (const input of inputs) input.disabled = false;
+          [map, usage, activity] = result;
+          const wikiMap = {
+            ...map,
+            domains: map.domains
+              .map((domain) => ({
+                ...domain,
+                clusters: domain.clusters
+                  .map((cluster) => ({
+                    ...cluster,
+                    points: cluster.points.filter((point) =>
+                      point.path?.startsWith("wiki/"),
+                    ),
+                  }))
+                  .filter((cluster) => cluster.points.length),
+              }))
+              .filter((domain) => domain.clusters.length),
+            materials: (map.materials || []).filter((point) =>
+              point.path?.startsWith("wiki/"),
+            ),
+          };
+          roots = knowledgeTree(wikiMap, usage, { skills: [] });
+          const all = el("option", null, "全部 Wiki 分类");
+          all.value = "";
+          sourceFilter.replaceChildren(all);
+          for (const root of roots) {
+            const option = el("option", null, root.title);
+            option.value = root.id;
+            sourceFilter.append(option);
+          }
+          if (!roots.some((root) => root.id === filterScope)) filterScope = "";
+          sourceFilter.value = filterScope;
+          paint();
+          const warnings = [...(map.warnings || []), ...(usage.warnings || [])];
+          if (map.scope?.truncated) warnings.push("图谱已达读取上限");
+          if (warnings.length) actions.status(warnings.join("；"));
+        }
+        const node = selected && findNode(roots, selected);
+        if (node && !node.children && node !== detailNode && !state.saving) {
+          void showSelection(node);
+        }
       } catch (error) {
-        if (current === ticket) actions.status(error.message);
+        if (current === ticket) {
+          actions.status(error.message);
+          if (!map) {
+            emptyMessage.textContent = "图谱读取失败";
+            retry.hidden = false;
+          }
+        }
+      } finally {
+        refreshing = false;
       }
     }
     await refresh();

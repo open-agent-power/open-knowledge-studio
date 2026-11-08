@@ -5,49 +5,234 @@
   border: 1px solid var(--line);
   border-radius: 9px;
   overflow: hidden;
-  background: radial-gradient(#e0e5ef 0.6px, transparent 0.6px);
-  background-size: 19px 19px;
+  background: var(--surface);
 }
-.graph-stage svg {
-  display: block;
+.graph-canvas-host {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+.graph-canvas-host canvas {
+  display: block;
   touch-action: none;
 }
-.studio-node {
-  cursor: grab;
-  outline: none;
+.graph-node-list {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
 }
-.studio-node:focus circle {
-  stroke: #506cac;
-  stroke-width: 2;
+.graph-node-list:focus-within {
+  top: 60px;
+  left: 12px;
+  width: min(300px, calc(100% - 24px));
+  height: auto;
+  max-height: calc(100% - 120px);
+  overflow: auto;
+  clip-path: none;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fffffff2;
 }
-.studio-node text {
-  fill: #8795ac;
-  font-size: 10px;
-  pointer-events: auto;
-  cursor: pointer;
+.graph-node-proxy {
+  display: block;
+  width: 100%;
+  padding: 7px 9px;
+  text-align: left;
+  overflow-wrap: anywhere;
 }
-.edge-label {
-  fill: #aeb9ca;
-  font-size: 8px;
-  pointer-events: none;
+.graph-node-proxy:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
-.graph-tools {
+.graph-node-proxy[aria-pressed="true"] {
+  color: var(--accent);
+  font-weight: 600;
+}
+.graph-tools,
+.replay-tools {
   position: absolute;
   bottom: 12px;
   display: flex;
   align-items: center;
-  gap: 9px;
-  background: #ffffffed;
+  gap: 6px;
+  max-width: calc(100% - 24px);
+  background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 6px;
+  padding: 5px;
+  color: var(--ink);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.graph-navigation {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.graph-tools > button,
+.graph-navigation > button,
+.graph-settings > summary {
+  min-width: 32px;
+  min-height: 32px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  box-sizing: border-box;
+  padding: 6px;
+}
+.graph-navigation > button,
+.graph-settings > summary {
+  width: 32px;
+  height: 32px;
+}
+.graph-navigation > button {
+  border-radius: 4px;
+}
+.graph-navigation > button:hover,
+.graph-settings > summary:hover {
+  background: var(--soft);
+}
+.graph-settings {
+  position: relative;
+}
+.graph-settings > summary {
+  list-style: none;
+  border-radius: 4px;
+}
+.graph-settings > summary::-webkit-details-marker {
+  display: none;
+}
+.graph-settings[open] > summary {
+  background: var(--soft);
+}
+.graph-settings-body {
+  position: absolute;
+  z-index: 5;
+  bottom: calc(100% + 12px);
+  right: 0;
+  width: 270px;
+  max-width: calc(100vw - 48px);
+  max-height: min(520px, 65vh);
+  overflow: auto;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface);
+  font-size: 12px;
+  box-sizing: border-box;
+}
+.graph-settings-body > strong {
+  display: block;
+  font-size: 12px;
+  margin-bottom: 10px;
+}
+.graph-settings-body > strong:not(:first-child) {
+  margin-top: 18px;
+}
+.graph-settings-body > button {
   padding: 7px 10px;
-  color: #91a0bb;
-  font-size: 10px;
+  margin-top: 8px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+.graph-settings-body h3 {
+  margin: 14px 0 10px;
+  font-size: 12px;
+}
+.graph-settings-body h3:first-child {
+  margin-top: 0;
+}
+.graph-setting-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 10px 0;
+}
+.graph-setting-row input[type="range"] {
+  min-width: 0;
+  width: 100px;
+  flex: 1;
+  accent-color: var(--accent);
+}
+.graph-setting-row input[type="checkbox"] {
+  margin-left: auto;
+  accent-color: var(--accent);
+}
+.graph-setting-row output {
+  min-width: 32px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.graph-summary {
+  position: absolute;
+  bottom: 20px;
+  left: 16px;
+  color: var(--ink);
+  font-size: 12px;
+  pointer-events: none;
+}
+.graph-empty {
+  position: absolute;
+  inset: 40% 20px auto;
+  text-align: center;
+  color: var(--ink);
+  font-size: 13px;
+  pointer-events: none;
+}
+.graph-empty p {
+  margin: 0 0 10px;
+}
+.graph-empty button {
+  pointer-events: auto;
+  padding: 7px 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+.graph-empty[hidden] {
+  display: none;
+}
+.graph-error {
+  position: absolute;
+  z-index: 2;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(420px, calc(100% - 40px));
+  box-sizing: border-box;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--soft);
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.graph-error[hidden] {
+  display: none;
 }
 .graph-tools {
   right: 12px;
+}
+.replay-tools {
+  left: 12px;
+}
+.replay-tools input {
+  width: 95px;
+  accent-color: #8a9dcc;
+}
+.replay-tools select {
+  background: none;
+  border: 0;
+  font-size: 12px;
 }
 .graph-note {
   position: absolute;
@@ -60,12 +245,29 @@
   position: absolute;
   top: 14px;
   right: 14px;
-  background: #fffffff2;
+  background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 7px;
   padding: 13px;
   max-width: 320px;
+  max-height: calc(100% - 90px);
+  overflow-y: auto;
   line-height: 1.8;
+}
+.graph-detail header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+.graph-detail header button {
+  margin: 0;
+  padding: 0 4px;
+  font-size: 18px;
+  line-height: 1.2;
+}
+.graph-detail[hidden] {
+  display: none;
 }
 .graph-detail p {
   margin: 5px 0;
@@ -82,6 +284,57 @@
   font-size: 10px;
   color: var(--accent);
 }
+.discussion-context {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  right: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+}
+.discussion-filter {
+  padding: 6px 9px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 12px;
+}
+.discussion-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--ink);
+  font-size: 11px;
+}
+.discussion-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+.discussion-dot {
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+  border-radius: 50%;
+}
+.graph-node-role {
+  display: block;
+  margin: 5px 0;
+  color: var(--ink);
+  font-size: 11px;
+}
+.discussion-stage .graph-detail {
+  top: 80px;
+  max-height: calc(100% - 160px);
+  box-sizing: border-box;
+}
 .legend {
   display: flex;
   gap: 17px;
@@ -89,3 +342,1179 @@
   font-size: 10px;
   color: #9ba8bd;
 }
+@media (max-width: 650px) {
+  .graph-tools {
+    bottom: 10px;
+    right: 10px;
+    gap: 2px;
+  }
+  .graph-summary {
+    bottom: 58px;
+    left: 12px;
+    font-size: 11px;
+  }
+  .knowledge-map .knowledge-key {
+    bottom: 58px;
+    max-width: calc(100% - 24px);
+  }
+  .knowledge-map .graph-summary {
+    bottom: 90px;
+  }
+  .replay-tools {
+    bottom: 56px;
+    left: 10px;
+    gap: 3px;
+  }
+  .replay-tools input {
+    width: 62px;
+  }
+  .graph-detail {
+    top: 10px;
+    right: 10px;
+    left: 10px;
+    max-width: none;
+    max-height: 42%;
+  }
+  .discussion-context {
+    top: 10px;
+    left: 10px;
+    right: 10px;
+    gap: 8px;
+  }
+  .discussion-legend {
+    gap: 6px 10px;
+  }
+  .discussion-stage .graph-detail {
+    top: 90px;
+    max-height: calc(100% - 180px);
+  }
+  .graph-settings-body {
+    width: 250px;
+  }
+}
+
+.communication-workspace {
+  display: grid;
+  grid-template-columns: minmax(230px, 0.75fr) minmax(0, 1.5fr);
+  height: calc(100vh - 183px);
+  min-height: 400px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface);
+}
+.communication-workspace[data-thread-open="false"] {
+  grid-template-columns: minmax(0, 1fr);
+}
+.communication-workspace[data-thread-open="false"] .communication-thread {
+  display: none;
+}
+.communication-list {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  border-right: 1px solid var(--line);
+}
+.communication-list-heading,
+.communication-thread-heading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.communication-list-heading {
+  padding: 14px 16px 8px;
+}
+.communication-list-heading h2,
+.communication-thread-heading h2,
+.communication-compose h2 {
+  margin: 0;
+  flex: 1;
+  font-size: 16px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.communication-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 16px;
+}
+.communication-tools input {
+  width: 100%;
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+.communication-access,
+.communication-count,
+.communication-meta {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.communication-access {
+  padding: 0 16px;
+}
+.communication-access p {
+  margin: 4px 0;
+}
+.communication-entries {
+  min-height: 0;
+  overflow: auto;
+  padding: 4px 0 16px;
+}
+.communication-count {
+  padding: 0 16px;
+}
+.communication-row {
+  display: block;
+  width: 100%;
+  padding: 13px 16px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.communication-row:hover,
+.communication-row[aria-pressed="true"] {
+  background: var(--soft);
+}
+.communication-row p {
+  margin: 6px 0;
+  line-height: 1.7;
+}
+.communication-row small {
+  color: var(--muted);
+  line-height: 1.6;
+}
+.communication-state,
+.communication-guide {
+  padding: 14px 16px;
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+}
+.communication-guide summary {
+  cursor: pointer;
+  color: var(--accent);
+}
+.communication-more {
+  margin: 14px 16px 0;
+}
+.communication-thread {
+  min-width: 0;
+  overflow: auto;
+  padding: 20px;
+}
+.communication-back {
+  display: none;
+}
+.communication-message {
+  padding: 20px 0;
+  border-bottom: 1px solid var(--line);
+  overflow-wrap: anywhere;
+}
+.communication-message-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px 12px;
+}
+.communication-message-meta span,
+.communication-message-meta time {
+  font-size: 12px;
+  color: var(--muted);
+}
+.communication-body {
+  line-height: 1.8;
+}
+.communication-body[data-review-message="true"] {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.communication-body pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.communication-body img {
+  max-width: 100%;
+  height: auto;
+}
+.communication-parent {
+  padding: 8px 0;
+  text-align: left;
+  color: var(--accent);
+}
+.communication-receipts {
+  margin-top: 12px;
+  font-size: 12px;
+  line-height: 1.8;
+}
+.communication-receipts summary {
+  cursor: pointer;
+  color: var(--accent);
+}
+.communication-receipt {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 12px;
+  padding: 10px 0;
+}
+.communication-receipt small {
+  width: 100%;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.communication-compose,
+.communication-compose label {
+  display: grid;
+  gap: 10px;
+}
+.communication-compose {
+  gap: 18px;
+}
+.communication-compose input,
+.communication-compose textarea {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+.communication-compose textarea {
+  min-height: 220px;
+  line-height: 1.8;
+  resize: vertical;
+}
+.communication-compose-actions {
+  display: flex;
+  gap: 10px;
+}
+.communication-error {
+  margin: 0;
+  color: var(--amber);
+  line-height: 1.7;
+}
+.discussion-document-dialog {
+  width: min(960px, calc(100vw - 48px));
+  max-width: none;
+  height: calc(100dvh - 48px);
+  max-height: none;
+  padding: 0;
+  color: var(--ink);
+  overflow: hidden;
+}
+.discussion-document-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+.discussion-document-header {
+  flex: 0 0 auto;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--line);
+}
+.discussion-document-header h2 {
+  margin: 0;
+  min-width: 0;
+  font-size: 16px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.discussion-document-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.discussion-document-dialog .discussion-document-tools button,
+.discussion-document-dialog .discussion-comment-controls button {
+  padding: 7px 10px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.discussion-document-feedback {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 10px 24px;
+  font-size: 13px;
+  color: var(--amber);
+  border-bottom: 1px solid var(--line);
+}
+.discussion-document-feedback:empty {
+  display: none;
+}
+.discussion-document-layout {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+.discussion-document-navigation {
+  display: flex;
+  gap: 8px;
+  margin: 0 auto 16px;
+  max-width: 72ch;
+  overflow: auto;
+}
+.discussion-document-chapter {
+  flex: 0 0 auto;
+  max-width: 240px;
+  padding: 7px 10px;
+  text-align: left;
+  font-size: 12px;
+  line-height: 1.6;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.discussion-document-chapter[aria-current="true"] {
+  background: var(--soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+.discussion-document-main {
+  padding: 20px 24px 40px;
+  min-width: 0;
+}
+.discussion-document-body,
+.discussion-document-source,
+.discussion-document-edit,
+.discussion-document-review,
+.discussion-process-panel,
+.discussion-document-thread {
+  max-width: 72ch;
+  margin: 0 auto;
+}
+.discussion-document-body {
+  font-size: 15px;
+  line-height: 1.85;
+}
+.discussion-document-section {
+  padding: 12px 14px 20px;
+  margin-bottom: 20px;
+  border: 1px solid transparent;
+  scroll-margin-top: 12px;
+  overflow-wrap: anywhere;
+}
+.discussion-document-section[data-selected="true"] {
+  border-color: var(--line);
+}
+.discussion-document-section h1,
+.discussion-document-section h2,
+.discussion-document-section h3 {
+  margin: 20px 0 12px;
+  line-height: 1.4;
+  color: var(--ink);
+}
+.discussion-document-section h1 {
+  font-size: 25px;
+}
+.discussion-document-section h2 {
+  font-size: 21px;
+}
+.discussion-document-section h3 {
+  font-size: 17px;
+}
+.discussion-document-section > :first-child {
+  margin-top: 0;
+}
+.discussion-document-section p {
+  margin: 0 0 14px;
+}
+.discussion-document-section ul,
+.discussion-document-section ol {
+  padding-left: 24px;
+}
+.discussion-document-section a {
+  color: var(--accent);
+  text-underline-offset: 3px;
+}
+.discussion-document-section img {
+  max-width: 100%;
+  height: auto;
+}
+.discussion-document-section table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+}
+.discussion-document-section td,
+.discussion-document-section th {
+  padding: 8px;
+  border: 1px solid var(--line);
+}
+.discussion-document-section blockquote {
+  margin: 16px 0;
+  padding-left: 14px;
+  border-left: 1px solid var(--line);
+}
+.discussion-document-dialog .discussion-document-section pre,
+.discussion-document-dialog .discussion-document-source pre {
+  max-height: none;
+  color: var(--ink);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font:
+    12px/1.8 ui-monospace,
+    monospace;
+}
+.discussion-document-comment-link {
+  padding: 5px 0;
+  font-size: 12px;
+  color: var(--accent);
+}
+.discussion-document-source,
+.discussion-document-review {
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+  font-size: 12px;
+}
+.discussion-document-source > summary,
+.discussion-document-review > summary {
+  cursor: pointer;
+  color: var(--accent);
+}
+.discussion-document-dialog .discussion-document-edit textarea {
+  display: block;
+  min-height: 55vh;
+  resize: vertical;
+  margin-bottom: 12px;
+  font:
+    13px/1.85 ui-monospace,
+    monospace;
+  color: var(--ink);
+  caret-color: var(--accent);
+}
+.discussion-document-thread {
+  padding: 20px 0 8px;
+  min-width: 0;
+  border-top: 1px solid var(--line);
+}
+.discussion-process-chain {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  padding: 20px 32px;
+  border-bottom: 1px solid var(--line);
+}
+.discussion-process-node {
+  position: relative;
+  flex: 1;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 14px;
+  background: var(--surface);
+}
+.discussion-process-node + .discussion-process-node {
+  margin-left: 32px;
+}
+.discussion-process-node + .discussion-process-node::before {
+  content: "";
+  position: absolute;
+  width: 32px;
+  height: 1px;
+  background: var(--line);
+  left: -33px;
+  top: 50%;
+}
+.discussion-process-node + .discussion-process-node::after {
+  content: "";
+  position: absolute;
+  width: 5px;
+  height: 5px;
+  border-top: 1px solid var(--muted);
+  border-right: 1px solid var(--muted);
+  left: -9px;
+  top: calc(50% - 3px);
+  transform: rotate(45deg);
+}
+.discussion-process-node[aria-current="step"] {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--soft);
+  font-weight: 600;
+}
+.discussion-process-panel {
+  padding-bottom: 24px;
+  line-height: 1.8;
+  font-size: 15px;
+}
+.discussion-process-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 12px;
+  margin-top: 20px;
+}
+.discussion-process-heading h3 {
+  margin: 0 0 8px;
+  font-size: 17px;
+}
+.discussion-process-runtime {
+  margin: 8px 0;
+  font-size: 12px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.discussion-process-panel select,
+.discussion-review-inline select {
+  width: 100%;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--ink);
+  background: var(--surface);
+  font: inherit;
+}
+.discussion-process-artifact {
+  margin: 24px 0;
+}
+.discussion-process-artifact h4 {
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+.discussion-document-dialog .discussion-process-artifact pre {
+  max-height: none;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
+  color: var(--ink);
+}
+.discussion-process-artifact img {
+  max-width: 100%;
+  height: auto;
+}
+.discussion-process-artifact details {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+  color: var(--muted);
+}
+.discussion-process-status {
+  font-size: 13px;
+  color: var(--muted);
+}
+.discussion-document-review {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+  padding-bottom: 24px;
+  font-size: 15px;
+}
+.discussion-document-review > summary {
+  display: none;
+}
+.discussion-document-review .discussion-review-inline {
+  margin-top: 0;
+  border-top: 0;
+  font-size: 15px;
+  line-height: 1.85;
+}
+.discussion-review-inline .discussion-review-content {
+  padding: 20px 0 0;
+}
+.discussion-review-inline > .discussion-review-heading,
+.discussion-review-inline .discussion-review-item-title,
+.discussion-review-inline .discussion-review-item-state,
+.discussion-review-inline .discussion-review-source > summary {
+  display: none;
+}
+.discussion-review-inline .discussion-review-request {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 16px;
+  margin: 0 0 16px;
+  padding: 0;
+  border: 0;
+}
+.discussion-review-inline .discussion-review-request p,
+.discussion-review-inline .discussion-review-request a {
+  margin: 0;
+  font-size: 12px;
+}
+.discussion-review-inline .discussion-review-request-status {
+  font-weight: 400;
+}
+.discussion-document-dialog
+  .discussion-review-inline
+  .discussion-review-original {
+  max-height: none;
+  font: inherit;
+  line-height: 1.85;
+  white-space: normal;
+}
+.discussion-review-inline .discussion-review-original img {
+  max-width: 100%;
+  height: auto;
+}
+.discussion-review-inline .discussion-review-original ul {
+  padding-left: 24px;
+}
+.discussion-review-inline .discussion-review-item-title {
+  font-size: 18px;
+  line-height: 1.6;
+}
+.discussion-review-inline .discussion-review-result h4 {
+  font-size: 14px;
+}
+.discussion-document-thread {
+  font-size: 15px;
+}
+.discussion-comments h3 {
+  margin: 0 0 6px;
+  font-size: 15px;
+}
+.discussion-comment-position,
+.discussion-comment-note,
+.discussion-comment-agent {
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--muted);
+}
+.discussion-comment {
+  padding: 16px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 14px;
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+}
+.discussion-comment-text {
+  white-space: pre-wrap;
+  margin: 10px 0;
+}
+.discussion-comment-reply {
+  margin: 12px 0 0;
+  padding-left: 14px;
+  border-left: 1px solid var(--line);
+}
+.discussion-comment-delivery {
+  margin: 8px 0;
+  font-size: 12px;
+  color: var(--accent);
+}
+.discussion-comment-delivery[data-state="failed"],
+.discussion-comment-delivery[data-state="needs_info"],
+.discussion-comment-feedback,
+.discussion-comment-read-error {
+  color: var(--amber);
+  font-size: 12px;
+}
+.discussion-comment-thread {
+  font-size: 12px;
+}
+.discussion-comment-changed {
+  font-size: 12px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.discussion-document-dialog .discussion-comment-form {
+  margin-top: 16px;
+  padding: 0;
+  border: 0;
+}
+.discussion-document-dialog .discussion-comment-form label {
+  margin: 12px 0 0;
+  font-size: 13px;
+}
+.discussion-document-dialog .discussion-comment-form textarea {
+  min-height: 110px;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.8;
+  color: var(--ink);
+}
+.discussion-comment-form select {
+  display: block;
+  width: 100%;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+}
+.discussion-comment-form input[type="file"] {
+  max-width: 100%;
+  min-width: 0;
+  padding: 6px 0;
+  font-size: 12px;
+  border: 0;
+}
+.discussion-document-dialog .discussion-comment-allow-edit {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.discussion-document-dialog .discussion-comment-allow-edit input {
+  width: auto;
+  margin: 3px 0 0;
+}
+.discussion-comment-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+.discussion-comment-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+.discussion-comment-footer .discussion-comment-agent {
+  flex: 1;
+  margin: 0;
+}
+.discussion-comment-footer .discussion-comment-controls {
+  margin: 0;
+}
+.discussion-comment-footer .discussion-comment-attachments {
+  font-size: 12px;
+}
+.discussion-comment-image {
+  margin: 14px 0;
+  max-width: 100%;
+}
+.discussion-comment-image img {
+  display: block;
+  max-width: 100%;
+  max-height: 240px;
+  object-fit: contain;
+}
+.discussion-comment-image figcaption {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.discussion-comment-feedback:empty,
+.discussion-comment-read-error:empty {
+  display: none;
+}
+.discussion-document-dialog button:focus-visible,
+.discussion-document-dialog summary:focus-visible,
+.discussion-document-dialog textarea:focus-visible,
+.discussion-document-dialog select:focus-visible,
+.discussion-document-dialog input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+@media (max-width: 700px) {
+  .discussion-document-dialog {
+    width: calc(100vw - 16px);
+    height: calc(100dvh - 16px);
+    margin: 8px;
+  }
+  .discussion-document-header {
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 14px 16px;
+  }
+  .discussion-document-header h2 {
+    width: 100%;
+  }
+  .discussion-document-layout {
+    display: block;
+    overflow: auto;
+  }
+  .discussion-document-main {
+    padding: 16px 12px 28px;
+    overflow: visible;
+  }
+  .discussion-document-body {
+    font-size: 14px;
+  }
+  .discussion-document-section {
+    padding: 8px 6px 16px;
+  }
+  .discussion-document-thread {
+    padding: 20px 6px 24px;
+  }
+  .discussion-process-chain {
+    padding: 16px;
+  }
+  .discussion-process-node {
+    padding: 9px 4px;
+    font-size: 13px;
+  }
+  .discussion-process-node + .discussion-process-node {
+    margin-left: 20px;
+  }
+  .discussion-process-node + .discussion-process-node::before {
+    width: 20px;
+    left: -21px;
+  }
+  .discussion-document-feedback {
+    padding: 10px 16px;
+  }
+}
+.discussion-review {
+  min-width: 0;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+  font-size: 12px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.discussion-review-heading,
+.discussion-review-tools,
+.discussion-review-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.discussion-review-heading {
+  justify-content: space-between;
+}
+.discussion-review-heading h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+.discussion-review-count,
+.discussion-review-note,
+.discussion-review-position {
+  color: var(--muted);
+  font-size: 12px;
+}
+.discussion-review-tools {
+  margin: 8px 0;
+}
+.discussion-review-tools > label,
+.discussion-review-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.discussion-review-tools > label {
+  flex: 1 1 100%;
+}
+.discussion-review select {
+  min-width: 0;
+  max-width: 100%;
+  flex: 1;
+  border: 1px solid var(--line);
+  padding: 7px;
+  color: var(--ink);
+  background: var(--surface);
+  font: inherit;
+}
+.discussion-review-filter {
+  margin-top: 14px;
+}
+.discussion-review-request {
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.discussion-review-request:empty {
+  display: none;
+}
+.discussion-review-request-status {
+  font-weight: 600;
+}
+.discussion-review-request[data-state="stale"]
+  .discussion-review-request-status {
+  color: var(--amber);
+}
+.discussion-review-thread {
+  display: inline-block;
+  margin-top: 5px;
+}
+.discussion-review-list {
+  max-height: 160px;
+  overflow: auto;
+  margin: 12px 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.discussion-review .discussion-review-row {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  width: 100%;
+  margin: 0;
+  padding: 9px 6px;
+  gap: 8px;
+  text-align: left;
+  color: var(--ink);
+  font-size: 12px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.discussion-review-row:hover,
+.discussion-review-row[aria-pressed="true"] {
+  background: var(--soft);
+}
+.discussion-review-state {
+  color: var(--accent);
+}
+.discussion-review-row[data-state="disputed"] .discussion-review-state,
+.discussion-review-row[data-state="needs_info"] .discussion-review-state {
+  color: var(--amber);
+}
+.discussion-review-result {
+  padding: 12px 0;
+  border-top: 1px solid var(--line);
+}
+.discussion-review-result h4 {
+  margin: 12px 0 6px;
+  font-size: 12px;
+}
+.discussion-review-reason,
+.discussion-review-origin pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.discussion-review-evidence {
+  margin: 6px 0 12px;
+  padding-left: 18px;
+}
+.discussion-review-evidence li {
+  margin: 6px 0;
+}
+.discussion-review-origin summary {
+  cursor: pointer;
+  color: var(--accent);
+}
+.discussion-review-original {
+  margin: 10px 0 16px;
+  max-width: 100%;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
+}
+.discussion-review .discussion-review-controls button,
+.discussion-review .discussion-review-tools button {
+  margin: 0;
+  padding: 7px 10px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.discussion-review .discussion-review-action {
+  font-weight: 600;
+  background: var(--soft);
+}
+.discussion-review-error {
+  color: var(--amber);
+}
+.discussion-review-error:empty,
+.discussion-review-status:empty {
+  display: none;
+}
+.discussion-review button:focus-visible,
+.discussion-review select:focus-visible,
+.discussion-review summary:focus-visible,
+.discussion-review a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.discussion-source {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
+  line-height: 1.8;
+}
+.discussion-review-page {
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 8px 16px 32px;
+}
+.discussion-review-page-heading {
+  margin-bottom: 20px;
+  min-width: 0;
+}
+.discussion-review-page-heading h1 {
+  font-size: 20px;
+  font-weight: 600;
+  margin: 0 0 8px;
+}
+.discussion-review-page-heading code {
+  color: var(--muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.discussion-review-wide {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  font-size: 14px;
+}
+.discussion-review-wide .discussion-review-heading {
+  align-items: baseline;
+  justify-content: flex-start;
+  gap: 12px 24px;
+}
+.discussion-review-wide .discussion-review-heading h3 {
+  font-size: 16px;
+}
+.discussion-review-wide .discussion-review-count {
+  font-size: 13px;
+}
+.discussion-review-reader {
+  display: grid;
+  grid-template-columns: minmax(240px, 0.75fr) minmax(0, 1.8fr);
+  gap: 28px;
+  margin: 20px 0 28px;
+  align-items: start;
+}
+.discussion-review-navigation,
+.discussion-review-reading {
+  min-width: 0;
+}
+.discussion-review-navigation {
+  position: sticky;
+  top: 12px;
+}
+.discussion-review-filters {
+  display: grid;
+  gap: 8px;
+}
+.discussion-review-filters .discussion-review-filter {
+  margin: 0;
+}
+.discussion-review-wide .discussion-review-list {
+  max-height: min(60vh, 660px);
+  margin: 12px 0 0;
+}
+.discussion-review-wide .discussion-review-row {
+  padding: 12px 10px;
+  font-size: 13px;
+  border-bottom: 1px solid var(--line);
+}
+.discussion-review-wide .discussion-review-content {
+  padding: 0 0 16px;
+}
+.discussion-review-item-title {
+  margin: 8px 0 16px;
+  font-size: 20px;
+  font-weight: 600;
+}
+.discussion-review-item-state {
+  color: var(--accent);
+  font-size: 12px;
+}
+.discussion-review-content[data-state="disputed"] .discussion-review-item-state,
+.discussion-review-content[data-state="needs_info"]
+  .discussion-review-item-state {
+  color: var(--amber);
+}
+.discussion-review-wide .discussion-review-content h4,
+.discussion-review-wide .discussion-review-result h4 {
+  font-size: 13px;
+  margin: 16px 0 8px;
+}
+.discussion-review-wide .discussion-review-original {
+  padding-left: 16px;
+  border-left: 2px solid var(--line);
+  line-height: 1.9;
+}
+.discussion-review-wide .discussion-review-result {
+  padding: 8px 0;
+  line-height: 1.9;
+}
+.discussion-review-propose {
+  padding: 14px 0;
+  border-top: 1px solid var(--line);
+}
+.discussion-review-propose > summary {
+  cursor: pointer;
+  color: var(--accent);
+  font-weight: 600;
+}
+.discussion-review-source > summary {
+  padding: 12px 0;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 13px;
+  border-top: 1px solid var(--line);
+}
+.discussion-review-wide .discussion-review-tools {
+  max-width: 560px;
+  margin-top: 16px;
+}
+.discussion-review-refresh {
+  margin-top: 8px;
+}
+.discussion-review .discussion-review-open {
+  width: 100%;
+  margin: 12px 0 0;
+  padding: 10px;
+  background: var(--soft);
+  color: var(--accent);
+}
+.discussion-review-compact .discussion-review-heading {
+  display: block;
+}
+.discussion-review-compact .discussion-review-count {
+  display: block;
+  margin-top: 8px;
+}
+@media (max-width: 700px) {
+  .discussion-review-page {
+    padding: 4px 0 24px;
+  }
+  .discussion-review-page-heading h1 {
+    font-size: 18px;
+  }
+  .discussion-review-reader {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 20px;
+  }
+  .discussion-review-navigation {
+    position: static;
+  }
+  .discussion-review-wide .discussion-review-list {
+    max-height: 220px;
+  }
+  .discussion-review-filters {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+  .discussion-review-filters .discussion-review-filter {
+    display: block;
+  }
+  .discussion-review-filters select {
+    width: 100%;
+    margin-top: 5px;
+  }
+}
+.communication-workspace button:focus-visible,
+.communication-workspace input:focus-visible,
+.communication-workspace textarea:focus-visible,
+.communication-workspace summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+@media (max-width: 700px) {
+  .communication-workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .communication-workspace[data-thread-open="true"] .communication-list {
+    display: none;
+  }
+  .communication-list {
+    border-right: 0;
+  }
+  .communication-thread {
+    padding: 14px;
+  }
+  .communication-thread-heading {
+    flex-wrap: wrap;
+  }
+  .communication-back {
+    display: inline-block;
+  }
+}
+
+/* Discussion still uses the SVG graph until its own view is migrated. */
+.graph-stage > svg { display: block; width: 100%; height: 100%; touch-action: none; }
+.studio-node { cursor: grab; outline: none; }
+.studio-node:focus circle { stroke: #506cac; stroke-width: 2; }
+.studio-node text { fill: #8795ac; font-size: 10px; pointer-events: auto; cursor: pointer; }
+.edge-label { fill: #aeb9ca; font-size: 8px; pointer-events: none; }

@@ -20,6 +20,17 @@ permissions:
   contents: read
 
 jobs:
+  learning-graph:
+    name: learning graph contracts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Test graph and learning views
+        run: node --test cli/tests/test_graph_pixi.js cli/tests/test_graph_camera.js cli/tests/test_graph_controls.js cli/tests/test_graph_layout.js cli/tests/test_graph_renderer.js cli/tests/test_knowledge_model.js cli/tests/test_knowledge_view.js
+
   pytest:
     name: pytest (${{ matrix.os }}, py${{ matrix.python }})
     runs-on: ${{ matrix.os }}
