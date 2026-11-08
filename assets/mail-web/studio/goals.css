@@ -205,6 +205,27 @@
   margin: 0;
   width: 200px;
 }
+.mindmap-inline-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+}
+.mindmap-inline-actions button {
+  min-height: 32px;
+  min-width: 60px;
+  padding: 5px 12px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--white);
+}
+.mindmap-inline-actions button[type="submit"] {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.mindmap-inline-actions button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 .mindmap-inline-editor input {
   box-sizing: border-box;
   width: 100%;
