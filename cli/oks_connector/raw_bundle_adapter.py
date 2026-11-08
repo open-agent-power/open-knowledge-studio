@@ -808,6 +808,10 @@ def emit_bundle(bundle: Path) -> int:
 
 
 def main() -> int:
+    # Help may contain characters outside the terminal code page. Keep the
+    # output readable as escaped text instead of crashing in legacy locales.
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(errors="backslashreplace")
     args = build_parser().parse_args()
     try:
         if args.command == "mineru":
