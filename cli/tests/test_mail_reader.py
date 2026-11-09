@@ -83,9 +83,10 @@ def test_rejections_consume_bounded_body_before_reply(headers, path, status):
 @pytest.mark.parametrize('length', ['65537', '-1', 'invalid'])
 def test_rejection_does_not_drain_unbounded_or_invalid_body(length):
     handler = object.__new__(Handler)
+    handler.path = '/api/mail/send'
     handler.headers = {'Content-Length': length}
     handler.connection = SimpleNamespace(settimeout=lambda timeout: None)
-    handler.rfile = SimpleNamespace(read=lambda *args: pytest.fail('Do not read an unbounded body'))
+    handler.rfile = SimpleNamespace(read1=lambda *args: pytest.fail('Do not read an unbounded body'))
     replies = []
     handler.send_json = lambda code, payload: replies.append((code, payload))
     handler._reject_post(403, 'denied')
