@@ -158,13 +158,13 @@ def test_debug_opt_in_privacy_and_corruption_preservation(kb):
     assert read_records(kb)["status"] == "empty"
     record(kb, "secret task text nebula", result["diagnostics"], result["knowledge"])
     path = kb / ".oks/retrieval-debug.json"
-    assert "secret task text" not in path.read_text()
-    assert "body_preview" not in path.read_text()
+    assert "secret task text" not in path.read_text(encoding="utf-8")
+    assert "body_preview" not in path.read_text(encoding="utf-8")
     assert overview(kb)["records"][0]["host_consumed"] == "unknown"
     path.write_text("corrupt", encoding="utf-8")
     with pytest.raises(ValueError, match="preserved"):
         record(kb, "new", {}, [])
-    assert path.read_text() == "corrupt"
+    assert path.read_text(encoding="utf-8") == "corrupt"
 
 
 def test_hook_emits_catalog_once_and_keeps_asset_cooldown_on_card_edits(kb):
