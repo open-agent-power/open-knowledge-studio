@@ -4,6 +4,8 @@ import io
 import json
 from pathlib import Path
 import shutil
+import subprocess
+import sys
 import zipfile
 
 import pytest
@@ -360,11 +362,45 @@ def test_chinese_task_search_uses_capability_descriptions(kb, tmp_path, query, e
     assert skills.search("火星地质标本") == []
 
 
-def test_specific_instruction_term_remains_discoverable(kb, source):
+def test_instruction_only_term_does_not_route_a_task(kb, source):
     with (source / "SKILL.md").open("a", encoding="utf-8") as handle:
         handle.write("\nUse quasar-protocol for the specialist operation.\n")
     promote(skills.import_skill(source))
-    assert skills.search("quasar-protocol")[0]["skill_id"] == "sample"
+    assert skills.search("quasar-protocol") == []
+    assert skills.search("nebula")[0]["skill_id"] == "sample"
+
+
+@pytest.mark.parametrize("backend", ["native", "fts5", "fusion"])
+def test_wiki_recall_excludes_skills_but_capability_search_finds_them(kb, source, backend):
+    from knowledge_studio.recall import _recall_knowledge_via_backend
+    page = promote(skills.import_skill(source))
+    ordinary = store.write_wiki_page("nebula evidence", "nebula evidence for a decision", human_reviewed=True)
+    hits = _recall_knowledge_via_backend(
+        query="nebula", topic_id=None, limit=1, scope=None,
+        goal_context={"mode": "none", "requested": "none"},
+        explain=True, search_backend=backend,
+    )
+    assert len(hits) == 1 and hits[0]["slug"] == ordinary.stem
+    assert skills.search("nebula")[0]["slug"] == page["slug"]
+
+
+def test_cached_python_execution_does_not_break_reload_or_hide_edits(kb, source):
+    promote(skills.import_skill(source))
+    cache = Path(skills.load("sample")["assets_root"])
+    script = cache / "scripts/run.py"
+    result = subprocess.run([sys.executable, "-c", "import run"], cwd=script.parent, capture_output=True)
+    assert result.returncode == 0
+    assert list((script.parent / "__pycache__").glob("*.pyc"))
+    assert skills.load("sample")["assets_root"] == str(cache)
+    # Runtime tolerance must not swallow new non-bytecode files.
+    note = script.parent / "__pycache__/notes.txt"
+    note.write_text("user notes")
+    with pytest.raises(ValueError, match="cache was modified"):
+        skills.load("sample")
+    note.unlink()
+    script.write_text("print('edited source')")
+    with pytest.raises(ValueError, match="cache was modified"):
+        skills.load("sample")
 
 
 def test_chinese_authored_custom_skill_retains_original_task_terms(kb, source):

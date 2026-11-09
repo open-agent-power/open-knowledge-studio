@@ -150,12 +150,14 @@ def _save_state(path: Path, state: dict) -> None:
 
 
 def _load_active_goals(kb_root: Path) -> list:
-    """Read profiles/goals/*.md with status: active. Returns title/slug/keywords."""
+    """Read flat and date-organized active goals; preserve relative identities."""
     goals_dir = kb_root / "profiles" / "goals"
     if not goals_dir.is_dir():
         return []
     goals = []
-    for f in sorted(goals_dir.glob("*.md")):
+    for f in sorted(goals_dir.rglob("*.md")):
+        if f.is_symlink() or not f.resolve().is_relative_to(goals_dir.resolve()):
+            continue
         try:
             text = f.read_text(encoding="utf-8")
             parts = text.split("---")
@@ -174,7 +176,7 @@ def _load_active_goals(kb_root: Path) -> list:
                             keywords.append(s[2:].strip())
                         elif s and not line.startswith(" "):
                             in_kw = False
-                goals.append({"title": title, "slug": f.stem, "keywords": keywords})
+                goals.append({"title": title, "slug": f.relative_to(goals_dir).with_suffix("").as_posix(), "keywords": keywords})
         except Exception:
             continue
     return goals
@@ -631,7 +633,7 @@ def main() -> int:
         candidates = [
             h for h in hits
             if is_recallable_wiki_page is not None
-            and is_recallable_wiki_page(h)
+            and is_recallable_wiki_page(h, include_skills=h.get("artifact_kind") == "skill")
             and (h.get("artifact_kind") != "skill" or (h.get("human_reviewed_at") and h.get("status") == "active"))
             and (float(h.get("relevance", 0)) > 0 if h.get("backend") in {"fts5", "like"} else float(h.get("relevance", 0)) >= floor)
         ]

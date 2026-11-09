@@ -70,7 +70,8 @@ def test_default_and_skill_use_same_persistent_index(kb):
 
 def test_query_hit_loads_exact_wiki_skill_without_host_deployment(kb):
     page = skill(kb)
-    hit = next(h for h in recall("nebula", goal="none")["knowledge"] if h.get("artifact_kind") == "skill")
+    assert all(h.get("artifact_kind") != "skill" for h in recall("nebula", goal="none")["knowledge"])
+    hit = skills.search("nebula")[0]
     assert hit["load_command"] == f"oks skills load {page['skill_id']} --version {page['skill_version']}"
     assert not (kb / ".oks/skill-loads.json").exists()
     loaded = skills.load(hit["skill_id"], version=hit["skill_version"])
@@ -80,15 +81,15 @@ def test_query_hit_loads_exact_wiki_skill_without_host_deployment(kb):
     assert not (kb / ".oks/skill-loads.json").exists()
 
 
-def test_metadata_routing_beats_incidental_body_and_has_labelled_fallback(kb):
+def test_metadata_routing_beats_incidental_body_without_execution_fallback(kb):
     skill(kb, "extract", "document extraction", "anything")
     skill(kb, "mail", "mail collaboration", "document extraction " * 100)
     assert skills.search("文档提取", limit=1)[0]["skill_id"] == "extract"
     skill(kb, "special", "unrelated utility")
-    assert skills.search("quasar-protocol", debug_record=True)[0]["skill_id"] == "special"
+    assert skills.search("quasar-protocol", debug_record=True) == []
     diagnostics = read_records(kb)["records"][0]["diagnostics"]
-    assert diagnostics["strategy"] == "capability_body"
-    assert diagnostics["capability_fallback"] == "instructions_no_metadata_match"
+    assert diagnostics["strategy"] == "capability"
+    assert "capability_fallback" not in diagnostics
 
 
 @pytest.mark.parametrize("state", [{"status": "dropped"}, {"archived": True}, {"human_reviewed_at": None}])

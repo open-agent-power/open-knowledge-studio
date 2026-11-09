@@ -1,3 +1,10 @@
+## Unreleased
+
+- Skill routing searches reviewed capability descriptions without falling back to instruction text.
+- Ordinary Wiki recall excludes Skill cards across retrieval backends; use `oks skills search` for capabilities.
+- Cached Python helpers can generate bytecode without breaking subsequent loads; source edits and unrelated files remain checked.
+- Prompt hooks discover active Goals in date folders and preserve relative identities for same-named daily Goals.
+
 ## [0.6.21] — 2026-08-31
 
 ### fix(test): `test_persistence` 不再依赖未跟踪的 `_assets/`
