@@ -98,7 +98,12 @@ def feedback_probe(cli: Path, work: Path, env: dict, root: Path, agreement: Path
         raise RuntimeError('Installed recall did not measure its own runtime')
     if queried["task_context"]["candidates"][0]["summary"] != "PRIVATE_INSTALLED_FEEDBACK":
         raise RuntimeError("Installed manual query lost explicit task requirements")
-    hit = next(h for h in queried["knowledge"] if h.get("artifact_kind") == "skill")
+    if any(h.get("artifact_kind") == "skill" for h in queried["knowledge"]):
+        raise RuntimeError("Wiki query leaked a Skill into the knowledge channel")
+    routed = json.loads(execute([str(cli), "skills", "search", "handoff policy retrieval",
+                                "--agreement", str(agreement), "--task-scope", scope["task"]],
+                               work, env, work / "feedback-skill-search.log"))
+    hit = routed["hits"][0]
     loaded = json.loads(execute([str(cli), "skills", "load", hit["skill_id"], "--version", hit["skill_version"]],
                                work, env, work / "query-skill-load.log"))
     if loaded["executed"] or not (Path(loaded["assets_root"]) / "SKILL.md").is_file():
