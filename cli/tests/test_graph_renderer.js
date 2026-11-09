@@ -403,6 +403,21 @@ test("metadata updates and repeated focus retain base edge geometry", async () =
   assert.ok(bases.every((mesh) => !mesh.destroyCount));
 });
 
+test("learning graph selection keeps unrelated nodes and labels readable", async () => {
+  const { renderer, applications, advance } = await fixture({ options: { dimUnrelated: false } });
+  const nodes = [node("selected", -200, 0), node("other", 200, 0)];
+  renderer.update(nodes, []);
+  await renderer.ready;
+  renderer.setCamera({ x: 0, y: 0, scale: 1 });
+  renderer.focus({ selected: "selected" });
+  advance(100);
+  const world = applications[0].stage.children[0];
+  const other = world.children[2].children[1];
+  const label = applications[0].stage.children[3].children.find((item) => item.text === "other");
+  assert.ok(other.alpha > 0.95);
+  assert.ok(label?.visible && label.alpha > 0.95);
+});
+
 test("pending and shared-tag edges share repeated dash textures in mesh batches", async () => {
   const { renderer, meshes, applications, advance } = await fixture();
   renderer.update(

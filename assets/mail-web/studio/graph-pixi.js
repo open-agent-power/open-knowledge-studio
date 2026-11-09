@@ -100,6 +100,7 @@ export function createGraph(host, tools, onSelect, options = {}) {
       insetBottom: options.insetBottom,
       fitPadding: options.fitPadding,
       screenSize: options.screenSize,
+      dimUnrelated: options.dimUnrelated,
       insidePolygon,
     },
   );

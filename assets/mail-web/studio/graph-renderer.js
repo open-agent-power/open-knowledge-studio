@@ -259,7 +259,7 @@ export function createRenderer(host, callbacks = {}, options = {}) {
       const color = views[0].edge.pending
         ? 0xa88b58
         : EDGE_COLORS[views[0].edge.type] || 0xa6b7cc;
-      addMesh(views, color, focus === null ? 0.7 : 0.12, false);
+      addMesh(views, color, focus === null || options.dimUnrelated === false ? 0.7 : 0.12, false);
     }
     edgeGeometryDirty = true;
     updateEdgeFocus();
@@ -298,7 +298,7 @@ export function createRenderer(host, callbacks = {}, options = {}) {
         group.mesh.destroy();
         return false;
       }
-      group.targetAlpha = focus === null ? 0.7 : 0.12;
+      group.targetAlpha = focus === null || options.dimUnrelated === false ? 0.7 : 0.12;
       return true;
     });
     for (const view of edgeViews)
@@ -530,7 +530,7 @@ export function createRenderer(host, callbacks = {}, options = {}) {
         config.labels === false
           ? 0
           : zoomAlpha *
-            (focus === null || node.id === focus || neighbors.has(node.id)
+            (options.dimUnrelated === false || focus === null || node.id === focus || neighbors.has(node.id)
               ? 1
               : 0.2);
       if (
@@ -636,7 +636,7 @@ export function createRenderer(host, callbacks = {}, options = {}) {
       sprite.position.set(node.x, node.y);
       sprite.width = sprite.height = (screenRadius(node) * 2) / camera.scale;
       const alpha =
-        focus === null || node.id === focus || neighbors.has(node.id)
+        options.dimUnrelated === false || focus === null || node.id === focus || neighbors.has(node.id)
           ? 1
           : 0.22;
       sprite.alpha += (alpha - sprite.alpha) * fade;

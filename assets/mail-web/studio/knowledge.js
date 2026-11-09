@@ -230,6 +230,7 @@ export function createKnowledgeView({ dom, state, actions, api }) {
     const graph = createGraph(canvasHost, zoom, select, {
       button,
       showEdgeLabels: false,
+      dimUnrelated: false,
       onBackground: clearSelection,
       nodeFill: (n) =>
         nodeCategory(n) === "raw"
