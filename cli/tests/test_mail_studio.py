@@ -53,3 +53,32 @@ def test_full_document_preserves_original_markdown_and_safe_html(tmp_path):
     assert '<script>' not in doc["body_html"]
     assert doc["metadata"]["tags"] == ['Java','自定义']
     assert file.read_text(encoding="utf-8") == source
+
+
+def test_studio_file_returns_safe_markdown_body_without_frontmatter(tmp_path):
+    import json
+    from threading import Thread
+    from urllib.request import urlopen
+    from knowledge_studio.mail_web import create_server
+
+    target = tmp_path / "skill" / "demo" / "SKILL.md"
+    target.parent.mkdir(parents=True)
+    (tmp_path / "wiki").mkdir()
+    (tmp_path / "mail").mkdir()
+    original = '---\ntitle: Skill\n---\n# Skill\n\n**正文** <script>alert(1)</script>\n'
+    target.write_bytes(original.encode("utf-8"))
+    server = create_server(tmp_path, 0)
+    worker = Thread(target=server.serve_forever, daemon=True)
+    worker.start()
+    try:
+        with urlopen(f'http://127.0.0.1:{server.server_port}/api/studio/file?path=skill%2Fdemo%2FSKILL.md') as response:
+            result = json.load(response)
+        assert result['text'] == original
+        assert 'title: Skill' not in result['body_html']
+        assert '<strong>正文</strong>' in result['body_html']
+        assert '<script>' not in result['body_html']
+        assert '&lt;script&gt;' in result['body_html']
+    finally:
+        server.shutdown()
+        server.server_close()
+        worker.join(timeout=5)

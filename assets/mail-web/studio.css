@@ -264,10 +264,17 @@ dialog form > button {
   }
   .studio-header {
     padding: 0 16px;
-    gap: 23px;
+    gap: 12px;
   }
   .studio-header nav {
-    gap: 20px;
+    flex-shrink: 0;
+    gap: 12px;
+  }
+  .studio-header nav button {
+    white-space: nowrap;
+  }
+  .studio-header #instance {
+    min-width: 0;
   }
   .doc-layout {
     grid-template-columns: 1fr;

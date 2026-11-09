@@ -116,6 +116,7 @@ export function createGoalsView({ dom, state, actions, model: M, api }) {
         onCancel: () => {
           pendingAdd = null;
           state.dirty = false;
+          actions.status("");
           paint();
         },
         onCommit: commitChild,

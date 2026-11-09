@@ -12,6 +12,7 @@ import {
   findNode,
   revealNode,
   mapQueryHits,
+  categoryLabels,
   nodeCategory,
   nodeSize,
   filterKnowledge,
@@ -47,14 +48,14 @@ export function createKnowledgeView({ dom, state, actions, api }) {
       stage = el("div", "graph-stage knowledge-stage"),
       aside = el("aside", "knowledge-detail");
     aside.hidden = true;
-    aside.setAttribute("aria-label", "Wiki 正文");
+    aside.setAttribute("aria-label", "文档正文");
     const canvasHost = el("div", "graph-canvas-host");
-    canvasHost.setAttribute("aria-label", "Wiki 文档图谱");
+    canvasHost.setAttribute("aria-label", "学习图谱");
     canvasHost.setAttribute("role", "group");
     stage.append(canvasHost);
     const tools = el("div", "knowledge-controls"),
       search = el("input");
-    const categories = new Set(["wiki", "raw"]),
+    const categories = new Set(Object.keys(categoryLabels)),
       hidden = new Set();
     let only = null,
       visibleState = "all",
@@ -79,6 +80,9 @@ export function createKnowledgeView({ dom, state, actions, api }) {
       only = null;
       selection = [];
       visibleState = "all";
+      categories.clear();
+      Object.keys(categoryLabels).forEach((kind) => categories.add(kind));
+      for (const chip of categoryButtons) chip.setAttribute("aria-pressed", "true");
       stateFilter.value = "all";
       selectionTools.hidden = true;
       clearSelection(false);
@@ -126,7 +130,7 @@ export function createKnowledgeView({ dom, state, actions, api }) {
       graph.fit();
     };
     const sourceFilter = el("select");
-    sourceFilter.setAttribute("aria-label", "筛选 Wiki 分类");
+    sourceFilter.setAttribute("aria-label", "筛选分类");
     sourceFilter.onchange = () => {
       if (!actions.canLeave()) {
         sourceFilter.value = filterScope;
@@ -140,6 +144,21 @@ export function createKnowledgeView({ dom, state, actions, api }) {
     };
     filterPanel.append(mode, sourceFilter);
     const filters = el("div", "knowledge-filters");
+    const categoryButtons = [];
+    for (const [kind, label] of Object.entries(categoryLabels)) {
+      const chip = button(label, () => {
+        if (!actions.canLeave()) return;
+        categories.has(kind) ? categories.delete(kind) : categories.add(kind);
+        chip.setAttribute("aria-pressed", String(categories.has(kind)));
+        localFocus = null;
+        clearSelection(false);
+        paint();
+      });
+      chip.setAttribute("aria-pressed", "true");
+      chip.style.setProperty("--category-color", `hsl(${nodeHue({ type: kind })} 48% 49%)`);
+      categoryButtons.push(chip);
+      filters.append(chip);
+    }
     const stateFilter = el("select");
     stateFilter.setAttribute("aria-label", "图谱状态");
     for (const [value, label] of [
@@ -199,6 +218,7 @@ export function createKnowledgeView({ dom, state, actions, api }) {
     $("content").append(shell);
     let map,
       usage,
+      contexts = { entries: [], edges: [] },
       activity = { queried_paths: [], used_slugs: [] },
       roots = [],
       signature = "",
@@ -274,7 +294,7 @@ export function createKnowledgeView({ dom, state, actions, api }) {
       if (!map) return;
       selection = [];
       selectionTools.hidden = true;
-      const relations = knowledgeRelations(map);
+      const relations = knowledgeRelations(map, contexts);
       const scopeRoots = filterScope
         ? roots.filter((root) => root.id === filterScope)
         : roots;
@@ -322,7 +342,7 @@ export function createKnowledgeView({ dom, state, actions, api }) {
       graph.update(projection.nodes, projection.edges, { selected });
       graph.setQuery?.(queryMode ? "" : query);
       empty.hidden = projection.nodes.length > 0;
-      emptyMessage.textContent = "当前筛选没有 Wiki 文档";
+      emptyMessage.textContent = "当前筛选没有文档";
       retry.hidden = true;
       summary.textContent = `${projection.nodes.length} ${projectionMode === "documents" ? "份文档" : "个节点"} · ${projection.edges.length} 条关系`;
     }
@@ -425,7 +445,7 @@ export function createKnowledgeView({ dom, state, actions, api }) {
             "soft",
           ),
         );
-        const label = el("p", "knowledge-kind", node.review?.label || "Wiki");
+        const label = el("p", "knowledge-kind", node.pending ? "待审核" : categoryLabels[nodeCategory(node)] || "文档");
         const body = el("article", "knowledge-body markdown-body");
         body.setAttribute("aria-label", "文档正文");
         body.textContent = "正在读取正文…";
@@ -460,6 +480,11 @@ export function createKnowledgeView({ dom, state, actions, api }) {
         }
         // Reading leads; graph actions and file internals remain secondary.
         aside.append(label, body, links, metadata, documentTools);
+        if (node.pending && node.path?.startsWith("drafts/")) {
+          const reviewLink = el("a", "knowledge-child", "打开草稿审核");
+          reviewLink.href = "/review?detail=1&draft=" + encodeURIComponent(node.path);
+          aside.append(reviewLink);
+        }
         const active = () =>
           current === ticket &&
           sequence === selectionSequence &&
@@ -467,10 +492,9 @@ export function createKnowledgeView({ dom, state, actions, api }) {
         const loadBody = async () => {
           body.textContent = "正在读取正文…";
           try {
-            const file = await api.request(
-              "/api/mail/memory/item?" +
-                new URLSearchParams({ path: node.path, full: "1" }),
-            );
+            const isMemory = node.path?.startsWith("wiki/") || node.path?.startsWith("drafts/");
+            const file = await api.request((isMemory ? "/api/mail/memory/item?" : "/api/studio/file?") +
+              new URLSearchParams(isMemory ? { path: node.path, full: "1" } : { path: node.path }));
             if (!active()) return;
             if (typeof file.body_html !== "string")
               throw Error("正文格式不完整，请重试");
@@ -482,7 +506,7 @@ export function createKnowledgeView({ dom, state, actions, api }) {
             )
               first.remove();
             if (!file.body?.trim())
-              body.append(el("p", "detail-meta", "这篇 Wiki 暂无正文。"));
+              body.append(el("p", "detail-meta", "这篇文档暂无正文。"));
             if (file.truncated)
               body.append(
                 el("p", "detail-meta", "正文超出读取上限，当前显示部分内容。"),
@@ -499,7 +523,7 @@ export function createKnowledgeView({ dom, state, actions, api }) {
         if (!active()) return;
         if (current !== ticket) return;
         const neighborIds = new Set();
-        for (const edge of knowledgeRelations(map)) {
+        for (const edge of knowledgeRelations(map, contexts)) {
           if (edge.type === "shared_tag") continue;
           if (edge.a === node.id) neighborIds.add(edge.b);
           if (edge.b === node.id) neighborIds.add(edge.a);
@@ -645,6 +669,8 @@ export function createKnowledgeView({ dom, state, actions, api }) {
         const result = await Promise.all([
           api.request("/api/mail/knowledge-map"),
           api.request("/api/studio/usage"),
+          api.request("/api/studio/skills"),
+          api.request("/api/studio/contexts"),
           api.request(
             "/api/studio/activity?" +
               new URLSearchParams({ date: state.date || "" }),
@@ -660,28 +686,10 @@ export function createKnowledgeView({ dom, state, actions, api }) {
         if (next !== signature) {
           signature = next;
           if (!map) for (const input of inputs) input.disabled = false;
-          [map, usage, activity] = result;
-          const wikiMap = {
-            ...map,
-            domains: map.domains
-              .map((domain) => ({
-                ...domain,
-                clusters: domain.clusters
-                  .map((cluster) => ({
-                    ...cluster,
-                    points: cluster.points.filter((point) =>
-                      point.path?.startsWith("wiki/"),
-                    ),
-                  }))
-                  .filter((cluster) => cluster.points.length),
-              }))
-              .filter((domain) => domain.clusters.length),
-            materials: (map.materials || []).filter((point) =>
-              point.path?.startsWith("wiki/"),
-            ),
-          };
-          roots = knowledgeTree(wikiMap, usage, { skills: [] });
-          const all = el("option", null, "全部 Wiki 分类");
+          let skills;
+          [map, usage, skills, contexts, activity] = result;
+          roots = knowledgeTree(map, usage, skills, contexts);
+          const all = el("option", null, "全部分类");
           all.value = "";
           sourceFilter.replaceChildren(all);
           for (const root of roots) {
@@ -692,7 +700,7 @@ export function createKnowledgeView({ dom, state, actions, api }) {
           if (!roots.some((root) => root.id === filterScope)) filterScope = "";
           sourceFilter.value = filterScope;
           paint();
-          const warnings = [...(map.warnings || []), ...(usage.warnings || [])];
+          const warnings = [...(map.warnings || []), ...(usage.warnings || []), ...(skills.warnings || []), ...(contexts.warnings || [])];
           if (map.scope?.truncated) warnings.push("图谱已达读取上限");
           if (warnings.length) actions.status(warnings.join("；"));
         }

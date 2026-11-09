@@ -972,6 +972,9 @@ class Handler(BaseHTTPRequestHandler):
                     result = studio.activity(self.kb_root,query.get('date',[''])[0])
                 elif route == '/api/studio/file':
                     result = studio.read_file(self.kb_root, query.get('path', [''])[0])
+                    _, body, _ = studio._markdown(result['text'])
+                    result['body'] = body
+                    result['body_html'] = md_to_html(body)
                 elif route == '/api/studio/workflow':
                     from .studio_workflow import workflow
                     result = workflow(self.kb_root, query.get('path', [''])[0])

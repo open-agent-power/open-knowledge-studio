@@ -49,6 +49,12 @@ async function fixture() {
     };
     return node;
   };
+  const originalButton = dom.button;
+  dom.button = (...args) => {
+    const node = originalButton(...args);
+    node.style = { setProperty(name, value) { this[name] = value; } };
+    return node;
+  };
   const state = {
     tab: "learning",
     learn: "graph",
@@ -159,6 +165,8 @@ async function fixture() {
         if (route === "/api/studio/usage") return snapshot.usage;
         if (route === "/api/studio/skills") return snapshot.skills;
         if (route === "/api/studio/contexts") return snapshot.contexts;
+        if (route.startsWith("/api/studio/file?"))
+          return { text: "---\ntitle: Skill\n---\n# Skill\n\n**正文**", body: "# Skill\n\n**正文**", body_html: "<h1>Skill</h1><p><strong>正文</strong></p>" };
         if (route.startsWith("/api/studio/activity?")) return snapshot.activity;
         if (route.startsWith("/api/studio/workflow?")) {
           workflowReads.push(route);
@@ -248,7 +256,7 @@ afterEach(() => {
     globalThis[name] = value;
 });
 
-test("Wiki scope survives state, lasso and reset without importing Drafts or Raw", async () => {
+test("all asset types survive state, lasso and reset", async () => {
   const page = await fixture();
   page.points().push({
     id: "drafts/p.md",
@@ -269,7 +277,7 @@ test("Wiki scope survives state, lasso and reset without importing Drafts or Raw
   await page.tick();
   assert.deepEqual(
     page.graph.nodes.map((n) => n.id),
-    ["wiki/a.md", "wiki/b.md"],
+    ["wiki/a.md", "wiki/b.md", "drafts/p.md", "raw/source.md"],
   );
   const stateFilter = all(page.dom.$("content")).find(
     (n) => n["aria-label"] === "图谱状态",
@@ -291,12 +299,12 @@ test("Wiki scope survives state, lasso and reset without importing Drafts or Raw
     .onclick();
   assert.equal(page.graph.nodes.length, 1);
   reset.onclick();
-  assert.equal(page.graph.nodes.length, 2);
+  assert.equal(page.graph.nodes.length, 4);
   assert.equal(page.graph.creates, 1);
   assert.equal(page.snapshot.map.materials.length, 1);
 });
 
-test("Learning excludes goal, discussion and skill definitions from both graph modes", async () => {
+test("Learning includes goal and skill definitions and allows toggling them", async () => {
   const page = await fixture();
   page.snapshot.contexts.entries = [
     { id: "goal/g.md", path: "goal/g.md", title: "Goal", type: "goal" },
@@ -305,14 +313,39 @@ test("Learning excludes goal, discussion and skill definitions from both graph m
     { path: "skill/demo/SKILL.md", title: "Skill" },
   ];
   await page.tick();
-  assert.ok(page.graph.nodes.every((n) => n.path.startsWith("wiki/")));
-  await page.openLeaves();
-  assert.ok(
-    page.graph.nodes
-      .filter((n) => !n.children)
-      .every((n) => n.path.startsWith("wiki/")),
-  );
+  assert.ok(page.graph.nodes.some((n) => n.path === "goal/g.md"));
+  assert.ok(page.graph.nodes.some((n) => n.path === "skill/demo/SKILL.md"));
+  const skill = all(page.dom.$("content")).find((n) => n.textContent === "技能" && n["aria-pressed"] !== undefined);
+  skill.onclick();
+  assert.ok(!page.graph.nodes.some((n) => n.path === "skill/demo/SKILL.md"));
+  skill.onclick();
+  assert.ok(page.graph.nodes.some((n) => n.path === "skill/demo/SKILL.md"));
+  await page.select("skill/demo/SKILL.md");
+  const body = all(page.aside()).find((n) => hasClass(n, "knowledge-body"));
+  assert.match(body.innerHTML, /<strong>正文<\/strong>/);
+  assert.doesNotMatch(body.innerHTML, /title:/);
   assert.equal(page.workflowReads.length, 0);
+});
+
+test("each asset category can be hidden and restored", async () => {
+  const page = await fixture();
+  page.points().push({ id: "drafts/p.md", path: "drafts/p.md", title: "Draft", kind: "candidate" });
+  page.snapshot.map.materials = [{ id: "raw/s.md", path: "raw/s.md", title: "Source", kind: "raw" }];
+  page.snapshot.skills.skills = [{ path: "skill/demo/SKILL.md", title: "Skill" }];
+  for (const type of ["profile", "project", "goal", "discuss", "team", "mail"])
+    page.snapshot.contexts.entries.push({ id: `${type}/item.md`, path: `${type}/item.md`, title: type, type });
+  await page.tick();
+  for (const [label, id] of [["知识", "wiki/a.md"], ["待审核", "drafts/p.md"], ["来源", "raw/s.md"], ["技能", "skill/demo/SKILL.md"], ["画像", "profile/item.md"], ["项目", "project/item.md"], ["目标", "goal/item.md"], ["讨论", "discuss/item.md"], ["团队", "team/item.md"], ["交接", "mail/item.md"]]) {
+    const chip = all(page.dom.$("content")).find((n) => n.textContent === label && n["aria-pressed"] !== undefined);
+    assert.ok(page.graph.nodes.some((n) => n.id === id), label);
+    chip.onclick();
+    assert.ok(!page.graph.nodes.some((n) => n.id === id), label);
+    chip.onclick();
+    assert.ok(page.graph.nodes.some((n) => n.id === id), label);
+  }
+  await page.select("drafts/p.md");
+  const review = all(page.aside()).find((n) => n.textContent === "打开草稿审核");
+  assert.ok(review.href.includes("/review?detail=1&draft=drafts%2Fp.md"));
 });
 
 test("Learning is a reader without Draft or Agent review controls", async () => {
@@ -468,7 +501,7 @@ test("document layout is ungrouped; hierarchy restores categories without replac
   assert.equal(page.graph.creates, 1);
 });
 
-test("Mail and profile data cannot be reintroduced by resetting the Wiki graph", async () => {
+test("reset restores mail and profile category visibility", async () => {
   const page = await fixture();
   page.snapshot.contexts.entries = [
     { id: "mail/a.md", path: "mail/a.md", title: "Mail", type: "mail" },
@@ -480,21 +513,20 @@ test("Mail and profile data cannot be reintroduced by resetting the Wiki graph",
     },
   ];
   await page.tick();
+  const mail = all(page.dom.$("content")).find((n) => n.textContent === "交接" && n["aria-pressed"] !== undefined);
+  mail.onclick();
+  assert.ok(!page.graph.nodes.some((n) => n.id === "mail/a.md"));
   all(page.dom.$("content"))
     .find((n) => n.textContent === "重置")
     .onclick();
   assert.deepEqual(
     page.graph.nodes.map((n) => n.id),
-    ["wiki/a.md", "wiki/b.md"],
-  );
-  assert.equal(
-    all(page.dom.$("content")).some((n) => n.dataset.category === "mail"),
-    false,
+    ["wiki/a.md", "wiki/b.md", "profiles/person.md", "mail/a.md"],
   );
   assert.equal(page.snapshot.contexts.entries.length, 2);
 });
 
-test("Wiki categories retain real Wiki links and exclude cross-bucket links", async () => {
+test("graph retains Wiki and cross-category links and narrows by source", async () => {
   const page = await fixture();
   page.snapshot.map.internal_links = [
     {
@@ -511,10 +543,10 @@ test("Wiki categories retain real Wiki links and exclude cross-bucket links", as
     { a: "goal/g.md", b: "wiki/a.md", type: "cites" },
   ];
   await page.tick();
-  assert.equal(page.graph.nodes.length, 2);
-  assert.equal(page.graph.edges.length, 1);
+  assert.equal(page.graph.nodes.length, 3);
+  assert.equal(page.graph.edges.length, 2);
   const source = all(page.dom.$("content")).find(
-    (n) => n["aria-label"] === "筛选 Wiki 分类",
+    (n) => n["aria-label"] === "筛选分类",
   );
   source.value = "domain:d";
   source.onchange();
@@ -603,7 +635,7 @@ for (const action of [
       if (action === "mode") page.hierarchy();
       if (action === "source") {
         const filter = all(page.dom.$("content")).find(
-          (node) => node["aria-label"] === "筛选 Wiki 分类",
+          (node) => node["aria-label"] === "筛选分类",
         );
         filter.value = "domain:d";
         filter.onchange();

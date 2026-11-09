@@ -23,7 +23,7 @@ runner = CliRunner()
 def test_prompt_goal_loader_reads_date_folders_with_distinct_identities(tmp_path):
     script = Path(__file__).resolve().parents[2] / "assets/hooks/user-prompt-recall.py"
     # Test the actual loader without invoking hook main, recall or persistence.
-    module = ast.parse(script.read_text())
+    module = ast.parse(script.read_text(encoding="utf-8"))
     loader = next(n for n in module.body if isinstance(n, ast.FunctionDef) and n.name == "_load_active_goals")
     namespace = {"Path": Path}
     exec(compile(ast.Module(body=[loader], type_ignores=[]), str(script), "exec"), namespace)

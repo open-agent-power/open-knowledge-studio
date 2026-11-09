@@ -320,6 +320,161 @@ def _write_goal(root: Path, slug: str, *, status="active", domains=None, keyword
     _atomic_write(gdir / f"{slug}.md", f"---\n{fm_str}---\n\n# {slug}\n")
 
 
+@pytest.mark.parametrize("goal,goal_boost", [("active", True), ("none", True), ("active", False), ("docker-goal", True)])
+def test_native_backend_uses_pure_knowledge_entry(kb_root, monkeypatch, goal, goal_boost):
+    from knowledge_studio import recall as engine, tasks, linked_sources, evaluation_feedback, vfs_observation
+    from knowledge_studio.search.native import NativeBackend
+
+    _write_goal(kb_root, "docker-goal", keywords=["docker"])
+    expected = engine.recall_knowledge("deployment", goal=goal, goal_boost=goal_boost,
+                                       topic_id=42, search_backend="native", limit=5)
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("A retrieval backend must not enter task/team/observation orchestration")
+
+    monkeypatch.setattr(tasks, "binding", forbidden)
+    monkeypatch.setattr(linked_sources, "search", forbidden)
+    monkeypatch.setattr(evaluation_feedback, "capture", forbidden)
+    monkeypatch.setattr(vfs_observation, "_save", forbidden)
+    hits = NativeBackend().search("deployment", goal=goal, goal_boost=goal_boost, topic_id=42, limit=5)
+    assert [h.slug for h in hits] == [h['slug'] for h in expected]
+    assert [h.score for h in hits] == [h['relevance'] for h in expected]
+    assert not (kb_root / '.oks').exists()
+
+
+@pytest.mark.parametrize("goal,goal_boost", [("active", True), ("none", True), ("active", False), ("docker-goal", True)])
+def test_fusion_shares_request_snapshots_and_orchestrates_once(kb_root, monkeypatch, goal, goal_boost):
+    from unittest.mock import Mock
+    from knowledge_studio import recall as engine, tasks, linked_sources, evaluation_feedback, vfs_observation
+    from knowledge_studio.search.native import NativeBackend
+
+    _write_goal(kb_root, "docker-goal", keywords=["docker"])
+    _write_goal(kb_root, "tests-goal", keywords=["tests"])
+    wiki_snapshot = engine.list_wiki_pages()
+    parameter_snapshot = engine.load_recall_params()
+    pages = Mock(return_value=wiki_snapshot)
+    params = Mock(return_value=parameter_snapshot)
+    goals = Mock(wraps=engine._resolve_goal_context)
+    binding = Mock(return_value=None)
+    team = Mock(return_value=([], []))
+    capture = Mock(return_value=None)
+    save = Mock(wraps=vfs_observation._save)
+    native_requests = []
+    search = NativeBackend.search
+
+    def native_search(self, query, **kwargs):
+        native_requests.append(kwargs)
+        return search(self, query, **kwargs)
+
+    monkeypatch.setattr(engine, "list_wiki_pages", pages)
+    monkeypatch.setattr(engine, "load_recall_params", params)
+    monkeypatch.setattr(engine, "_resolve_goal_context", goals)
+    monkeypatch.setattr(tasks, "binding", binding)
+    monkeypatch.setattr(linked_sources, "search", team)
+    monkeypatch.setattr(evaluation_feedback, "capture", capture)
+    monkeypatch.setattr(vfs_observation, "_save", save)
+    monkeypatch.setattr(NativeBackend, "search", native_search)
+    result = engine.recall("deployment", goal=goal, goal_boost=goal_boost,
+                           topic_id=42, search_backend="fusion", knowledge_only=True, limit=5)
+    assert result['knowledge']
+    assert pages.call_count == params.call_count == goals.call_count == 1
+    assert binding.call_count == team.call_count == capture.call_count == save.call_count == 1
+    request = native_requests[0]
+    assert request['topic_id'] == 42
+    assert request['goal_boost'] is (goal_boost and goal != 'none')
+    assert request['goal_context']['mode'] == result['goal']['mode']
+    assert request['candidate_pages'] is wiki_snapshot
+    assert request['params'] is parameter_snapshot
+    assert [g['slug'] for g in request['goal_context']['goals']] == result['goal']['slugs']
+
+
+def test_fusion_refreshes_wiki_and_configuration_between_requests(kb_root):
+    from knowledge_studio import recall as engine, store
+
+    settings = kb_root / 'settings/recall.yaml'
+    settings.parent.mkdir()
+    settings.write_text('inject:\n  per_page_chars: 12\n', encoding='utf-8')
+    first = engine.recall('deployment', goal='none', search_backend='fusion', knowledge_only=True)
+    assert 'docker-deployment' in {h['slug'] for h in first['knowledge']}
+    assert all(len(h['body_preview']) <= 12 for h in first['knowledge'])
+
+    page = kb_root / 'wiki/computing/concepts/docker-deployment.md'
+    store._update_frontmatter_field(page, 'archived', True)
+    settings.write_text('inject:\n  per_page_chars: 50\n', encoding='utf-8')
+    second = engine.recall('deployment', goal='none', search_backend='fusion', knowledge_only=True)
+    assert second['knowledge']
+    assert 'docker-deployment' not in {h['slug'] for h in second['knowledge']}
+    assert any(len(h['body_preview']) > 12 for h in second['knowledge'])
+
+
+def test_fusion_goal_none_is_not_affected_by_active_goals(kb_root):
+    from knowledge_studio import recall as engine
+
+    def rankings():
+        result = engine.recall('docker deployment', goal='none',
+                               search_backend='fusion', knowledge_only=True)
+        return [(item['slug'], item['relevance']) for item in result['knowledge']]
+
+    before = rankings()
+    assert before
+    _write_goal(kb_root, 'docker-goal', keywords=['docker'])
+    assert rankings() == before
+
+
+def test_fusion_reuses_the_outer_task_goal_without_rebinding(kb_root, monkeypatch):
+    from knowledge_studio import recall as engine, retrieval_debug, tasks
+    from knowledge_studio.search.native import NativeBackend
+
+    _write_goal(kb_root, "bound-goal", keywords=["docker"])
+    _write_goal(kb_root, "other-goal", keywords=["tests"])
+    task_context = {'goal_path': 'profiles/goals/bound-goal.md', 'scope': 'selected'}
+    monkeypatch.setattr(retrieval_debug, 'agreement_context', lambda *args: task_context)
+
+    def forbidden(*args, **kwargs):
+        pytest.fail('The outer request already checked the supplied task agreement')
+
+    monkeypatch.setattr(tasks, 'binding', forbidden)
+    requests = []
+    search = NativeBackend.search
+
+    def native_search(self, query, **kwargs):
+        requests.append(kwargs['goal_context'])
+        return search(self, query, **kwargs)
+
+    monkeypatch.setattr(NativeBackend, 'search', native_search)
+    result = engine.recall('deployment', agreement={}, task_scope='selected',
+                           search_backend='fusion', knowledge_only=True)
+    assert result['goal']['slugs'] == ['bound-goal']
+    assert [g['slug'] for g in requests[0]['goals']] == ['bound-goal']
+    with pytest.raises(ValueError, match='Goal differs from task agreement'):
+        engine.recall('deployment', goal='none', agreement={}, task_scope='selected',
+                      search_backend='fusion', knowledge_only=True)
+
+
+def test_fusion_embedding_fallback_does_not_receive_internal_snapshots(kb_root, monkeypatch):
+    from knowledge_studio import recall as engine, search
+
+    settings = kb_root / 'settings/recall.yaml'
+    settings.parent.mkdir()
+    settings.write_text('embedding_fallback: true\n', encoding='utf-8')
+    get_backend = search.get_backend
+    received = []
+
+    class EmbeddingBackend:
+        def search(self, query, *, limit, scope, **kwargs):
+            received.append(kwargs)
+            return [search.SearchHit('git-branching', 'Git', 1, backend='embedding')]
+
+    def backend(name, root):
+        return EmbeddingBackend() if name == 'embedding' else get_backend(name, root=root)
+
+    monkeypatch.setattr(search, 'get_backend', backend)
+    result = engine.recall('deployment', goal='none', search_backend='fusion',
+                           knowledge_only=True, limit=5)
+    assert received == [{}]
+    assert result['knowledge'][0]['backend'] == 'embedding'
+
+
 def test_load_active_goals_normalizes(kb_root):
     from knowledge_studio.store import load_active_goals
     _write_goal(kb_root, "active-goal", domains=["Computing", "Engineering"],
