@@ -2,7 +2,7 @@
 
 v0.6.0 前默认召回；v0.6.0+ 默认改 fts5（node-level BM25, R@1=0.825）。
 native 保留作向后兼容 + --explain 七因子逐项分可见 + fusion re-rank 用。
-包装 ``recall()``，无新依赖，实时遍历 wiki/。
+包装 ``recall_knowledge()``，无新依赖，实时遍历 wiki/。
 """
 from __future__ import annotations
 
@@ -10,12 +10,13 @@ from typing import Any
 
 from . import SearchHit
 
-# recall() 接受的 kwargs 白名单（避免 backend 传无关参数）
-_RECALL_KWARGS = ("goal", "goal_boost", "type_filter", "explain", "topic_id")
+# Pure retrieval inputs, including the current request's optional snapshots.
+_RECALL_KWARGS = ("goal", "goal_boost", "type_filter", "explain", "topic_id",
+                  "candidate_pages", "params", "goal_context")
 
 
 class NativeBackend:
-    """包装 ``recall()`` — OKS 默认 6+1 召回。
+    """包装 ``recall_knowledge()`` — OKS 6+1 召回。
 
     无预索引（实时计算），无新依赖。小库（< 1000 页）足够快。
     """
@@ -27,15 +28,14 @@ class NativeBackend:
     def search(
         self, query: str, *, limit: int = 10, scope: str | None = None, **kwargs: Any
     ) -> list[SearchHit]:
-        from ..recall import recall
+        from ..recall import recall_knowledge
 
         recall_kwargs = {k: v for k, v in kwargs.items() if k in _RECALL_KWARGS}
-        r = recall(
+        hits = recall_knowledge(
             query=query,
             limit=limit,
             scope=scope,
-            knowledge_only=True,
-            search_backend="legacy",  # 强制 6+1，避免 fusion 递归
+            search_backend="native",
             **recall_kwargs,
         )
         return [
@@ -46,7 +46,7 @@ class NativeBackend:
                 backend="native",
                 extra={"confidence": h.get("confidence", 0.8)},
             )
-            for h in r.get("knowledge", [])
+            for h in hits
         ]
 
 
