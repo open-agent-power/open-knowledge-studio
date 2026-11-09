@@ -98,3 +98,30 @@ def test_http_upload_accepts_large_datasets_but_requires_instance_and_origin(roo
             assert json.load(response)['datasets'][0]['case_count']==400
     finally:
         server.shutdown();server.server_close();worker.join(timeout=5)
+
+
+def test_reject_incomplete_upload_does_not_block_server(root):
+    import socket
+    from threading import Thread
+    from urllib.request import urlopen
+    from knowledge_studio.mail_web import create_server
+
+    server = create_server(root, 0, local_edit=True)
+    worker = Thread(target=server.serve_forever, daemon=True)
+    worker.start()
+    try:
+        with socket.create_connection(("127.0.0.1", server.server_port), timeout=3) as client:
+            client.settimeout(3)
+            client.sendall(
+                (f"POST /api/evaluation/import HTTP/1.1\r\n"
+                 f"Host: 127.0.0.1:{server.server_port}\r\n"
+                 "Content-Type: application/json\r\n"
+                 "Content-Length: 100000\r\n\r\n").encode() + b"{}"
+            )
+            assert b" 403 " in client.recv(4096)
+        with urlopen(f"http://127.0.0.1:{server.server_port}/api/evaluation/catalog", timeout=3) as response:
+            assert response.status == 200
+    finally:
+        server.shutdown()
+        server.server_close()
+        worker.join(timeout=5)
