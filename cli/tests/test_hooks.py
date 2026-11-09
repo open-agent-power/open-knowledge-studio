@@ -1,6 +1,7 @@
 """Tests for optional editor hook installation."""
 
 import json
+import ast
 import os
 
 import pytest
@@ -17,6 +18,23 @@ from knowledge_studio.cli import app
 
 
 runner = CliRunner()
+
+
+def test_prompt_goal_loader_reads_date_folders_with_distinct_identities(tmp_path):
+    script = Path(__file__).resolve().parents[2] / "assets/hooks/user-prompt-recall.py"
+    # Test the actual loader without invoking hook main, recall or persistence.
+    module = ast.parse(script.read_text())
+    loader = next(n for n in module.body if isinstance(n, ast.FunctionDef) and n.name == "_load_active_goals")
+    namespace = {"Path": Path}
+    exec(compile(ast.Module(body=[loader], type_ignores=[]), str(script), "exec"), namespace)
+    folder = tmp_path / "profiles/goals"
+    for relative, status in [("flat.md", "active"), ("2026/11/08/write.md", "active"),
+                             ("2026/11/09/write.md", "active"), ("2026/11/09/done.md", "completed")]:
+        path = folder / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(f"---\ntitle: {path.stem}\nstatus: {status}\n---\n")
+    actual = namespace["_load_active_goals"](tmp_path)
+    assert {row["slug"] for row in actual} == {"flat", "2026/11/08/write", "2026/11/09/write"}
 
 
 def _init_instance(tmp_path):
