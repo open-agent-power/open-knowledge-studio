@@ -36,6 +36,7 @@ def linked(tmp_path):
     repo = tmp_path / "team"
     repo.mkdir()
     git(repo, "init", "-q")
+    git(repo, "config", "core.autocrlf", "true")
     (repo / "catalog").mkdir()
     (repo / "knowledge").mkdir()
     (repo / "sources/reviews").mkdir(parents=True)
@@ -88,7 +89,7 @@ def approve(repo, rows):
                 "decided_at": "2026-11-05T00:00:00Z",
                 "decision_ref": "https://example.org/decision",
                 "body_sha256": hashlib.sha256(
-                    (repo / "knowledge/one.md").read_bytes()
+                    subprocess.check_output(["git", "-C", str(repo), "show", "HEAD:knowledge/one.md"])
                 ).hexdigest(),
             }
         )
@@ -108,6 +109,9 @@ def test_candidates_are_visible_but_never_recalled_and_upstream_unchanged(linked
 def test_head_refresh_is_committed_and_versioned_without_copying(linked):
     root, repo, rows = linked
     sha = approve(repo, rows)
+    blob = subprocess.check_output(["git", "-C", str(repo), "show", f"{sha}:knowledge/one.md"])
+    approval = json.loads(subprocess.check_output(["git", "-C", str(repo), "show", f"{sha}:sources/reviews/one.json"]))
+    assert approval["body_sha256"] == hashlib.sha256(blob).hexdigest()
     hits, warnings = sources.search(root, "quartz")
     assert not warnings and hits[0]["revision"] == sha
     assert "/blob/" + sha + "/" in hits[0]["url"]

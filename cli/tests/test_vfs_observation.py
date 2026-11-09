@@ -7,7 +7,7 @@ def test_read_is_equivalent_with_nested_real_spans_and_private_content_not_logge
     tmp_path,
 ):
     (tmp_path / "wiki").mkdir()
-    (tmp_path / "wiki/a.md").write_text("# private\n中文 content")
+    (tmp_path / "wiki/a.md").write_text("# private\n中文 content", encoding="utf-8")
     data = execute(tmp_path, "compare", "oks://wiki/a.md", offset=2, limit=7)
     assert data["result"]["content"] == "private"
     record = data["trace"]
@@ -19,7 +19,7 @@ def test_read_is_equivalent_with_nested_real_spans_and_private_content_not_logge
         s["start_ms"] + s["duration_ms"] <= record["total_ms"] for s in record["spans"]
     )
     assert all(s["parent_id"] is not None for s in record["spans"][1:])
-    assert "private" not in (tmp_path / "records/observability/vfs.json").read_text()
+    assert "private" not in (tmp_path / "records/observability/vfs.json").read_text(encoding="utf-8")
     assert history(tmp_path)["records"][0]["id"] == record["id"]
 
 
@@ -47,7 +47,7 @@ def test_ordinary_fs_cli_has_observation_without_changing_schema(tmp_path, monke
     from knowledge_studio.cli import app
 
     (tmp_path / "wiki").mkdir()
-    (tmp_path / "wiki/a.md").write_text("# evidence")
+    (tmp_path / "wiki/a.md").write_text("# evidence", encoding="utf-8")
     monkeypatch.setenv("OKS_ROOT", str(tmp_path))
     result = CliRunner().invoke(
         app, ["fs", "read", "oks://wiki/a.md", "--format", "json"]
@@ -67,7 +67,8 @@ def test_recall_exposes_real_spans_without_persisting_query_or_using_wiki(
 
     (tmp_path / "wiki").mkdir()
     (tmp_path / "wiki/a.md").write_text(
-        "---\ntitle: Evidence\ntype: concept\narea: computing\n---\nQuartz evidence"
+        "---\ntitle: Evidence\ntype: concept\narea: computing\n---\nQuartz evidence",
+        encoding="utf-8",
     )
     monkeypatch.setenv("OKS_ROOT", str(tmp_path))
     result = recall(
@@ -85,6 +86,6 @@ def test_recall_exposes_real_spans_without_persisting_query_or_using_wiki(
     assert history(tmp_path, "recall")["records"][0]["id"] == trace["id"]
     assert (
         "private-query"
-        not in (tmp_path / "records/observability/recall.json").read_text()
+        not in (tmp_path / "records/observability/recall.json").read_text(encoding="utf-8")
     )
     assert not (tmp_path / ".oks/access.json").exists()

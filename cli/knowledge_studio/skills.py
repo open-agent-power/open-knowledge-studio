@@ -120,7 +120,7 @@ def _root(explicit: Path | str | None = None) -> Path:
     return root
 
 
-def _scan(directory: Path, *, ignore: bool = False) -> tuple[dict[str, bytes], list[str]]:
+def _scan(directory: Path, *, ignore: bool = False, runtime_bytecode: bool = False) -> tuple[dict[str, bytes], list[str]]:
     if directory.is_symlink() or directory.is_junction():
         raise ValueError("Skill source/target cannot be a symlink or junction")
     files: dict[str, bytes] = {}
@@ -139,6 +139,11 @@ def _scan(directory: Path, *, ignore: bool = False) -> tuple[dict[str, bytes], l
             relative = _relative(child.relative_to(directory).as_posix())
             if child.is_symlink() or not child.is_file():
                 raise ValueError(f"Only regular files may be imported: {relative}")
+            # Python may create derived bytecode when cached helpers are run.
+            # Ignore only these files, not arbitrary new files or source edits.
+            if runtime_bytecode and "__pycache__" in PurePosixPath(relative).parts and child.suffix == ".pyc":
+                skipped.append(relative)
+                continue
             if ignore and name in _IGNORED:
                 skipped.append(relative)
                 continue
@@ -760,10 +765,6 @@ def search(query: str, *, limit: int = 5, kind: str | None = None, category: str
                    strategy="capability", category=category, diagnostics=diagnostics)
     search_query = f"{query} {routed_query}" if routed_query != query.lower() else query
     hits = _recall_knowledge_via_backend(query=search_query, **options)
-    if not hits and routed_query == query.lower():
-        options["strategy"] = "capability_body"
-        hits = _recall_knowledge_via_backend(query=query, **options)
-        diagnostics["capability_fallback"] = "instructions_no_metadata_match"
     by_slug = {p["slug"]: p for p in pages}
     for hit in hits:
         hit.update({key: by_slug[hit["slug"]].get(key, "") for key in ("skill_id", "skill_version", "skill_category")})
@@ -813,7 +814,7 @@ def load(identity: str, *, version: str | None = None, host: str | None = None) 
         cache = _inside(root, f".oks/skill-cache/{identity}/{selected['skill_version']}")
         with store._file_lock(_inside(root, ".oks/locks/skills.lock")):
             if cache.exists():
-                current, _ = _scan(cache)
+                current, _ = _scan(cache, runtime_bytecode=True)
                 if _hashes(current) != _hashes(files):
                     raise ValueError("Skill cache was modified; preserve those edits before reloading")
             else:
