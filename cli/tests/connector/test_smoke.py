@@ -28,6 +28,19 @@ def test_cli_help_runs():
     assert "usage" in proc.stdout.lower()
 
 
+def test_help_survives_legacy_output_encoding():
+    import os
+
+    env = dict(os.environ, PYTHONUTF8="0", PYTHONIOENCODING="cp1252")
+    proc = subprocess.run(
+        [sys.executable, "-X", "utf8=0", "-m", "oks_connector.raw_bundle_adapter", "--help"],
+        capture_output=True, env=env, check=False,
+    )
+    assert proc.returncode == 0, proc.stderr.decode("cp1252", errors="replace")
+    assert b"usage" in proc.stdout.lower()
+    assert b"\\u" in proc.stdout  # nonrepresentable text remains recoverable
+
+
 def test_direct_adapters_run_without_installed_connector(tmp_path):
     """Extraction venvs need not install OKS or the old standalone distribution."""
     from pathlib import Path

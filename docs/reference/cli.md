@@ -53,6 +53,8 @@ oks mail setup --agent reviewer --path /path/to/knowledge-base --skills-dir .age
 | `oks status` | 知识库概览（wiki/raw 计数 + tier + 质量） |
 | `oks metrics [--html]` | 知识指标；可生成基于注入与反馈记录的本地 HTML 报告和调参建议 |
 | `oks recall "<q>"` | 召回（fts5 node-level，双路 wiki + raw） |
+| `oks skills search "<任务意图>"` | 仅检索已审核 Skill 的名称与能力描述，不自动回退正文 |
+| `oks skills load <id> --version <version>` | 按固定版本读取指令与素材；默认不安装到宿主 |
 | `oks fs ls/tree/stat/read/overview/find` | 通过 canonical `oks://` URI 只读浏览当前实例 |
 | `oks ingest run <src>` | 摄入材料 → Raw Bundle |
 | `oks ingest prepare <src>` | 生成 ingest 协议骨架 |
@@ -73,6 +75,13 @@ oks mail setup --agent reviewer --path /path/to/knowledge-base --skills-dir .age
 | `oks config init/show/set` | 配置 |
 | `oks security sanitize <file>` | 凭据脱敏 |
 | `oks eval recall <dataset>` | 召回离线评测 |
+
+普通 `oks recall`（包括 `--knowledge-only`）不返回 Skill 卡或加载命令；需要能力时使用
+`oks skills search`。找不到匹配能力时允许空结果，不把正文里偶然提到的工具当成能力声明。
+已选定 Skill 后，直接复用任务中的版本，不必每轮重新搜索。
+
+缓存中的 Python 组件可正常生成 `__pycache__/*.pyc`，这些运行时派生文件不参与源资产哈希比较。
+修改源文件或添加其他文件仍会阻止缓存重用；生成文章等产物应放在任务目录。
 
 完整命令：`oks --help`。
 
