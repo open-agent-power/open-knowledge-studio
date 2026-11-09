@@ -230,6 +230,12 @@
   line-height: 1.85;
   color: var(--ink);
 }
+.knowledge-source {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
+  line-height: 1.7;
+}
 .knowledge-kind {
   font-size: 12px;
   color: var(--muted);

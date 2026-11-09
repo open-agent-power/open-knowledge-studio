@@ -446,6 +446,35 @@ test("saving postpones detail updates and an unchanged next snapshot catches up"
   assert.ok(text(page.aside()).includes("Available after saving"));
 });
 
+test("Wiki details toggle between rendered content and literal Markdown source", async () => {
+  const page = await fixture();
+  const markdown = '---\ntitle: Example\n---\n\n# Example\n<script>unsafe</script>';
+  page.fileReads.push({
+    body: '# Example\n<script>unsafe</script>',
+    body_html: '<h1>Example</h1><p>Rendered body</p>',
+    markdown,
+    markdown_truncated: true,
+  });
+  await page.select('wiki/a.md');
+  const nodes = all(page.aside());
+  const toggle = nodes.find((node) => node.textContent === '查看 Markdown 原文');
+  const body = nodes.find((node) => hasClass(node, 'knowledge-body'));
+  const source = nodes.find((node) => hasClass(node, 'knowledge-source'));
+  const notice = nodes.find((node) => node.textContent === '原文超出读取上限，当前显示部分内容。');
+  assert.equal(toggle.hidden, false);
+  assert.equal(source.hidden, true);
+  await toggle.onclick();
+  assert.equal(body.hidden, true);
+  assert.equal(source.hidden, false);
+  assert.equal(source.textContent, markdown);
+  assert.ok(!source.innerHTML);
+  assert.equal(notice.hidden, false);
+  await toggle.onclick();
+  assert.equal(body.hidden, false);
+  assert.equal(source.hidden, true);
+  assert.equal(notice.hidden, true);
+});
+
 test("Wiki read failures retain a visible retry and recover with server-rendered Markdown", async () => {
   const page = await fixture();
   page.fileReads.push(new Error("read failed"));

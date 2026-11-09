@@ -8,7 +8,6 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from socketserver import TCPServer
 from threading import RLock
-from time import monotonic
 from urllib.parse import parse_qs, urlsplit
 
 from knowledge_studio import identity, mail, mail_media, store
@@ -1291,28 +1290,19 @@ class Handler(BaseHTTPRequestHandler):
         return value
 
     def _reject_post(self, status, message, **details):
-        """Consume a bounded body before rejecting, so clients receive the response."""
+        """Consume a bounded request body before sending a JSON rejection.
+
+        Windows clients can see a connection reset when an HTTP/1.0 handler
+        closes with unread POST bytes. Rejections must leave the request stream
+        in the same state as accepted JSON requests.
+        """
         try:
             length = int(self.headers.get("Content-Length", "0"))
-            limit = 65536
-            if self.path.split("?", 1)[0] == "/api/evaluation/import":
-                from .studio_evaluation import MAX_UPLOAD
-                limit += MAX_UPLOAD
-            if 0 < length <= limit:
-                deadline = monotonic() + 1
-                while length > 0:
-                    remaining = deadline - monotonic()
-                    if remaining <= 0:
-                        break
-                    self.connection.settimeout(remaining)
-                    chunk = self.rfile.read1(min(length, 65536))
-                    if not chunk:
-                        break
-                    length -= len(chunk)
+            self.connection.settimeout(1)
+            if 0 < length <= 65536:
+                self.rfile.read(length)
         except (ValueError, OSError):
             pass
-        finally:
-            self.connection.settimeout(None)
         self.send_json(status, {"error": message, **details})
 
     def do_POST(self):

@@ -450,6 +450,20 @@ export function createKnowledgeView({ dom, state, actions, api }) {
         const body = el("article", "knowledge-body markdown-body");
         body.setAttribute("aria-label", "文档正文");
         body.textContent = "正在读取正文…";
+        const source = el("pre", "knowledge-source");
+        source.hidden = true;
+        const sourceNotice = el("p", "detail-meta", "原文超出读取上限，当前显示部分内容。");
+        sourceNotice.hidden = true;
+        const sourceToggle = button("查看 Markdown 原文", () => {
+          const showingSource = source.hidden;
+          source.hidden = !showingSource;
+          body.hidden = showingSource;
+          sourceNotice.hidden = !showingSource || !sourceNotice.dataset.truncated;
+          sourceToggle.textContent = showingSource ? "返回阅读" : "查看 Markdown 原文";
+          sourceToggle.setAttribute("aria-pressed", String(showingSource));
+        }, "soft");
+        sourceToggle.hidden = true;
+        sourceToggle.setAttribute("aria-pressed", "false");
         const metadata = el("details", "node-attributes");
         metadata.append(
           el("summary", null, "文件信息"),
@@ -480,7 +494,7 @@ export function createKnowledgeView({ dom, state, actions, api }) {
           links.append(link);
         }
         // Reading leads; graph actions and file internals remain secondary.
-        aside.append(label, body, links, metadata, documentTools);
+        aside.append(label, sourceToggle, body, source, sourceNotice, links, metadata, documentTools);
         if (node.pending && node.path?.startsWith("drafts/")) {
           const reviewLink = el("a", "knowledge-child", "打开草稿审核");
           reviewLink.href = "/review?detail=1&draft=" + encodeURIComponent(node.path);
@@ -499,6 +513,11 @@ export function createKnowledgeView({ dom, state, actions, api }) {
             if (!active()) return;
             if (typeof file.body_html !== "string")
               throw Error("正文格式不完整，请重试");
+            if (typeof file.markdown === "string") {
+              source.textContent = file.markdown;
+              sourceNotice.dataset.truncated = file.markdown_truncated ? "true" : "";
+              sourceToggle.hidden = false;
+            }
             body.innerHTML = file.body_html;
             const first = body.firstElementChild;
             if (
