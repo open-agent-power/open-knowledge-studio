@@ -1,0 +1,3 @@
+# Generated upstream bundles and license notices preserve their build bytes.
+assets/mail-web/vendor/graph-engine/pixi.min.js whitespace=-blank-at-eol,-blank-at-eof
+assets/mail-web/vendor/graph-engine/THIRD-PARTY-NOTICES whitespace=-blank-at-eol,-blank-at-eof
