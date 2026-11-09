@@ -38,13 +38,14 @@ export function goalTree(view, date) {
 export function layoutTree(root, collapsed = new Set()) {
   const nodes = [],
     edges = [];
-  let row = 0;
+  let offset = 0;
   function visit(node, depth, parent) {
     const item = { ...node, x: depth * 240 + 120, y: 0 };
     nodes.push(item);
     const children = collapsed.has(node.id) ? [] : node.children;
     const shown = children.map((child) => visit(child, depth + 1, item));
-    item.y = shown.length ? (shown[0].y + shown.at(-1).y) / 2 : ++row * 64;
+    item.y = shown.length ? (shown[0].y + shown.at(-1).y) / 2 : (offset += 64);
+    if (node.draft) offset += 32;
     if (parent) edges.push({ from: parent, to: item });
     return item;
   }
@@ -53,7 +54,7 @@ export function layoutTree(root, collapsed = new Set()) {
     nodes,
     edges,
     width: Math.max(520, ...nodes.map((n) => n.x + 150)),
-    height: Math.max(320, (row + 1) * 64),
+    height: Math.max(320, offset + 64),
   };
 }
 // Reserve a real layout slot for an unsaved child without changing the document.
@@ -120,26 +121,40 @@ export function drawMindmap({
         x: node.x - 92,
         y: node.y - 19,
         width: 206,
-        height: 42,
+        height: 84,
       });
       const form = document.createElement("form"),
-        input = document.createElement("input");
+        input = document.createElement("input"),
+        controls = document.createElement("div"),
+        save = document.createElement("button"),
+        cancel = document.createElement("button");
       form.className = "mindmap-inline-editor";
       input.value = pendingAdd.title;
       input.placeholder = "子目标";
       input.setAttribute("aria-label", "新子目标标题");
       input.required = true;
       input.maxLength = 300;
-      form.append(input);
+      controls.className = "mindmap-inline-actions";
+      save.type = "submit";
+      save.textContent = "保存";
+      cancel.type = "button";
+      cancel.textContent = "取消";
+      cancel.onclick = onCancel;
+      controls.append(save, cancel);
+      form.append(input, controls);
       editor.append(form);
       svg.append(editor);
       form.onsubmit = (event) => {
         event.preventDefault();
         event.stopPropagation();
-        if (input.value.trim()) onCommit(parent, input.value.trim());
+        if (input.value.trim()) return onCommit(parent, input.value.trim());
       };
       input.oninput = () => onDraft(input.value);
       input.onkeydown = (event) => {
+        if (event.key === "Enter" && event.isComposing) {
+          event.preventDefault();
+          return;
+        }
         if (event.key === "Escape") {
           event.preventDefault();
           onCancel();
@@ -205,5 +220,7 @@ export function drawMindmap({
     }
   }
   host.replaceChildren(svg);
-  host.querySelector(".mindmap-inline-editor input")?.focus();
+  const draftInput = host.querySelector(".mindmap-inline-editor input");
+  draftInput?.focus();
+  draftInput?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
 }
