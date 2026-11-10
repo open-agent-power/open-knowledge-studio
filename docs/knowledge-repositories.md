@@ -5,30 +5,21 @@ OKS 是工具；个人库和团队库是独立的数据仓库。统一使用入�
 ## 两个知识文件夹
 
 ```text
-personal-knowledge/                 # 私有 Git 仓库，个人正本
-├── profiles/
-│   ├── users/                      # 个人背景
-│   ├── projects/                   # 项目画像，区别于项目源码
-│   ├── agents/                     # Agent 背景与角色
-│   ├── recipes/                    # 场景组合与约定，不代表自动执行
-│   ├── discuss/YYYY/MM/DD/          # 讨论判断与开放问题
-│   └── goals/YYYY/MM/DD/            # 每日目标与 Markdown 子目标
-├── raw/YYYY/MM/DD/                  # 原始证据与转换产物
-├── drafts/                         # 待审知识变更
-├── wiki/                           # 已整理知识，审核状态须查证据
-├── skills/                         # 可复用方法包
-├── mail/                           # 交接事实
-├── records/                        # 调用、时间轴、评测、迁移等记录
-└── settings/sources.yaml            # 关联团队库，不复制其正文
+knowledge/
+├── personal-knowledge/             # 独立个人 Git 仓库
+└── team-knowledge/                 # 独立团队 Git 仓库
 
-team-knowledge/                     # 独立团队 Git 仓库
-├── knowledge/                      # 团队内容
-├── catalog/knowledge.yaml          # 稳定 ID、路径、状态与引用
-├── sources/                        # 来源与人工审核凭据
-└── governance/                     # 团队贡献与审核规则
+# 每个库使用相同核心桶
+raw/YYYY/MM/DD/                    # 原始证据与转换产物
+drafts/                           # 待审核候选
+wiki/                             # 审核后可复用知识
+skills/                           # 可执行能力包
+profiles/                         # 背景、项目、讨论、目标
+records/                          # 调用、评测、审核、迁移等记录
+settings/                         # 库声明与配置
 ```
 
-文件夹不必处于同一父目录。个人库中配置团队库的实际路径即可；符号链接只是入口，不是第二份正本。团队库不必初始化成另一个 OKS 实例，也不存个人聊天、私有画像或个人运行日志。
+文件夹不必处于同一父目录。个人库中配置团队库的实际路径即可；符号链接只是入口，不是第二份正本。个人库和团队库共享目录协议，团队库可用 `oks team init` 创建。它不承接个人聊天、私有画像或个人运行日志。
 
 ## 查阅与贡献
 
@@ -63,7 +54,17 @@ open-knowledge-studio/
 点击右上角的知识库名称，可以查看当前个人库和团队关联目录，不新增主导航。
 
 - 个人库：填写已有 OKS 实例目录并切换。页面重新连接，服务重新绑定观察器；同时保存 CLI 默认知识库位置。不会创建、搬迁或合并知识文件。显式 `--path` 和 `OKS_ROOT` 仍按原有优先级覆盖默认值。
-- 团队库：只编辑路径，名称直接显示文件夹名，保存整组关联；已有内部引用标识保持稳定。仓库标识从已提交的 Catalog 读取；先校验所有条目，再原子替换 `settings/sources.yaml`。已有固定版本保持不变，换目录或新增时使用 `HEAD`。
+- 团队库：只编辑路径，名称直接显示文件夹名，保存整组关联；已有内部引用标识保持稳定。仓库标识从已提交的 `settings/library.yaml`、兼容 Catalog 或 Git origin 读取；先校验所有条目，再原子替换 `settings/sources.yaml`。已有固定版本保持不变，换目录或新增时使用 `HEAD`。
 - 解除关联只移除个人配置，不删除团队仓库。无效目录、过期编辑或校验失败不会覆盖原配置。只读服务可查看，修改需要 `--local-edit`。
 
 文章创作等工作区可以独立保存稿件和产物，沿用个人知识库作为知识正本。先讨论读者、选题与判断，再形成目标，写作反馈经过确认后才形成长期知识候选；工作区不必复制个人库或团队库。
+
+## 跨库读取与兼容
+
+普通OKS实例直接按wiki/、drafts/、raw/、skills/、profiles/和records/中的Markdown建立只读视图；Wiki沿用个人库的human_reviewed_at标记，未审核、废弃和技能登记不进入知识召回。该标记是状态依据，不能独立证明审核人身份。
+
+旧团队库的catalog/knowledge.yaml、knowledge/和sources/index.json保持兼容。迁移后的可选records/catalog/knowledge.yaml继续保存稳定ID、旧路径和精确正文审核哈希；settings/library.yaml可声明repository与source_index。候选迁入drafts/不改变审核状态。修改正文必须重新审核，不能更新旧批准哈希来伪装有效。
+
+跨库结果保留命名空间、提交、路径、状态和哈希。团队文档可用 `oks fs ls oks://team/` 与 `oks fs read oks://team/<source-id>/<path>` 读取；该视图只暴露已索引的提交文档，不能写入或越过知识桶访问机器配置。读取结果中的revision用于重现该版本。图谱解析显式相对链接、稳定团队ID和oks://team/链接，不把同名标题推断成同一知识。
+
+团队召回目前仍是独立词法通道，不混入个人BM25分数。类型筛选按知识类型执行；查询合并不表示联合排序质量已完成评测。关联本地HEAD不会自动拉取远端，也不读取未提交修订。技能在图谱中可见不表示已安装或会自动执行。

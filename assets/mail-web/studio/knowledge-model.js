@@ -68,7 +68,8 @@ export function knowledgeTree(map, usage, skills, contexts = { entries: [] }) {
     for (const item of entries) {
       const key =
         item.date ||
-        (["goal", "discuss"].includes(kind) ? "历史未归档" : item.group);
+        (["goal", "discuss"].includes(kind) ? "历史未归档" : kind === "team"
+          ? `${item.group} / ${{wiki:"知识",drafts:"待审核",raw:"来源",skills:"技能",profiles:"画像",records:"记录"}[item.asset_kind] || "知识"}` : item.group);
       if (!grouped.has(key)) grouped.set(key, []);
       grouped.get(key).push({ ...item, uses: 0, pending: item.pending || false, family: kind });
     }

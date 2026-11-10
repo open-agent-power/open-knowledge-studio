@@ -11,7 +11,7 @@ from time import perf_counter
 from uuid import uuid4
 
 from . import store, tasks
-from .vfs import VfsResolver, VfsService, VfsError, _validate_slice
+from .vfs import OksUri, VfsResolver, VfsService, VfsError, _validate_slice
 
 
 class Measurement:
@@ -59,6 +59,11 @@ class MeasuredService(VfsService):
 
     def read(self, uri, *, offset=0, limit=20000):
         _validate_slice(offset, limit)
+        with self.measurement.span("解析虚拟路径"):
+            parsed = OksUri.parse(uri)
+        if parsed.scope == "team":
+            with self.measurement.span("读取团队Git快照与切片"):
+                return super().read(uri, offset=offset, limit=limit)
         node = self.resolver.resolve(uri)
         if node.path is None or not node.path.is_file():
             raise VfsError("UNSUPPORTED_CONTENT", "Not a readable file")
@@ -141,11 +146,16 @@ def execute(root, operation, uri, *, query="", offset=0, limit=20000, persist=Tr
                 if operation == "compare":
                     # Same resolved file and character slice, no grep/read workload
                     # mismatch. VFS is deliberately first: cache/order is disclosed.
-                    node = service.resolver.resolve(uri)
-                    with m.span("直接读取（同文件与切片）"):
-                        direct = node.path.read_text(encoding="utf-8")[
-                            offset : offset + limit
-                        ]
+                    parsed = OksUri.parse(uri)
+                    if parsed.scope == "team":
+                        from . import linked_sources
+                        source = next(row for row in linked_sources.configuration(root) if row["name"] == parsed.parts[0])
+                        with m.span("直接Git blob读取（同提交与切片）"):
+                            direct = linked_sources._blob(source["path"], result["revision"], "/".join(parsed.parts[1:])).decode("utf-8")[offset:offset+limit]
+                    else:
+                        node = service.resolver.resolve(uri)
+                        with m.span("直接读取（同文件与切片）"):
+                            direct = node.path.read_text(encoding="utf-8")[offset:offset+limit]
                     record["comparison"] = {
                         "equivalent": direct == result["content"],
                         "vfs_ms": vfs_ms,
@@ -164,6 +174,7 @@ def execute(root, operation, uri, *, query="", offset=0, limit=20000, persist=Tr
                 record["output_bytes"] = len(encoded)
                 record["output_sha256"] = hashlib.sha256(encoded).hexdigest()
                 if "content" in result:
+                    record.update({key:result[key] for key in ("repository", "revision", "source_sha256", "read_only") if key in result})
                     record["returned_chars"] = result["returned_chars"]
                     record["content_sha256"] = hashlib.sha256(
                         result["content"].encode()

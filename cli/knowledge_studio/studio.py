@@ -220,6 +220,7 @@ def context_catalog(root):
             edges.append({'a': identifier, 'b': target, 'type': 'cites'})
         if meta.get('reply_to'):
             edges.append({'a': identifier, 'b':'mail:'+str(meta['reply_to']), 'type':'reply_to'})
+    edges.extend(linked_sources.relations(entries))
     return {'entries': entries, 'edges': edges, 'warnings': warnings}
 
 

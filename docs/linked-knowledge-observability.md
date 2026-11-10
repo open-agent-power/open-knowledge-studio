@@ -10,9 +10,9 @@ oks sources list
 oks sources unlink team
 ```
 
-关联配置保存在个人库 `settings/sources.yaml`。当前适配 `catalog/knowledge.yaml`、`knowledge/`、`sources/index.json` 的独立团队目录格式。读取本地 HEAD 的已提交 Git blob；可加 `--revision <40位SHA>` 固定版本。默认 HEAD 随本地提交更新，OKS 不执行 fetch、checkout 或上游脚本。
+关联配置保存在个人库 `settings/sources.yaml`。个人与团队采用相同核心桶，支持普通OKS实例；仍兼容 `catalog/knowledge.yaml`、`knowledge/`、`sources/index.json` 旧格式。迁移目录和审核索引可保留于records/catalog/，来源位于raw/。读取本地 HEAD 的已提交 Git blob；可加 `--revision <40位SHA>` 固定版本。默认 HEAD 随本地提交更新，OKS 不执行 fetch、checkout 或上游脚本。
 
-图谱显示来源仓库、完整提交、内容 SHA、原始证据链接与审核状态。只有 approved 且审批绑定完整正文 SHA 的团队知识进入独立的 `team_knowledge` 召回通道；candidate 可浏览，但不会被自动批准。两个通道的词法分数不混合排序。当前离线 Wiki 评测仍只评个人 Wiki，不据此宣称已经验证团队联合召回质量。
+图谱显示来源仓库、完整提交、内容 SHA、原始证据链接与审核状态。标准Wiki依照审核元数据、Catalog条目依照绑定完整正文SHA的批准记录进入独立的 `team_knowledge` 召回通道；candidate 可浏览，但不会被自动批准。两个通道的词法分数不混合排序。当前离线 Wiki 评测仍只评个人 Wiki，不据此宣称已经验证团队联合召回质量。
 
 团队更新由 Agent 在团队仓库分支修改、验证、发 PR；PR 合并不自动等于知识审核通过。
 

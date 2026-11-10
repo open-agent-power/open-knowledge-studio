@@ -60,10 +60,7 @@ def save_sources(root, request):
         if not isinstance(revision, str) or (revision != 'HEAD' and not re.fullmatch(r'[0-9a-f]{40}', revision)):
             raise ValueError('版本必须为 HEAD 或完整 commit SHA')
         # Read committed data only; do not import or run linked repository code.
-        catalog = yaml.safe_load(linked_sources._blob(path, revision, 'catalog/knowledge.yaml'))
-        repository = catalog.get('repository') if isinstance(catalog, dict) else None
-        if not isinstance(repository, str) or not re.fullmatch(r'[\w.-]+/[\w.-]+', repository):
-            raise ValueError('团队库缺少有效的 catalog/knowledge.yaml repository')
+        repository = linked_sources.repository_at(path, revision)
         item = {'name': name, 'path': str(path), 'repository': repository, 'revision': revision}
         linked_sources.snapshot(item)
         if any(v['path'] == str(path) for v in validated):

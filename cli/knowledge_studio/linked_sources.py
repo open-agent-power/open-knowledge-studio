@@ -159,7 +159,38 @@ def snapshot(source, *, approved_only=False):
 
 @lru_cache(maxsize=32)
 def _snapshot(path, revision, repository, name, approved_only=False):
-    catalog = yaml.safe_load(_blob(path, revision, "catalog/knowledge.yaml"))
+    from .library_snapshot import unified_snapshot
+    if _has_blob(path, revision, "settings/library.yaml") or _has_blob(path, revision, "records/catalog/knowledge.yaml"):
+        return unified_snapshot(path, revision, repository, name, approved_only=approved_only)
+    # Ordinary OKS instances created by `oks team init` need no extra catalog.
+    if not _has_blob(path, revision, "catalog/knowledge.yaml"):
+        return unified_snapshot(path, revision, repository, name, approved_only=approved_only)
+    return _catalog_snapshot(path, revision, repository, name, approved_only)
+
+
+def _has_blob(path, revision, relative):
+    return bool(_git(path, "ls-tree", "-z", revision, "--", relative))
+
+
+def repository_at(path, revision="HEAD"):
+    """Discover identity from committed metadata or an existing Git remote."""
+    for relative in ("settings/library.yaml", "records/catalog/knowledge.yaml", "catalog/knowledge.yaml"):
+        if _has_blob(path, revision, relative):
+            data = yaml.safe_load(_blob(path, revision, relative))
+            repository = data.get("repository") if isinstance(data, dict) else None
+            if isinstance(repository, str) and re.fullmatch(r"[\w.-]+/[\w.-]+", repository):
+                return repository
+    remote = _git(path, "config", "--get", "remote.origin.url").decode().strip()
+    match = re.fullmatch(r"(?:git@github.com:|https://github.com/)([\w.-]+/[\w.-]+?)(?:\.git)?/?", remote)
+    if not match:
+        raise ValueError("Linked knowledge library needs repository identity in settings/library.yaml or origin")
+    return match[1]
+
+
+def _catalog_snapshot(path, revision, repository, name, approved_only=False,
+                      catalog_path="catalog/knowledge.yaml", source_path="sources/index.json",
+                      unified=False):
+    catalog = yaml.safe_load(_blob(path, revision, catalog_path))
     if (
         not isinstance(catalog, dict)
         or catalog.get("schema_version") != 1
@@ -171,7 +202,7 @@ def _snapshot(path, revision, repository, name, approved_only=False):
         raise ValueError("Catalog must contain at most 2000 knowledge entries")
     entries, seen = [], set()
     base = f"https://github.com/{repository}/blob/{revision}/"
-    source_rows = json.loads(_blob(path, revision, "sources/index.json")).get(
+    source_rows = json.loads(_blob(path, revision, source_path)).get(
         "sources", []
     )
     evidence = {row["id"]: row for row in source_rows}
@@ -189,7 +220,7 @@ def _snapshot(path, revision, repository, name, approved_only=False):
             raise ValueError("Invalid or duplicate team knowledge ID")
         seen.add(identifier)
         relative = _relative(row["path"])
-        if not relative.startswith("knowledge/") or not relative.endswith(".md"):
+        if not relative.startswith(("wiki/", "drafts/") if unified else ("knowledge/",)) or not relative.endswith(".md"):
             raise ValueError("Team knowledge must be Markdown under knowledge/")
         body = _blob(path, revision, relative)
         digest = hashlib.sha256(body).hexdigest()
@@ -200,7 +231,7 @@ def _snapshot(path, revision, repository, name, approved_only=False):
         if status == "approved":
             if (
                 not isinstance(approval, str)
-                or not approval.startswith("sources/reviews/")
+                or not approval.startswith(("records/reviews/", "sources/reviews/"))
                 or not approval.endswith(".json")
             ):
                 raise ValueError("Approved knowledge needs a review record")
@@ -236,8 +267,13 @@ def _snapshot(path, revision, repository, name, approved_only=False):
                 "slug": f"team:{name}/{identifier}",
                 "title": row["title"],
                 "type": "team",
+                "knowledge_type": row.get("type", "strategy"),
+                "asset_kind": "wiki" if status == "approved" else "drafts",
+                "read_only": True,
+                "uri": f"oks://team/{name}/" + quote(relative, safe="/"),
                 "family": "team",
-                "group": name,
+                "group": Path(path).name,
+                "library_id": name,
                 "path": relative,
                 "source_path": relative,
                 "source_sha256": digest,
@@ -308,7 +344,8 @@ def search(root, query, limit=3, scope=None, type_filter=None):
             if (
                 entry["status"] != "approved"
                 or (scope and scope not in entry["tags"])
-                or type_filter
+                or (type_filter and entry.get("knowledge_type") != type_filter)
+                or entry.get("asset_kind", "wiki") != "wiki"
             ):
                 continue
             # Independent, explicitly named lexical channel: its scores are not
@@ -331,3 +368,57 @@ def search(root, query, limit=3, scope=None, type_filter=None):
         sorted(hits, key=lambda e: (-e["relevance"], e["id"]))[:limit],
         data["warnings"],
     )
+
+
+def read(root, name, relative, *, revision=None):
+    """Read an indexed, committed document; never traverse a linked worktree."""
+    relative = _relative(relative)
+    source = next((row for row in configuration(root) if row["name"] == name), None)
+    if source is None:
+        raise ValueError("Unknown linked knowledge library")
+    if revision is not None:
+        if not re.fullmatch(r"[0-9a-f]{40}", revision):
+            raise ValueError("Use a complete commit SHA")
+        source = {**source, "revision": revision}
+    data = snapshot(source)
+    entry = next((e for e in data["entries"] if e["path"] == relative), None)
+    if entry is None:
+        raise ValueError("Linked document is not indexed")
+    return entry
+
+
+def relations(entries):
+    """Resolve explicit cross-library links without guessing semantic edges."""
+    import posixpath
+    from urllib.parse import unquote, urlsplit
+
+    from .studio import _visible_markdown
+
+    by_id = {e["id"]: e for e in entries}
+    by_path = {}
+    for entry in entries:
+        namespace = entry["id"].split("/", 1)[0] if entry["id"].startswith("team:") else "personal"
+        by_path[(namespace, entry["path"])] = entry["id"]
+    edges = set()
+    for entry in entries:
+        namespace = entry["id"].split("/", 1)[0] if entry["id"].startswith("team:") else "personal"
+        text = _visible_markdown(entry.get("body", ""))
+        tokens = re.findall(r"\[\[([^\]|]+)(?:\|[^\]]+)?\]\]", text)
+        tokens += re.findall(r"(?<!!)\[[^\]]*\]\(([^\s)]+)\)", text)
+        for token in tokens:
+            token = token.split("#", 1)[0].strip()
+            target = token if token in by_id else None
+            if token.startswith("oks://team/"):
+                uri = urlsplit(token)
+                parts = unquote(uri.path).strip("/").split("/", 1)
+                if len(parts) == 2:
+                    target = by_path.get(("team:" + parts[0], parts[1]))
+            elif not target and not urlsplit(token).scheme:
+                relative = posixpath.normpath(posixpath.join(posixpath.dirname(entry["path"]), token))
+                for candidate in (token, token + ".md", relative, relative + ".md"):
+                    target = by_path.get((namespace, candidate))
+                    if target:
+                        break
+            if target and target != entry["id"] and (namespace != "personal" or target.startswith("team:")):
+                edges.add((entry["id"], target))
+    return [{"a":a,"b":b,"type":"cites"} for a,b in sorted(edges)]

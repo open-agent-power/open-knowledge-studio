@@ -70,7 +70,7 @@ class OksUri:
                 "URI must use oks:// without credentials, port, query, or fragment",
             )
         scope = parsed.netloc
-        if scope not in MOUNTS:
+        if scope not in MOUNTS and scope != "team":
             raise VfsError("UNSUPPORTED_SCOPE", f"Unsupported OKS scope: {scope}")
         path_body = parsed.path[1:] if parsed.path.startswith("/") else parsed.path
         if "//" in parsed.path:
@@ -128,6 +128,8 @@ class VfsResolver:
         uri = value if isinstance(value, OksUri) else self.parse(value)
         if uri.scope is None:
             return ResolvedNode(uri=uri, path=None, mount=None, synthetic_root=True)
+        if uri.scope == "team":
+            raise VfsError("PATH_NOT_EXPOSED", "Linked libraries use committed read-only access")
         mount = MOUNTS[uri.scope]
         legacy = {'goal': ('goal',), 'discuss': ('discuss',), 'skill': ('skill',), 'skills': ('skill',)}
         if uri.scope in legacy:
@@ -231,6 +233,13 @@ class VfsService:
     def __init__(self, resolver: VfsResolver | None = None):
         self.resolver = resolver or VfsResolver()
 
+    def _has_libraries(self):
+        from . import linked_sources
+        try:
+            return bool(linked_sources.configuration(self.resolver.root))
+        except (OSError, ValueError):
+            return False
+
     def _entry(self, path: Path) -> dict[str, str]:
         uri = self.resolver.uri_for_path(path)
         node_type = _node_type(path)
@@ -257,6 +266,9 @@ class VfsService:
         return node.path if node.path.exists() else None
 
     def ls(self, uri: str) -> dict[str, object]:
+        if OksUri.parse(uri).scope == "team":
+            from .library_vfs import request
+            return request(self.resolver.root, uri, "ls")
         node = self.resolver.resolve(uri)
         if node.synthetic_root:
             return {
@@ -267,7 +279,7 @@ class VfsService:
                         "type": "directory",
                         "uri": f"oks://{scope}/",
                     }
-                    for scope in MOUNTS
+                    for scope in list(MOUNTS) + (["team"] if self._has_libraries() else [])
                     if scope not in _HIDDEN_SCOPES
                 ],
             }
@@ -281,6 +293,9 @@ class VfsService:
         return {"uri": node.uri.render(), "entries": entries}
 
     def stat(self, uri: str) -> dict[str, object]:
+        if OksUri.parse(uri).scope == "team":
+            from .library_vfs import request
+            return request(self.resolver.root, uri, "stat")
         node = self.resolver.resolve(uri)
         if node.synthetic_root:
             return {
@@ -310,6 +325,9 @@ class VfsService:
         self, uri: str, *, offset: int = 0, limit: int = 20_000
     ) -> dict[str, object]:
         _validate_slice(offset, limit)
+        if OksUri.parse(uri).scope == "team":
+            from .library_vfs import request
+            return request(self.resolver.root, uri, "read", offset=offset, limit=limit)
         node = self.resolver.resolve(uri)
         if node.synthetic_root or node.path is None or not node.path.is_file():
             raise VfsError(
@@ -385,6 +403,9 @@ class VfsService:
         self, uri: str, *, depth: int = 3, max_entries: int = 1_000
     ) -> dict[str, object]:
         _validate_tree_limits(depth, max_entries)
+        if OksUri.parse(uri).scope == "team":
+            from .library_vfs import request
+            return request(self.resolver.root, uri, "tree", depth=depth, max_entries=max_entries)
         node = self.resolver.resolve(uri)
 
         def physical_entries(
@@ -413,6 +434,11 @@ class VfsService:
                     mount_root = self._existing_mount_root(scope)
                     if depth > 1 and mount_root is not None:
                         yield from physical_entries(mount_root, mount, 2)
+                if self._has_libraries():
+                    yield {"name": "team", "type": "directory", "uri": "oks://team/", "read_only": True}
+                    if depth > 1:
+                        from .library_vfs import request
+                        yield from request(self.resolver.root, "oks://team/", "tree", depth=depth-1, max_entries=max_entries)["entries"]
                 return
             assert node.path is not None and node.mount is not None
             if not node.path.is_dir():
@@ -436,6 +462,9 @@ class VfsService:
         }
 
     def overview(self, uri: str) -> dict[str, object]:
+        if OksUri.parse(uri).scope == "team":
+            from .library_vfs import request
+            return request(self.resolver.root, uri, "overview")
         node = self.resolver.resolve(uri)
         if node.synthetic_root:
             children = self.ls(uri)["entries"]
@@ -477,6 +506,9 @@ class VfsService:
         self, query: str, *, under: str, max_results: int = 50
     ) -> dict[str, object]:
         normalized = _validate_find(query, max_results)
+        if OksUri.parse(under).scope == "team":
+            from .library_vfs import request
+            return request(self.resolver.root, under, "find", query=query, max_results=max_results)
         node = self.resolver.resolve(under)
         if not node.synthetic_root and (node.path is None or not node.path.is_dir()):
             raise VfsError("NOT_DIRECTORY", f"Not a directory: {node.uri.render()}")
@@ -538,6 +570,14 @@ class VfsService:
                 truncated = True
                 break
             matches.append(match)
+
+        if node.synthetic_root and self._has_libraries():
+            from .library_vfs import request
+            remaining = max_results - len(matches)
+            linked = request(self.resolver.root, "oks://team/", "find", query=query,
+                             max_results=max(1, remaining))
+            matches.extend(linked["matches"][:remaining])
+            truncated = truncated or linked["truncated"] or (remaining == 0 and bool(linked["matches"]))
 
         return {
             "uri": node.uri.render(),
