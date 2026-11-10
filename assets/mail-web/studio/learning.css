@@ -389,22 +389,18 @@
   font-size: 12px;
   color: #8c99ad;
 }
-.day-timeline {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  overflow-x: auto;
-  padding: 12px 0;
-  font-size: 11px;
-  white-space: nowrap;
-}
-.timeline-event {
-  border: 1px solid var(--line);
-  border-radius: 5px;
-  padding: 8px;
-  color: #7386aa;
-  white-space: nowrap;
-}
+.day-timeline { padding:12px 0; font-size:11px; min-width:0; }
+.timeline-controls { display:flex; align-items:center; gap:10px; }
+.timeline-controls > button { width:28px; flex-shrink:0; }
+.timeline-track { position:relative; flex:1; min-width:80px; margin:0 6px; height:28px; }
+.timeline-range { appearance:none; -webkit-appearance:none; position:absolute; inset:0; width:100%; height:4px; margin:auto 0; border-radius:4px; outline-offset:6px; background:linear-gradient(to right,var(--accent) var(--progress),var(--line) var(--progress)); cursor:pointer; }
+.timeline-range::-webkit-slider-thumb { -webkit-appearance:none; width:12px; height:12px; border-radius:50%; background:var(--accent); }
+.timeline-range::-moz-range-thumb { width:12px; height:12px; border:0; border-radius:50%; background:var(--accent); }
+.timeline-marks { position:absolute; inset:0; pointer-events:none; }
+.timeline-marker { position:absolute; top:22px; width:8px; height:8px; padding:0; transform:translateX(-50%); border-radius:50%; background:#b9c6dc; pointer-events:auto; }
+.timeline-marker[aria-pressed="true"] { background:var(--accent); }
+.timeline-clock { font-variant-numeric:tabular-nums; flex-shrink:0; }
+.timeline-caption { margin:5px 0 0 38px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; color:var(--muted); }
 .day-active circle:nth-child(2) {
   stroke: #7d9bce;
   stroke-width: 3;
@@ -441,3 +437,7 @@
   .knowledge-filters button { padding:3px 5px; }
   .knowledge-key { max-width:55%; line-height:1.7; bottom:8px; }
 }
+
+.timeline-stages { display:flex; gap:8px; margin-top:8px; overflow-x:auto; padding:2px 0 5px; }
+.timeline-event { flex-shrink:0; border:1px solid var(--line); border-radius:5px; padding:8px; color:#7386aa; white-space:nowrap; font-size:11px; }
+.timeline-event[aria-pressed="true"] { border-color:var(--accent); color:#526ca9; background:#eef2fb; }

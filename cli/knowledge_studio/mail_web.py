@@ -7,7 +7,7 @@ from datetime import date, datetime, time, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from socketserver import TCPServer
-from threading import RLock
+from threading import Lock, RLock
 from urllib.parse import parse_qs, urlsplit
 
 from knowledge_studio import identity, mail, mail_media, store
@@ -1317,12 +1317,28 @@ class Handler(BaseHTTPRequestHandler):
                     if payload.get('expected_knowledge_base') != str(self.server.kb_root):
                         self.send_json(409, {'error': '知识库已切换，请重新打开。', 'code': 'instance_changed'})
                         return
-                    if payload.get('action') == 'switch':
-                        result = studio_libraries.switch_personal(self.server, payload)
-                    elif payload.get('action') == 'sources':
-                        result = studio_libraries.save_sources(self.kb_root, payload)
-                    else:
-                        raise ValueError('Unknown library configuration action')
+                if payload.get('action') == 'choose_folder':
+                    if not self.server.folder_picker_lock.acquire(blocking=False):
+                        raise ValueError('文件夹选择器已打开，请先完成或取消选择')
+                    try:
+                        result = studio_libraries.choose_folder()
+                    finally:
+                        self.server.folder_picker_lock.release()
+                    with self.server.library_lock:
+                        if payload.get('expected_knowledge_base') != str(self.server.kb_root):
+                            self.send_json(409, {'error': '知识库已切换，请重新打开。', 'code': 'instance_changed'})
+                            return
+                else:
+                    with self.server.library_lock:
+                        if payload.get('expected_knowledge_base') != str(self.server.kb_root):
+                            self.send_json(409, {'error': '知识库已切换，请重新打开。', 'code': 'instance_changed'})
+                            return
+                        if payload.get('action') == 'switch':
+                            result = studio_libraries.switch_personal(self.server, payload)
+                        elif payload.get('action') == 'sources':
+                            result = studio_libraries.save_sources(self.kb_root, payload)
+                        else:
+                            raise ValueError('Unknown library configuration action')
                 self.send_json(200, result)
             except (OSError, ValueError, TypeError, UnicodeError, yaml.YAMLError) as exc:
                 self.send_json(400, {'error': str(exc)})
@@ -1646,6 +1662,7 @@ def create_server(root: Path, port: int = 3182, *, mode: str = "reader", knowled
     server = _LoopbackHTTPServer(("127.0.0.1", port), Handler)
     server.kb_root = root
     server.library_lock = RLock()
+    server.folder_picker_lock = Lock()
     server.mode = mode
     server.local_review = bool(local_review or local_edit)
     server.local_edit = bool(local_edit)

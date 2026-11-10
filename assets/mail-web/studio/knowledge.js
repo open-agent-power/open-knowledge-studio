@@ -299,7 +299,7 @@ export function createKnowledgeView({ dom, state, actions, api }) {
           );
         }
         aside.append(body);
-        if (['goal','skill','discuss'].includes(node.type)) {
+        if (['goal','discuss'].includes(node.type)) {
           const flow = el('details','knowledge-workflow');
           const content = el('div');
           flow.append(el('summary',null,'流程与执行'),content);

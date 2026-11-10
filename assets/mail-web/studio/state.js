@@ -21,3 +21,11 @@ export function createStudioState() {
     statisticsMode: "usage",
   };
 }
+
+// Calendar arithmetic in UTC avoids DST changing the selected local date.
+export function shiftDate(value, days) {
+  const date = new Date(value + "T12:00:00Z");
+  if (!Number.isFinite(date.getTime())) throw Error("日期无效");
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}

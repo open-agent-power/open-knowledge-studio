@@ -1,6 +1,6 @@
 import { createLibrariesView } from "./studio/libraries.js";
 import { renderOnboarding } from "./studio/onboarding.js";
-import { createStudioState } from "./studio/state.js";
+import { createStudioState, shiftDate } from "./studio/state.js";
 import { $, el, button } from "./studio/dom.js";
 import { createStudioApi } from "./studio/api.js";
 import { createDiscussionView } from "./studio/discussion.js";
@@ -217,6 +217,8 @@ import { createSettingsView } from "./studio/settings.js";
       else b.removeAttribute("aria-current");
     });
     $("scopeBar").hidden = false;
+    $("scope").hidden = state.tab === "learning";
+    document.querySelector('label[for="scope"]').hidden = state.tab === "learning";
     $("scope").setAttribute("aria-label", "日期");
     $("newGoal").setAttribute(
       "aria-label",
@@ -224,7 +226,8 @@ import { createSettingsView } from "./studio/settings.js";
     );
     $("newGoal").hidden = state.tab !== "discuss";
     $("newGoal").disabled = !writable();
-    $("newGoal").title = writable() ? "新增 Markdown" : "只读模式";
+    $("newGoal").title = writable() ? "当天新增讨论文件（同一天可有多个主题）" : "只读模式";
+    $("previousDay").hidden = $("nextDay").hidden = state.tab === "learning";
     document.title =
       "OKS · " +
       { discuss: "讨论", goals: "目标", learning: "学习" }[state.tab];
@@ -336,23 +339,22 @@ import { createSettingsView } from "./studio/settings.js";
         void navigate(b.dataset.tab).catch((e) => status(e.message));
       }),
   );
-  $("scope").onchange = async (event) => {
-    if (!canLeave()) {
-      $("scope").value = state.date;
-      return;
-    }
-    state.date = event.target.value;
+  async function changeDate(date) {
+    if (!canLeave()) { $("scope").value = state.date; return; }
+    if (!date) { $("scope").value = state.date; return; }
+    state.date = date;
     await selectDate();
     state.selected = "";
     state.view = null;
     try {
       if (state.tab === "learning") render();
       else await loadView(true);
-    } catch (e) {
-      status(e.message);
-      render();
-    }
-  };
+    } catch (e) { status(e.message); render(); }
+  }
+  $("scope").onchange = event => { void changeDate(event.target.value); };
+  for (const [id, step] of [["previousDay", -1], ["nextDay", 1]]) {
+    $(id).onclick = () => { void changeDate(shiftDate(state.date || localDate(), step)); };
+  }
   window.addEventListener("beforeunload", (event) => {
     if (state.dirty || state.settingsDirty) {
       event.preventDefault();

@@ -18,6 +18,7 @@ class Element {
     this.tagName = tag;
     this.children = [];
     this.dataset = {};
+    this.style = { setProperty(key, value) { this[key] = value; } };
     this.classList = { add() {} };
     this.value = "";
   }

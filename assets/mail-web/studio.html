@@ -35,7 +35,7 @@
     <main>
       <div id="scopeBar">
         <label for="scope">日期</label
-        ><input id="scope" type="date" aria-label="日期" /><button
+        ><button id="previousDay" type="button" aria-label="上一天" title="上一天">‹</button><input id="scope" type="date" aria-label="日期" /><button id="nextDay" type="button" aria-label="下一天" title="下一天">›</button><button
           id="newGoal"
           title="新增目标 Markdown"
           aria-label="新增目标 Markdown"
@@ -52,11 +52,12 @@
       </header>
       <label for="personalLibrary">个人知识库</label>
       <div class="library-personal">
+        <span id="personalLibraryName" class="library-folder"></span>
         <input
           id="personalLibrary"
           spellcheck="false"
           autocomplete="off"
-        /><button id="switchLibrary" type="button">切换</button>
+        /><button id="choosePersonalLibrary" type="button">选择文件夹</button><button id="switchLibrary" type="button">切换</button>
       </div>
       <div class="library-heading">
         <span>团队知识库</span

@@ -260,6 +260,7 @@ export function createGoalsView({ dom, state, actions, model: M, api }) {
       api,
       canLeave: actions.canLeave,
       events: state.view.timeline,
+      selectedId: revision?.revision?.id,
       onSelect: (view) => {
         revision = view;
         paint();

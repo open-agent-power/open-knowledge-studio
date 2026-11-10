@@ -380,3 +380,9 @@ dialog form > button {
   white-space: nowrap;
   text-overflow: ellipsis;
 }
+
+#previousDay, #nextDay { font-size:21px; color:#8294b4; padding:2px 8px; }
+.library-personal { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.library-personal input { flex:1; min-width:150px; }
+.library-source { grid-template-columns:minmax(90px,140px) minmax(150px,1fr) auto auto; }
+@media(max-width:650px) { .library-source { grid-template-columns:1fr auto auto; } .library-source .library-folder { grid-column:1 / -1; } .library-personal .library-folder { width:100%; } }

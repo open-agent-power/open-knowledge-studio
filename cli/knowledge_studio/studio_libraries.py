@@ -4,6 +4,9 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 import re
+import shutil
+import subprocess
+import sys
 
 import yaml
 
@@ -20,6 +23,7 @@ def libraries(root):
     return {
         'knowledge_base': str(root),
         'personal_path': str(root),
+        'personal_name': root.name,
         'sources': linked_sources.configuration(root),
         'sources_version': _version(root),
     }
@@ -118,3 +122,37 @@ def switch_personal(server, request):
         if daily is not None:
             server.daily_service = daily
         return libraries(new_root)
+
+
+def choose_folder():
+    """Show a native dialog on the local server's desktop; never apply settings."""
+    if sys.platform == 'darwin':
+        command = ['osascript', '-e', 'POSIX path of (choose folder with prompt "选择知识库文件夹")']
+    elif sys.platform == 'win32':
+        command = ['powershell', '-NoProfile', '-STA', '-Command',
+                   '[Console]::OutputEncoding=[System.Text.UTF8Encoding]::new(); '
+                   'Add-Type -AssemblyName System.Windows.Forms; '
+                   '$dialog=New-Object System.Windows.Forms.FolderBrowserDialog; '
+                   '$dialog.Description="选择知识库文件夹"; '
+                   'if($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK){$dialog.SelectedPath}']
+    elif shutil.which('zenity'):
+        command = ['zenity', '--file-selection', '--directory', '--title=选择知识库文件夹']
+    elif shutil.which('kdialog'):
+        command = ['kdialog', '--getexistingdirectory', str(Path.home()), '--title', '选择知识库文件夹']
+    else:
+        raise ValueError('当前系统没有可用的文件夹选择器，请手动填写路径')
+    try:
+        result = subprocess.run(command, capture_output=True, text=True, encoding='utf-8', timeout=120)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise ValueError('无法打开文件夹选择器，请手动填写路径或重试') from exc
+    if result.returncode:
+        if (sys.platform == 'darwin' and '-128' in result.stderr) or (sys.platform not in {'darwin', 'win32'} and result.returncode == 1 and not result.stderr.strip()):
+            return {'cancelled': True, 'path': None}
+        raise ValueError('文件夹选择器未能完成，请手动填写路径或重试')
+    value = result.stdout.strip()
+    if not value:
+        return {'cancelled': True, 'path': None}
+    path = Path(value).expanduser().resolve()
+    if not path.is_dir():
+        raise ValueError('所选文件夹不可访问，请重新选择')
+    return {'cancelled': False, 'path': str(path), 'name': path.name}

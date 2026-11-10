@@ -10,7 +10,7 @@ export function createDiscussionView({ dom, state, actions, model: M, api }) {
     drawForceGraph(...args, { entry: state.view.entry, button });
   function renderDiscussion() {
     let data = M.graph(state.view, expanded);
-    const stage = el("div", "graph-stage");
+    const stage = el("div", "graph-stage discussion-stage");
     stage.setAttribute("aria-label", "目标及关联知识");
     const ns = "http://www.w3.org/2000/svg",
       svg = document.createElementNS(ns, "svg");

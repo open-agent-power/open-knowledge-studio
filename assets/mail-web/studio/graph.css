@@ -89,3 +89,5 @@
   font-size: 10px;
   color: #9ba8bd;
 }
+
+.discussion-stage { height:calc(100vh - 230px); }

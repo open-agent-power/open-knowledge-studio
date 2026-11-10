@@ -7,17 +7,35 @@ export function createLibrariesView({ dom, actions, api }) {
   const error = (message = "") => {
     $("libraryError").textContent = message;
   };
+  const folder = (value, fallback = "团队知识库") =>
+    value.trim().replace(/[\\/]+$/, "").split(/[\\/]/).pop() || fallback;
+  function personalName() {
+    $("personalLibraryName").textContent = folder($("personalLibrary").value, "个人知识库");
+  }
+  function enableControls() {
+    $("libraryDialog").querySelectorAll("button,input").forEach(n => {
+      n.disabled = busy || !actions.writable();
+    });
+    $("closeLibraries").disabled = busy;
+  }
+  async function chooseFolder(apply) {
+    if (busy || !actions.writable() || !actions.canLeave()) return;
+    busy = true; error(); enableControls();
+    try {
+      const selected = await api.post("/api/studio/libraries", { action: "choose_folder" });
+      if (!selected.cancelled) apply(selected.path);
+    } catch (e) { error(e.message); }
+    finally { busy = false; enableControls(); }
+  }
+  $("personalLibrary").oninput = personalName;
+  $("choosePersonalLibrary").onclick = () => chooseFolder(path => {
+    $("personalLibrary").value = path; personalName();
+  });
   function renderSources() {
     const list = $("teamLibraries");
     list.replaceChildren();
     rows.forEach((row, index) => {
       const line = el("div", "library-source");
-      const folder = (value) =>
-        value
-          .trim()
-          .replace(/[\\/]+$/, "")
-          .split(/[\\/]/)
-          .pop() || "团队知识库";
       const name = el("span", "library-folder", folder(row.path));
       name.title = folder(row.path);
       const path = el("input");
@@ -34,7 +52,13 @@ export function createLibrariesView({ dom, actions, api }) {
         renderSources();
       });
       remove.setAttribute("aria-label", `解除关联 ${folder(row.path)}`);
-      line.append(name, path, remove);
+      const choose = button("选择文件夹", () => chooseFolder(value => {
+        row.path = path.value = value;
+        name.textContent = name.title = folder(value);
+        remove.setAttribute("aria-label", `解除关联 ${folder(value)}`);
+      }));
+      choose.setAttribute("aria-label", `选择团队 ${index + 1} 文件夹`);
+      line.append(name, path, choose, remove);
       list.append(line);
     });
   }
@@ -92,6 +116,7 @@ export function createLibrariesView({ dom, actions, api }) {
       try {
         current = await api.request("/api/studio/libraries");
         $("personalLibrary").value = current.personal_path;
+        personalName();
         rows = current.sources.map((row) => ({
           ...row,
           originalPath: row.path,
