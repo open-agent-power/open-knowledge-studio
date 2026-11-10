@@ -35,16 +35,16 @@ def test_maintainer_skills_live_outside_assets():
     assert {"ingest", "query", "promote"} <= shipped
 
 
-def test_both_build_paths_vendor_assets_verbatim():
-    """bundle_assets.py (workflow) and setup.py (pip) must produce one tree."""
+def test_both_build_paths_use_shared_asset_assembly():
+    """The workflow and setuptools must use the same assembly implementation."""
     cli_dir = Path(__file__).parents[1]
     sources = {
         "bundle_assets.py": (cli_dir / "scripts" / "bundle_assets.py").read_text(encoding="utf-8"),
         "setup.py": (cli_dir / "setup.py").read_text(encoding="utf-8"),
     }
     for name, source in sources.items():
-        assert 'repo_root / "assets"' in source, f"{name} must copy from assets/"
-        assert "_MAP = [" not in source, f"{name} still uses the retired per-dir map"
+        assert "from _build_assets import bundle_assets" in source
+        assert "shutil.copytree" not in source
 
 
 def test_init_never_materializes_dev_only_skills(tmp_path):
@@ -223,7 +223,10 @@ def test_init_materializes_shareable_assets(tmp_path):
     for schema in ("recall-case.schema.json", "trace-event.schema.json", "run-manifest.schema.json"):
         assert (target / "_meta" / schema).is_file()
     # Contracts that used to sit at the repo root now ship inside the two layers.
-    assert (target / "_meta" / "schemas" / "raw-bundle-v0.2.schema.json").is_file()
+    from importlib.resources import files
+    from knowledge_studio.schemas import INSTANCE_SCHEMA_NAMES
+    for name in INSTANCE_SCHEMA_NAMES:
+        assert (target / "_meta" / "schemas" / name).read_bytes() == files("knowledge_studio.schemas").joinpath(name).read_bytes()
     assert (target / "settings" / "capabilities" / "video.watch.json").is_file()
     # Recipes and goal templates travel with the instance.
     assert (target / "profiles" / "recipes" / "daily-arxiv-scan.md").is_file()

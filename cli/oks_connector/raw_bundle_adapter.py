@@ -232,7 +232,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 
-from oks_connector.route import is_url, platform_for, route_plan
+from oks_connector.route import extractor_capability, is_url, platform_for, route_plan
 from oks_connector.digest import write_digest, update_raw_index
 from oks_connector.i18n import t
 from oks_connector._shared import (
@@ -297,27 +297,8 @@ def _extractor_python(extractor: str) -> Path:
         "mineru": "OKS_MINERU_PYTHON",
         "formula": "OKS_FORMULA_PYTHON",
     }[extractor]
-    extra = {
-        "watch": "watch",
-        "rapidocr": "watch",
-        "markitdown": "document",
-        "mineru": "pdf",
-        "formula": "formula",
-    }[extractor]
-    module = {
-        "watch": "watch_skill",
-        "rapidocr": "rapidocr",
-        "markitdown": "markitdown",
-        "mineru": "mineru",
-        "formula": "paddleocr",
-    }[extractor]
-
     # 1. Already installed (via oks capability install) — shared check
-    # Map extractor names to capability names for the shared check
-    _extractor_to_capability = {"watch": "watch", "rapidocr": "watch",
-                                "markitdown": "document", "mineru": "pdf",
-                                "formula": "formula"}
-    capability = _extractor_to_capability.get(extractor, extractor)
+    capability = extractor_capability(extractor)
     from oks_connector.capability_check import is_capability_available as _cap_ok
     cap_ok, cap_python = _cap_ok(capability)
     if cap_ok and cap_python is not None:
@@ -347,7 +328,7 @@ def _extractor_python(extractor: str) -> Path:
 
     raise RuntimeError(
         f"{t('capability_missing', name=extractor)}\n"
-        f"{t('capability_missing_hint', name=extra, env=environment)}"
+        f"{t('capability_missing_hint', name=capability, env=environment)}"
     )
 
 
@@ -416,26 +397,16 @@ def _validate_extractor_python(
             timeout=15,
         )
     except subprocess.TimeoutExpired:
-        extra_name = {
-            "watch": "watch", "rapidocr": "watch",
-            "markitdown": "document", "mineru": "pdf",
-            "formula": "formula",
-        }[extractor]
         raise RuntimeError(
             f"{extractor} Python 在 {candidate} 导入 {module_query} 时超时。\n"
             f"可选依赖可能已损坏或未安装。\n"
-            f"重新安装: oks capability install {extra_name} --yes"
+            f"重新安装: oks capability install {extractor_capability(extractor)} --yes"
         )
     if import_result.returncode != 0:
-        extra_name = {
-            "watch": "watch", "rapidocr": "watch",
-            "markitdown": "document", "mineru": "pdf",
-            "formula": "formula",
-        }[extractor]
         raise RuntimeError(
             f"{extractor} Python 在 {candidate} 无法导入 {module_query}:\n"
             f"{import_result.stderr.strip()[-800:]}\n"
-            f"安装: oks capability install {extra_name} --yes\n"
+            f"安装: oks capability install {extractor_capability(extractor)} --yes\n"
             f"或设置 {environment} 指向已安装完整 {extractor} 依赖的 Python 解释器。"
         )
 

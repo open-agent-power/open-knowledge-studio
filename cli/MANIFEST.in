@@ -1,2 +1,3 @@
+include _build_assets.py
 recursive-include knowledge_studio/_assets *
 recursive-include oks_connector *.py *.txt LICENSE UPSTREAM.json

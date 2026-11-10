@@ -5,6 +5,7 @@ Typer-based CLI for knowledge base search, wiki CRUD, drafts, and maintenance.
 from __future__ import annotations
 
 import importlib.util
+from importlib.resources import files as package_files
 import hashlib
 import json
 import math
@@ -25,6 +26,7 @@ from rich.markdown import Markdown
 from rich.markup import escape
 
 from knowledge_studio import store
+from knowledge_studio.schemas import INSTANCE_SCHEMA_NAMES
 from knowledge_studio import mail as mail_domain
 from knowledge_studio.i18n import t
 from knowledge_studio.raw_commit import CommitError as _CommitError
@@ -42,14 +44,6 @@ from knowledge_studio.skills_cli import app as skills_app
 from knowledge_studio.handoff_cli import app as handoff_app
 from knowledge_studio.feedback_cli import app as feedback_app
 from knowledge_studio.tasks_cli import app as tasks_app
-
-# ── ingest: in-tree connector, shipped in the same OKS distribution ──
-from oks_connector.raw_bundle_adapter import (
-    build_parser as _connector_parser,
-    run_ingest as _connector_run_ingest,
-)
-_connector_available = True
-
 
 def _configure_utf8_stdio() -> None:
     """Keep Unicode Raw evidence printable in Windows legacy code pages."""
@@ -644,29 +638,6 @@ def ingest_prepare_cmd(
     ))
 
 
-def _connector_install_hint() -> str:
-    return ""  # no-op: connector is built into the monorepo
-
-
-def _connector_command() -> str | None:
-    """Connector ships inside open-knowledge-studio; no separate distribution needed."""
-    return "built-in" if _connector_available else None
-
-
-# Both extract from PDFs: pdf-lite reads the text layer, pdf runs MinerU for
-# layout and asset evidence. Guards must accept either, not the literal "pdf".
-_PDF_CAPABILITIES = frozenset({"pdf-lite", "pdf"})
-
-
-def _recommended_capability(source: str) -> str:
-    suffix = Path(source.split("?", 1)[0]).suffix.lower()
-    if suffix == ".pdf":
-        return "pdf-lite"
-    if suffix in {".docx", ".pptx", ".xlsx", ".html", ".htm", ".md", ".txt", ".csv"}:
-        return "document"
-    return "watch"  # video, audio, and platform URLs all route to watch
-
-
 @ingest_app.command("run")
 def ingest(
     source: str = typer.Argument(..., help="Local file or supported platform URL"),
@@ -679,61 +650,54 @@ def ingest(
     """Acquire one source through the built-in connector; no Wiki promotion occurs here."""
     if mode not in {"quick", "forensic"}:
         raise typer.BadParameter("--mode must be quick or forensic")
-    connector = _connector_command()
-    if connector is None:
-        console.print(Panel.fit(
-            f"[bold red]{t('connector_missing')}[/bold red]\n\n"
-            f"{t('connector_missing_hint')}",
-            title=t("action_required"),
-            border_style="red",
-        ))
-        raise typer.Exit(2)
+    from oks_connector.route import extractor_capability, route_plan
 
-    # ── pre-flight: check capability before running the connector ──
-    needed = _recommended_capability(source)
-    if not _capability_already_installed(needed):
-        env = _extractor_env_for(needed)
-        console.print(Panel.fit(
-            f"[bold yellow]{t('capability_missing', name=needed)}[/bold yellow]\n\n"
-            f"{t('capability_missing_hint', name=needed, env=env)}",
-            title=t("install_hint"),
-            border_style="yellow",
-        ))
-        raise typer.Exit(2)
-
-    # ── formula-secondary requires both pdf and formula capabilities ──
-    if formula_secondary:
-        if needed not in _PDF_CAPABILITIES:
+    try:
+        # ── pre-flight: check capability before running the connector ──
+        needed = extractor_capability(route_plan(source)["extractor"])
+        if needed and not _capability_already_installed(needed):
+            env = _extractor_env_for(needed)
             console.print(Panel.fit(
-                "[bold yellow]--formula-secondary 仅对 PDF 文件有效[/bold yellow]\n\n"
-                "当前来源不是 PDF 文件，已忽略 --formula-secondary 选项。",
-                title=t("install_hint"),
-                border_style="yellow",
-            ))
-        elif not _capability_already_installed("formula"):
-            env = _extractor_env_for("formula")
-            console.print(Panel.fit(
-                f"[bold yellow]{t('capability_missing', name='formula')}[/bold yellow]\n\n"
-                f"{t('capability_missing_hint', name='formula', env=env)}",
+                f"[bold yellow]{t('capability_missing', name=needed)}[/bold yellow]\n\n"
+                f"{t('capability_missing_hint', name=needed, env=env)}",
                 title=t("install_hint"),
                 border_style="yellow",
             ))
             raise typer.Exit(2)
 
-    cli_args = ["ingest", source, "--mode", mode]
-    if timeout_seconds is not None:
-        cli_args.extend(["--timeout-seconds", str(timeout_seconds)])
-    if progress:
-        cli_args.append("--progress")
-    if formula_secondary and needed in _PDF_CAPABILITIES:
-        cli_args.append("--formula-secondary")
-        cli_args.extend(["--formula-max-regions", str(formula_max_regions)])
-    try:
-        parsed = _connector_parser().parse_args(cli_args)
-    except SystemExit as exc:
-        raise typer.Exit(exc.code)
-    try:
-        exit_code = _connector_run_ingest(parsed)
+        # ── formula-secondary requires both pdf and formula capabilities ──
+        if formula_secondary:
+            if needed != "pdf":
+                console.print(Panel.fit(
+                    "[bold yellow]--formula-secondary 仅对 PDF 文件有效[/bold yellow]\n\n"
+                    "当前来源不是 PDF 文件，已忽略 --formula-secondary 选项。",
+                    title=t("install_hint"),
+                    border_style="yellow",
+                ))
+            elif not _capability_already_installed("formula"):
+                env = _extractor_env_for("formula")
+                console.print(Panel.fit(
+                    f"[bold yellow]{t('capability_missing', name='formula')}[/bold yellow]\n\n"
+                    f"{t('capability_missing_hint', name='formula', env=env)}",
+                    title=t("install_hint"),
+                    border_style="yellow",
+                ))
+                raise typer.Exit(2)
+
+        from argparse import Namespace
+        from oks_connector.raw_bundle_adapter import run_ingest
+
+        parsed = Namespace(
+            command="ingest", source=source, output=None, title=None,
+            mode=mode, subtitle_langs="zh.*,ai-zh,en.*",
+            mineru_backend="pipeline", mineru_method="auto", overwrite=False,
+            timeout_seconds=timeout_seconds, progress=progress,
+            formula_secondary=formula_secondary and needed == "pdf",
+            formula_max_regions=formula_max_regions if formula_secondary and needed == "pdf" else 20,
+        )
+        exit_code = run_ingest(parsed)
+    except typer.Exit:
+        raise
     except Exception as exc:
         console.print(Panel.fit(
             f"[bold red]{exc}[/bold red]",
@@ -2243,6 +2207,8 @@ def _materialize_assets(root: Path, base: Path, overwrite: bool) -> list[str]:
             # Those caches are runtime noise, not part of a reusable Skill.
             if "__pycache__" in item.relative_to(src).parts or item.suffix in {".pyc", ".pyo"}:
                 continue
+            if item.parent == base / "_meta" / "schemas" and item.name in INSTANCE_SCHEMA_NAMES:
+                continue
             target = dest / item.relative_to(src)
             if item.is_dir():
                 target.mkdir(parents=True, exist_ok=True)
@@ -2259,6 +2225,14 @@ def _materialize_assets(root: Path, base: Path, overwrite: bool) -> list[str]:
         src = base / name
         if src.is_dir() and copy_into(src, root / name):
             done.append(name)
+    schemas = package_files("knowledge_studio.schemas")
+    for name in INSTANCE_SCHEMA_NAMES:
+        target = root / "_meta" / "schemas" / name
+        if target.exists() and not overwrite:
+            continue
+        store._atomic_write(target, schemas.joinpath(name).read_bytes())
+        if "_meta" not in done:
+            done.append("_meta")
     from . import skill_bundle
     core = base / 'skills' / skill_bundle.CORE
     if core.is_dir() and skill_bundle.copy(root,core,'skills/'+skill_bundle.CORE,overwrite=overwrite):

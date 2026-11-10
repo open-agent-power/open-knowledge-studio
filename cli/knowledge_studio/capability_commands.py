@@ -1,31 +1,19 @@
-"""``oks capability`` — inspect available providers and diagnose environment.
-
-``capability list`` reads ``providers/*/provider.yaml`` and shows what
-actions are available.  ``capability doctor`` checks the local environment
-(command existence, env vars, Python imports) and reports what's ready,
-what's missing, and how to fix it.
+"""Provider inventory and local diagnostics for ``oks capability status``.
 
 Per CONSTITUTION P4, doctor performs only LOCAL checks — no MCP handshake,
 no HTTP requests, no API authentication tests.  Remote capability
 availability is verified by each Provider's own ``probe.py``.
-
-Also exposes ``_provider_status``, ``_build_capability_summary``, and
-``print_capability_summary`` so ``oks init`` can show a user-facing
-capability overview without duplicating grouping logic.
 """
 
 from __future__ import annotations
 
 import os
 import shutil
-import sys
 from importlib.resources import files
 from pathlib import Path
 from typing import Any
 
-from rich.console import Console
-
-from knowledge_studio.i18n import t
+import yaml
 
 
 def _providers_root() -> Path:
@@ -33,64 +21,13 @@ def _providers_root() -> Path:
     return Path(str(files("knowledge_studio.providers")))
 
 
-def _parse_yaml_lines(lines: list[str]) -> dict[str, Any]:
-    """Parse simple indented YAML into nested dicts.  Handles up to 3 levels
-    of nesting — sufficient for provider.yaml.  No anchors, no lists-of-dicts,
-    no multi-line strings."""
-    result: dict[str, Any] = {}
-    i = 0
-    while i < len(lines):
-        line = lines[i]
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#"):
-            i += 1
-            continue
-        indent = len(line) - len(line.lstrip())
-        key, _, value = stripped.partition(":")
-        key = key.strip()
-        value = value.strip().strip('"').strip("'")
-
-        if not value:
-            # Section header — collect all indented lines that follow
-            sub_lines: list[str] = []
-            j = i + 1
-            while j < len(lines):
-                nxt = lines[j]
-                nxt_stripped = nxt.strip()
-                if not nxt_stripped or nxt_stripped.startswith("#"):
-                    j += 1
-                    continue
-                nxt_indent = len(nxt) - len(nxt.lstrip())
-                if nxt_indent <= indent:
-                    break  # dedented — end of section
-                sub_lines.append(nxt)
-                j += 1
-            # Detect YAML block-list: all items start with "- "
-            if sub_lines and all(s.strip().startswith("- ") for s in sub_lines):
-                result[key] = [s.strip()[2:].strip().strip('"').strip("'") for s in sub_lines]
-            else:
-                result[key] = _parse_yaml_lines(sub_lines)
-            i = j
-        else:
-            # Scalar value
-            if value.startswith("[") and value.endswith("]"):
-                value = [
-                    v.strip().strip('"').strip("'")
-                    for v in value[1:-1].split(",") if v.strip()
-                ]
-            result[key] = value
-            i += 1
-    return result
-
-
-def _load_provider_yaml(path: Path) -> dict[str, Any] | None:
-    """Load a provider.yaml as a plain nested dict. Returns None on failure."""
+def _load_yaml_mapping(path: Path) -> dict[str, Any] | None:
+    """Load catalog YAML while preserving its string-valued scalar contract."""
     try:
-        lines = path.read_text(encoding="utf-8").splitlines()
-    except OSError:
+        result = yaml.load(path.read_text(encoding="utf-8"), Loader=yaml.BaseLoader)
+    except (OSError, yaml.YAMLError):
         return None
-    result = _parse_yaml_lines(lines)
-    return result if result else None
+    return result if isinstance(result, dict) and result else None
 
 
 def _scan_providers(root: Path) -> list[dict[str, Any]]:
@@ -104,7 +41,7 @@ def _scan_providers(root: Path) -> list[dict[str, Any]]:
         yaml_path = child / "provider.yaml"
         if not yaml_path.is_file():
             continue
-        data = _load_provider_yaml(yaml_path)
+        data = _load_yaml_mapping(yaml_path)
         if data:
             data["_dir"] = str(child.name)
             entries.append(data)
@@ -120,9 +57,11 @@ def capability_list(root: Path | None = None) -> dict[str, Any]:
     ``providers`` (list of {id, execution, provides, maturity, limits}),
     and ``by_action`` (action → list of provider ids).
     """
-    root = root or _providers_root()
-    providers = _scan_providers(root)
+    return _catalog(_scan_providers(root or _providers_root()))
 
+
+def _catalog(providers: list[dict[str, Any]]) -> dict[str, Any]:
+    """Project one provider snapshot into the action inventory."""
     all_actions: set[str] = set()
     by_action: dict[str, list[str]] = {}
     provider_list: list[dict[str, Any]] = []
@@ -352,9 +291,11 @@ def capability_doctor(root: Path | None = None) -> dict[str, Any]:
     ``status`` is one of: ready, not_configured, unavailable, runtime_only, blocked, experimental.
     PER CONSTITUTION P4: local checks only, no network calls.
     """
-    root = root or _providers_root()
-    providers = _scan_providers(root)
+    return _diagnose_providers(_scan_providers(root or _providers_root()))
 
+
+def _diagnose_providers(providers: list[dict[str, Any]]) -> dict[str, Any]:
+    """Check a provider snapshot without reading its catalog again."""
     results: list[dict[str, Any]] = []
     all_healthy = True
 
@@ -390,13 +331,10 @@ def capability_doctor(root: Path | None = None) -> dict[str, Any]:
 
 def _load_actions_metadata() -> dict[str, dict[str, str]]:
     """Load action labels and descriptions from actions.yaml."""
-    from importlib.resources import files
-
     actions_yaml = files("knowledge_studio.capabilities").joinpath("actions.yaml")
     if not actions_yaml.is_file():
         return {}
-    lines = actions_yaml.read_text(encoding="utf-8").splitlines()
-    parsed = _parse_yaml_lines(lines)
+    parsed = _load_yaml_mapping(actions_yaml) or {}
     actions = parsed.get("actions", {})
     if not isinstance(actions, dict):
         return {}
@@ -421,9 +359,9 @@ def capability_status(root: Path | None = None) -> dict[str, Any]:
     actions.yaml.  Each provider entry includes availability status,
     health, known limits, and platform metadata.
     """
-    root = root or _providers_root()
-    catalog = capability_list(root)
-    doctor = capability_doctor(root)
+    providers = _scan_providers(root or _providers_root())
+    catalog = _catalog(providers)
+    doctor = _diagnose_providers(providers)
     actions_meta = _load_actions_metadata()
 
     # Index providers by id from doctor result
@@ -443,7 +381,7 @@ def capability_status(root: Path | None = None) -> dict[str, Any]:
 
     # Enrich each provider with availability and raw metadata
     enriched_providers: list[dict[str, Any]] = []
-    for raw_p in _scan_providers(root):
+    for raw_p in providers:
         pid = raw_p.get("id", raw_p.get("_dir", "unknown"))
         status = provider_status.get(pid, {})
         caps: list[str] = []
@@ -481,301 +419,3 @@ def capability_status(root: Path | None = None) -> dict[str, Any]:
         "by_action": catalog["by_action"],
         "overall": doctor.get("overall", "unknown"),
     }
-
-
-# ── Init-time capability summary ────────────────────────────────────
-
-_ALWAYS_AVAILABLE = frozenset({"agent-runtime", "human", "text-read"})
-
-
-def _remote_setup_hint(provider_id: str) -> str:
-    """Return a one-line configuration hint for a remote provider."""
-    if provider_id == "firecrawl":
-        return t("firecrawl_setup_hint")
-    if provider_id == "agentkey":
-        return t("agentkey_setup_hint")
-    if provider_id == "mediacrawler":
-        return t("mediacrawler_setup_hint")
-    return ""
-
-
-def _build_capability_summary(
-    doctor_result: dict[str, Any] | None,
-) -> dict[str, list[dict[str, Any]]]:
-    """Group provider statuses for human-readable init output.
-
-    Pure function — receives a ``capability_doctor()`` result, returns
-    grouped lists keyed by ``local_ready``, ``local_missing``,
-    ``remote_ready``, ``remote_not_configured``, ``remote_runtime_only``,
-    ``blocked_experimental``.
-
-    Providers that are always available (agent-runtime, human, text-read)
-    are excluded — they would only add noise for a first-time user.
-    """
-    empty: dict[str, list[dict[str, Any]]] = {
-        "local_ready": [],
-        "local_missing": [],
-        "remote_ready": [],
-        "remote_not_configured": [],
-        "remote_runtime_only": [],
-        "blocked_experimental": [],
-    }
-    if doctor_result is None:
-        return empty
-
-    for p in doctor_result.get("providers", []):
-        pid = p.get("id", "")
-        if pid in _ALWAYS_AVAILABLE:
-            continue
-        status = p.get("status", "unavailable")
-        execution = p.get("execution", "")
-
-        if status in ("blocked", "experimental"):
-            empty["blocked_experimental"].append(p)
-        elif execution == "external":
-            if status == "ready":
-                empty["remote_ready"].append(p)
-            elif status == "not_configured":
-                empty["remote_not_configured"].append(p)
-            elif status == "runtime_only":
-                empty["remote_runtime_only"].append(p)
-            else:
-                empty["remote_not_configured"].append(p)
-        else:
-            if status == "ready":
-                empty["local_ready"].append(p)
-            else:
-                empty["local_missing"].append(p)
-
-    return empty
-
-
-# ── User-facing capability descriptions ──────────────────────────────
-
-# Maps provider IDs to user-facing capability names shown during init.
-# Internal provider IDs are hidden from default user view.
-# Each entry: (user_facing_label, category)
-# Categories: "document" | "web" | "media" | "social" | "platform"
-_USER_CAPABILITY_LABELS: dict[str, tuple[str, str]] = {
-    "pdf-lite": ("PDF 文本提取", "pdf"),
-    "markitdown": ("Office 文档提取", "pdf"),
-    "mineru": ("PDF 深度提取（含排版还原）", "pdf"),
-    "rapidocr": ("图片文字识别（OCR）", "image"),
-    "trafilatura": ("网页正文提取（静态页面）", "web"),
-    "http-fetch": ("网页原始获取", "web"),
-    "firecrawl": ("动态网页内容抓取", "web"),
-    "browser": ("浏览器登录态页面", "web"),
-    "yt-dlp": ("视频/音频下载", "media"),
-    "ffmpeg": ("媒体格式转换", "media"),
-    "local-asr": ("本地语音转写", "media"),
-    "remote-asr": ("远程语音转写", "media"),
-    "mediacrawler": ("社交平台公开内容采集", "platform"),
-    "agentkey": ("受限平台内容获取（知乎/微信/B站）", "platform"),
-}
-
-
-def _describe_ready_capabilities(
-    summary: dict[str, list[dict[str, Any]]],
-) -> tuple[list[str], list[str]]:
-    """Derive user-facing capability lists from provider status.
-
-    Returns (can_do_now, can_enable_later) — each is a list of
-    human-readable Chinese capability descriptions.
-    """
-    can_do: list[str] = []
-    can_enable: list[str] = []
-
-    def _label(pid: str) -> str:
-        return _USER_CAPABILITY_LABELS.get(pid, (pid, "other"))[0]
-
-    # Local ready
-    for p in summary.get("local_ready", []):
-        can_do.append(_label(p["id"]))
-    # Remote ready
-    for p in summary.get("remote_ready", []):
-        can_do.append(_label(p["id"]))
-    # Remote runtime_only — depends on the Agent model; not guaranteed
-    for p in summary.get("remote_runtime_only", []):
-        can_enable.append(f"{_label(p['id'])}（取决于 Agent 模型和 MCP 配置）")
-
-    # Local missing (installable)
-    for p in summary.get("local_missing", []):
-        hint = ""
-        pid = p["id"]
-        if pid == "pdf-lite":
-            hint = " — oks capability install pdf-lite"
-        elif pid == "rapidocr":
-            hint = " — pip install rapidocr"
-        elif pid == "markitdown":
-            hint = " — pip install markitdown"
-        can_enable.append(_label(pid) + hint)
-
-    # Remote not configured
-    for p in summary.get("remote_not_configured", []):
-        hint = _remote_setup_hint(p["id"])
-        entry = _label(p["id"])
-        if hint:
-            entry += f" — {hint}"
-        can_enable.append(entry)
-
-    # Blocked/experimental — shown as unavailable
-    for p in summary.get("blocked_experimental", []):
-        can_enable.append(f"{_label(p['id'])}（当前不可用）")
-
-    return can_do, can_enable
-
-
-def _derive_first_prompts(
-    can_do: list[str],
-) -> list[str]:
-    """Generate first-use prompt suggestions based on available capabilities."""
-    prompts: list[str] = []
-    has_doc = any("PDF" in c or "Office" in c or "Markdown" in c for c in can_do)
-    has_web = any("网页" in c for c in can_do)
-
-    prompts.append(t("init_prompt_local_only"))
-    if has_doc:
-        prompts.append(t("init_prompt_with_pdf"))
-    if has_web:
-        prompts.append(t("init_prompt_with_web"))
-    return prompts
-
-
-# ── R4-4: Category-level capability view ────────────────────────────
-
-# Six user-facing capability categories.  Provider names are hidden from
-# the default view — users see WHAT they can do, not WHICH providers exist.
-_CATEGORY_DEFINITIONS: dict[str, dict[str, Any]] = {
-    "text": {
-        "label": "文本与 Markdown",
-        "description": "Markdown / 纯文本直接读取，本地处理，无需额外依赖",
-        "always_available": True,
-    },
-    "web": {
-        "label": "网页读取",
-        "description": "网页抓取与正文提取，支持静态页面与动态渲染",
-    },
-    "pdf": {
-        "label": "PDF 文档处理",
-        "description": "PDF 文本提取、结构解析、扫描件 OCR",
-    },
-    "image": {
-        "label": "图片理解",
-        "description": "图片文字识别（OCR）与语义内容理解",
-    },
-    "media": {
-        "label": "音视频处理",
-        "description": "媒体下载、语音转写、字幕提取",
-    },
-    "platform": {
-        "label": "平台内容",
-        "description": "社交平台与受限平台内容获取",
-    },
-}
-
-
-def _category_status(
-    key: str, doctor_result: dict[str, Any] | None
-) -> str:
-    """Derive a simple status for a capability category.
-
-    Returns one of: "ready" (always-available or has working providers),
-    "available" (has providers, some may need config), "unavailable".
-    """
-    cat = _CATEGORY_DEFINITIONS.get(key, {})
-    if cat.get("always_available"):
-        return "ready"
-
-    if doctor_result is None:
-        return "unavailable"
-
-    # Check if any provider in this category has a useful status
-    # (aggregation is informal — we just check if anything exists)
-    provider_map = {p["id"]: p for p in doctor_result.get("providers", [])}
-
-    # Map category to its relevant providers via _USER_CAPABILITY_LABELS
-    relevant_pids = {
-        pid for pid, (label, cat_name) in _USER_CAPABILITY_LABELS.items()
-        if cat_name == key
-    }
-
-    has_ready = False
-    has_any = False
-    for pid in relevant_pids:
-        p = provider_map.get(pid, {})
-        status = p.get("status", "unavailable")
-        if status == "ready":
-            has_ready = True
-        if status not in ("unavailable",):
-            has_any = True
-
-    if has_ready:
-        return "ready"
-    elif has_any:
-        return "available"
-    return "unavailable"
-
-
-def _build_category_summary(
-    doctor_result: dict[str, Any] | None,
-) -> list[dict[str, Any]]:
-    """Return a simple capability category list for user-facing display.
-
-    No provider IDs, no counts, no weight/latency — just status + name +
-    description.
-    """
-    categories: list[dict[str, Any]] = []
-    for key, cat in _CATEGORY_DEFINITIONS.items():
-        status = _category_status(key, doctor_result)
-        categories.append({
-            "key": key,
-            "label": cat["label"],
-            "description": cat["description"],
-            "status": status,
-        })
-    return categories
-
-
-def _status_indicator(status: str) -> str:
-    """Return a display character for a category status."""
-    if status == "ready":
-        return "✓"
-    elif status == "available":
-        return "○"
-    else:
-        return "✗"
-
-
-def print_capability_summary(
-    console: Console,
-    doctor_result: dict[str, Any] | None,
-) -> None:
-    """Print a user-facing capability summary after ``oks init``.
-
-    Shows 6 capability categories — no provider IDs, no counts, no
-    weight/latency.  Provider details are available via
-    ``oks capability doctor --verbose``.
-    """
-    categories = _build_category_summary(doctor_result)
-
-    console.print(f"\n[bold]{t('init_ready')}[/bold]")
-
-    # ── Category list (6 rows, one per capability family) ──
-    if categories:
-        for cat in categories:
-            indicator = _status_indicator(cat["status"])
-            status_map = {"ready": "green", "available": "yellow", "unavailable": "red"}
-            color = status_map.get(cat["status"], "dim")
-            console.print(
-                f"  [{color}]{indicator}[/{color}] "
-                f"[bold]{cat['label']}[/bold]"
-            )
-            console.print(f"    {cat['description']}")
-
-    # ── First-use prompts ──
-    can_do_labels = [cat["label"] for cat in categories if cat["status"] in ("ready", "available")]
-    prompts = _derive_first_prompts(can_do_labels)
-    if prompts:
-        console.print(f"\n[bold]{t('init_first_prompt')}[/bold]")
-        for prompt in prompts:
-            console.print(f'  [cyan]"{prompt}"[/cyan]')

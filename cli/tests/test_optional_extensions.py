@@ -86,32 +86,14 @@ def test_connect_skill_matches_install_and_review_boundaries():
     assert "`--force` only authorizes scaffolding" in text
 
 
-def test_ingest_missing_connector_shows_explicit_action(monkeypatch):
-    monkeypatch.setattr(cli, "_connector_command", lambda: None)
-
-    result = runner.invoke(cli.app, ["ingest", "https://example.com/video"])
-
-    assert result.exit_code == 2
-    assert "Connector" in result.output  # appears in both zh/en
-    assert result.exit_code == 2
-
-
 def test_ingest_recommends_capability_install(monkeypatch):
     """Pre-flight check suggests capability install when extractor is missing."""
-    monkeypatch.setattr(cli, "_connector_command", lambda: "built-in")
     monkeypatch.setattr(cli, "_capability_already_installed", lambda _name: False)
 
     result = runner.invoke(cli.app, ["ingest", "paper.pdf"])
 
     assert result.exit_code == 2
     assert "capability install" in result.output  # appears in both zh/en
-
-
-def test_connector_command_reports_builtin_when_module_available(monkeypatch):
-    """After repo merge, _connector_command returns 'built-in' when the module is importable."""
-    monkeypatch.setattr(cli, "_connector_available", True)
-
-    assert cli._connector_command() == "built-in"
 
 
 def test_ingest_forwards_mode_timeout_and_progress(monkeypatch):
@@ -124,9 +106,9 @@ def test_ingest_forwards_mode_timeout_and_progress(monkeypatch):
         received["source"] = parsed.source
         return 0
 
-    monkeypatch.setattr(cli, "_connector_command", lambda: "built-in")
     monkeypatch.setattr(cli, "_capability_already_installed", lambda _name: True)
-    monkeypatch.setattr(cli, "_connector_run_ingest", fake_run_ingest)
+    from oks_connector import raw_bundle_adapter
+    monkeypatch.setattr(raw_bundle_adapter, "run_ingest", fake_run_ingest)
 
     result = runner.invoke(
         cli.app,
@@ -147,9 +129,9 @@ def test_ingest_forwards_formula_secondary_for_pdf(monkeypatch):
         received["formula_max_regions"] = parsed.formula_max_regions
         return 0
 
-    monkeypatch.setattr(cli, "_connector_command", lambda: "built-in")
     monkeypatch.setattr(cli, "_capability_already_installed", lambda _name: True)
-    monkeypatch.setattr(cli, "_connector_run_ingest", fake_run_ingest)
+    from oks_connector import raw_bundle_adapter
+    monkeypatch.setattr(raw_bundle_adapter, "run_ingest", fake_run_ingest)
 
     result = runner.invoke(
         cli.app,

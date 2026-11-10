@@ -5,9 +5,9 @@ contract emitted by connector extractors and consumed by the validator.
 
 ## Runtime status
 
-- **Not auto-loaded or enforced at runtime.** The validator (`scripts/validator.py`)
-  uses hardcoded version strings and field checks; no `jsonschema` dependency.
-- **Not loaded by CI.** The publish workflow only builds the Python wheel.
+- `oks raw-commit` loads these package resources and validates evidence with `jsonschema`.
+- Builds and `oks init` generate the instance schemas under `_meta/schemas/`
+  from this directory. Edit the package source when changing a protocol.
 
 ## When to use
 
