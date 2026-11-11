@@ -2151,7 +2151,9 @@ oks wiki use <slug>            # 标记引用
 """
 
 
-_SHARED_ASSETS = ("templates", "_meta", "settings", "profiles")
+# Schemas and templates stay with the tool/Skill. Never seed a personal
+# instance with the tool author's team, active goals or example recipes.
+_SHARED_ASSETS = ("settings",)
 _DEFAULT_CORE_SKILLS = ('oh-my-oks',)
 
 # How each agent ecosystem's directory is assembled from the single-source
@@ -2231,7 +2233,7 @@ def _materialize_assets(root: Path, base: Path, overwrite: bool) -> list[str]:
             if found and found.group(1) != "python3":
                 preserved_bakes[wrapper] = f'"${{OKS_PYTHON:-{found.group(1)}}}"'
 
-    def copy_into(src: Path, dest: Path) -> bool:
+    def copy_into(src: Path, dest: Path, *, preserve_existing: bool = False) -> bool:
         """Merge per file: never clobber what the user changed unless upgrading.
 
         A directory-level check would skip whole trees, because `init` creates
@@ -2247,7 +2249,7 @@ def _materialize_assets(root: Path, base: Path, overwrite: bool) -> list[str]:
             if item.is_dir():
                 target.mkdir(parents=True, exist_ok=True)
                 continue
-            if target.exists() and (not overwrite or target in wiring_state):
+            if target.exists() and (preserve_existing or not overwrite or target in wiring_state):
                 continue
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(item, target)
@@ -2257,8 +2259,12 @@ def _materialize_assets(root: Path, base: Path, overwrite: bool) -> list[str]:
     done: list[str] = []
     for name in _SHARED_ASSETS:
         src = base / name
-        if src.is_dir() and copy_into(src, root / name):
+        if src.is_dir() and copy_into(src, root / name, preserve_existing=True):
             done.append(name)
+    index = base / "profiles" / "INDEX.md"
+    if index.is_file() and not (root / "profiles" / "INDEX.md").exists():
+        store._atomic_write(root / "profiles" / "INDEX.md", index.read_text(encoding="utf-8"))
+        done.append("profiles/INDEX.md")
     from . import skill_bundle
     core = base / 'skills' / skill_bundle.CORE
     if core.is_dir() and skill_bundle.copy(root,core,'skills/'+skill_bundle.CORE,overwrite=overwrite):
@@ -2314,7 +2320,7 @@ def init(
     ),
     upgrade: bool = typer.Option(
         False, "--upgrade",
-        help="Re-copy bundled assets (skills/templates/_meta/settings), overwriting them; your memory (wiki/drafts/profiles) is untouched",
+        help="Refresh bundled skills and hooks; preserve existing knowledge and settings, and add missing defaults",
     ),
     force: bool = typer.Option(
         False, "--force",
@@ -2343,7 +2349,7 @@ def init(
             f"[red]Refusing to scaffold into non-empty directory:[/red] {root}\n"
             f"It does not look like a knowledge base (no wiki/). Init would create:\n"
             + "\n".join(f"  - {d}/" for d in _INSTANCE_DIRS)
-            + "\n  - .claude/ templates/ _meta/ settings/ (bundled assets)"
+            + "\n  - host integration and settings/ (missing defaults only)"
             + "\n  - .gitignore"
             + "\n\nRe-run with [bold]--force[/bold] to proceed anyway."
         )
@@ -2361,7 +2367,7 @@ def init(
     base = _asset_source()
     if base is None:
         console.print(
-            "[yellow]No bundled assets found — skills/templates not materialized.[/yellow]\n"
+            "[yellow]No bundled assets found — skills/settings not materialized.[/yellow]\n"
             "  Reinstall the canonical main source with pipx, then retry:\n"
             "  pipx upgrade open-knowledge-studio\n"
             "  or run python cli/scripts/bundle_assets.py in the repo before installing."
@@ -2464,21 +2470,12 @@ def team_init(
 
     Team knowledge is still stored as tracked Markdown under profiles/, raw/,
     wiki/, and drafts/. This command only adds an explicit team-oriented entry
-    point and labels the bundled team profile/goal for the new workspace.
+    point and creates a minimal team profile; goals are created by the user.
     """
     root = Path(path).expanduser().resolve()
-    team_name = " ".join((name or root.name.replace("-", " ").replace("_", " ")).split())
+    team_name = " ".join((name or root.name).split())
     if not team_name:
         team_name = "Knowledge Studio Team"
-
-    # `oks init --upgrade` refreshes bundled assets. Protect the two team
-    # knowledge files before delegating so an upgrade cannot clobber edits.
-    preserved_team_files: dict[Path, str] = {}
-    if upgrade:
-        for relative in (Path("profiles/team.md"), Path("profiles/goals/team.md")):
-            candidate = root / relative
-            if candidate.is_file():
-                preserved_team_files[candidate] = candidate.read_text(encoding="utf-8")
 
     # Reuse the well-tested personal scaffold so both modes share the same
     # non-empty-directory guard, asset materialization, git setup, and active
@@ -2491,9 +2488,6 @@ def team_init(
         force=force,
     )
 
-    for candidate, contents in preserved_team_files.items():
-        store._atomic_write(candidate, contents)
-
     def write_team_file(path: Path, contents: str) -> None:
         store._atomic_write(path, contents)
 
@@ -2502,7 +2496,6 @@ def team_init(
         return json.dumps(value, ensure_ascii=False)
 
     team_profile = root / "profiles" / "team.md"
-    team_goal = root / "profiles" / "goals" / "team.md"
     if not team_profile.exists():
         write_team_file(
             team_profile,
@@ -2516,55 +2509,13 @@ def team_init(
             f"# {team_name}\n\n"
             "Shared context for the team knowledge workspace.\n",
         )
-    else:
-        profile_text = team_profile.read_text(encoding="utf-8")
-        # The bundled upstream profile is a useful seed, but its default title
-        # should not leak into a newly named team. Never rewrite a customized
-        # profile on a rerun.
-        if 'title: "Knowledge Studio Team"' in profile_text:
-            profile_text = profile_text.replace(
-                'title: "Knowledge Studio Team"',
-                f"title: {yaml_string(team_name)}",
-                1,
-            ).replace("# Knowledge Studio Team", f"# {team_name}", 1)
-            write_team_file(team_profile, profile_text)
-
-    if not team_goal.exists():
-        write_team_file(
-            team_goal,
-            "---\n"
-            f"title: {yaml_string(team_name + ' Goals')}\n"
-            "type: goal\n"
-            "owner: team\n"
-            "status: active\n"
-            "domains: [computing, AI]\n"
-            "keywords: [knowledge, collaboration, agent loop]\n"
-            "source: team-init\n"
-            "---\n\n"
-            f"# {team_name} Goals\n\n"
-            "Define the next shared outcome and keep it visible to every team member.\n",
-        )
-    else:
-        goal_text = team_goal.read_text(encoding="utf-8")
-        if "title: Team Goals 2026" in goal_text:
-            goal_text = goal_text.replace(
-                "title: Team Goals 2026",
-                f"title: {yaml_string(team_name + ' Goals')}",
-                1,
-            ).replace("# Team Goals 2026-Q3", f"# {team_name} Goals", 1)
-            write_team_file(team_goal, goal_text)
-
     console.print(
         f"\n[bold green]Team knowledge studio ready:[/bold green] {root}\n"
-        f"  team profile: profiles/team.md ({team_name})\n"
-        "  shared goal:   profiles/goals/team.md\n\n"
-        "Next steps:\n"
-        f"  1. Review the team profile and goal in {root}\n"
-        "  2. Commit and share this folder through your normal Git workflow\n"
-        "  3. Each member clones it, installs OKS skills, and binds their profile with:\n"
-        "     oks registry bind --profile <user-id> --goals team\n"
-        "     Run `oks team sync --push` when you want to exchange team files.\n"
-        "  4. Use /query and the knowledge-to-word skill against the shared Wiki"
+        f"  team profile: profiles/team.md ({team_name})\n\n"
+        "Create shared knowledge and dated goals when needed.\n"
+        "Each member links this independent repository through their personal "
+        "settings/sources.yaml; existing files are not copied into personal Wiki.\n"
+        "Commit and share through the team's authorized Git workflow."
     )
 
 

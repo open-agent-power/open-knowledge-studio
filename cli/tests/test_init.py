@@ -12,14 +12,14 @@ from knowledge_studio.cli import app
 runner = CliRunner()
 
 # Contract: what `oks init` must produce. Buckets come from _INSTANCE_DIRS; the
-# per-agent dirs and templates/_meta/settings/profiles are assembled from assets/.
+# per-agent dirs, missing settings and the context index come from assets/.
 EXPECTED_BUCKETS = [
     "profiles/discuss", "skills", "records/studio",
     "profiles/users", "profiles/projects", "profiles/recipes", "profiles/goals",
     "raw", "wiki", "drafts",
 ]
 EXPECTED_TOP_LEVEL = {
-    ".claude", ".qoder", ".pi", ".codex", ".agents", ".codebuddy", ".workbuddy", "_meta", "settings", "templates",
+    ".claude", ".qoder", ".pi", ".codex", ".agents", ".codebuddy", ".workbuddy", "settings",
     "profiles", "raw", "wiki", "drafts", "mail", "skills", "records", ".gitignore", "AGENTS.md",
 }
 
@@ -214,19 +214,19 @@ def test_init_materializes_shareable_assets(tmp_path):
     result = runner.invoke(app, ["init", str(target), "--no-git", "--no-set-default"])
     assert result.exit_code == 0, result.output
 
-    # skills + templates arrive so the Claude Code experience works out of the box
+    # Only operational assets arrive; schemas/templates stay with the tool.
     assert (target / ".claude" / "skills" / "oh-my-oks").is_dir()
     assert not (target / ".claude" / "skills" / "office").exists()
     assert (target / "skills" / "oh-my-oks" / "SKILL.md").is_file()
     assert (target / ".claude" / "settings.json").is_file()
-    assert (target / "templates").is_dir()
-    for schema in ("recall-case.schema.json", "trace-event.schema.json", "run-manifest.schema.json"):
-        assert (target / "_meta" / schema).is_file()
-    # Contracts that used to sit at the repo root now ship inside the two layers.
-    assert (target / "_meta" / "schemas" / "raw-bundle-v0.2.schema.json").is_file()
+    assert not (target / "templates").exists()
+    assert not (target / "_meta").exists()
     assert (target / "settings" / "capabilities" / "video.watch.json").is_file()
-    # Recipes and goal templates travel with the instance.
-    assert (target / "profiles" / "recipes" / "daily-arxiv-scan.md").is_file()
+    assert (target / "profiles" / "INDEX.md").is_file()
+    assert not (target / "profiles" / "team.md").exists()
+    assert not (target / "profiles" / "goals" / "team.md").exists()
+    assert not list((target / "profiles" / "recipes").glob("*.md"))
+
 
 
 def test_init_upgrade_refreshes_assets_but_keeps_user_files(tmp_path):
@@ -286,7 +286,7 @@ def test_init_rerun_on_existing_kb_is_idempotent(tmp_path):
     assert result.exit_code == 0, result.output
 
 
-def test_team_init_creates_shared_profile_and_goal(tmp_path):
+def test_team_init_creates_profile_without_inventing_active_goal(tmp_path):
     target = tmp_path / "team-knowledge-studio"
 
     result = runner.invoke(
@@ -304,12 +304,10 @@ def test_team_init_creates_shared_profile_and_goal(tmp_path):
 
     assert result.exit_code == 0, result.output
     profile = (target / "profiles" / "team.md").read_text(encoding="utf-8")
-    goal = (target / "profiles" / "goals" / "team.md").read_text(encoding="utf-8")
+    assert not (target / "profiles" / "goals" / "team.md").exists()
     assert 'title: "Platform Knowledge Team"' in profile
     assert "# Platform Knowledge Team" in profile
-    assert "owner: team" in goal
-    assert "Platform Knowledge Team Goals" in goal
-    assert "oks registry bind" in result.output
+    assert "settings/sources.yaml" in result.output
 
 
 def test_team_init_rerun_preserves_custom_profile(tmp_path):
@@ -363,9 +361,8 @@ def test_team_init_quotes_yaml_unsafe_name(tmp_path):
     import yaml
 
     profile = yaml.safe_load((target / "profiles" / "team.md").read_text(encoding="utf-8").split("---")[1])
-    goal = yaml.safe_load((target / "profiles" / "goals" / "team.md").read_text(encoding="utf-8").split("---")[1])
+    assert not (target / "profiles" / "goals" / "team.md").exists()
     assert profile["title"] == 'Team: "Quoted"'
-    assert goal["title"] == 'Team: "Quoted" Goals'
 
 
 def test_team_init_fallback_without_bundled_assets(tmp_path, monkeypatch):
@@ -378,7 +375,7 @@ def test_team_init_fallback_without_bundled_assets(tmp_path, monkeypatch):
 
     assert result.exit_code == 0, result.output
     assert (target / "profiles" / "team.md").is_file()
-    assert (target / "profiles" / "goals" / "team.md").is_file()
+    assert not (target / "profiles" / "goals" / "team.md").exists()
 
     # target now contains wiki/ → treated as an existing KB, no --force needed
     result = runner.invoke(app, ["init", str(target), "--no-git", "--no-set-default"])
@@ -449,3 +446,34 @@ def test_qoder_no_hooks_dir_but_runs_via_claude_hooks(tmp_path):
     assert _AGENT_TARGETS[".qoder"]["hooks"] is False, "plan A: .qoder hooks should be disabled"
     assert _AGENT_TARGETS[".qoder"]["skills"] is True, "qoder skills still install"
     assert _AGENT_TARGETS[".qoder"]["config"] == "qoder", "qoder config still install"
+
+
+def test_upgrade_preserves_overrides_and_does_not_reseed_removed_assets(tmp_path):
+    target = tmp_path / "kb"
+    args = ["init", str(target), "--no-git", "--no-set-default"]
+    assert runner.invoke(app, args).exit_code == 0
+    settings = target / "settings" / "recall.yaml"
+    settings.write_text("search_backend: native\nrecall:\n  topn: 2\n", encoding="utf-8")
+    context = target / "profiles" / "INDEX.md"
+    context.write_text("# My context\n", encoding="utf-8")
+    custom = target / "profiles" / "projects" / "mine.md"
+    custom.write_text("# User project\n", encoding="utf-8")
+    result = runner.invoke(app, [*args, "--upgrade"])
+    assert result.exit_code == 0, result.output
+    assert settings.read_text() == "search_backend: native\nrecall:\n  topn: 2\n"
+    assert context.read_text() == "# My context\n"
+    assert custom.read_text() == "# User project\n"
+    assert not (target / "_meta").exists()
+    assert not (target / "templates").exists()
+    assert not (target / "profiles" / "team.md").exists()
+    assert not (target / "profiles" / "goals" / "team.md").exists()
+    assert not list((target / "profiles" / "recipes").glob("*.md"))
+
+
+def test_team_init_uses_folder_name_by_default(tmp_path):
+    target = tmp_path / "team-knowledge"
+    result = runner.invoke(app, ["team", "init", str(target), "--no-git", "--no-set-default"])
+    assert result.exit_code == 0, result.output
+    import yaml
+    profile = yaml.safe_load((target / "profiles" / "team.md").read_text().split("---")[1])
+    assert profile["title"] == "team-knowledge"
