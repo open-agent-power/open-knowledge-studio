@@ -1,13 +1,15 @@
 ---
 name: oh-my-oks
-description: 操作本地 Open Knowledge Studio：查阅知识、记录讨论、维护每日目标、整理材料与知识候选、按已有人工决定审核更新。适用于使用或维护 OKS 知识库。
+description: 接入和使用 Open Knowledge Studio：安装连接与首次引导、个人及团队库关联、讨论与目标维护、知识查询与审核。适用于开始使用或维护OKS知识库。
 ---
 
 # Oh My OKS
 
 围绕用户当前需要选择 Discuss → Goal → Learning 的最小闭环。OKS 保存上下文和证据；执行由当前 Agent 承担。
 
-先用 `oks status` 确认知识库。用户已经提供路径时沿用该实例，跨目录通过 `OKS_ROOT` 指定，不擅自更换全局默认库。
+首次安装、连接或学习使用时，读取 [references/onboarding.md](references/onboarding.md)，按当前环境与共享引导进度继续；已有用户不反复教学。
+
+CLI可用后，用 `oks status` 确认知识库。用户已经提供路径时沿用该实例，跨目录通过 `OKS_ROOT` 指定，不擅自更换全局默认库。
 
 - **讨论与目标**：查阅 [references/context.md](references/context.md)。讨论保留人的判断、AI 理解与待确认；每日目标以 Markdown 分支维护，修改可回放。
 - **查阅与学习**：查阅 [references/learning.md](references/learning.md)。按任务查证据、准确记录采纳、把可复用结论写成待审核候选。

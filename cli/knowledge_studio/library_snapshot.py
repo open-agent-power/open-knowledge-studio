@@ -50,7 +50,7 @@ def unified_snapshot(path, revision, repository, name, *, approved_only=False):
         mode, kind, _ = header.split()
         relative = raw.decode("utf-8")
         parts = PurePosixPath(relative).parts
-        if not parts or parts[0] not in BUCKETS or not relative.endswith(".md"):
+        if not parts or (parts[0] not in BUCKETS and relative not in {"README.md", "readme.md"}) or not relative.endswith(".md"):
             continue
         if any(part.startswith(".") for part in parts):
             continue
@@ -64,7 +64,7 @@ def unified_snapshot(path, revision, repository, name, *, approved_only=False):
         raise ValueError("Linked repository has no standard Wiki")
     used_ids = {e["id"] for e in entries}
     for relative in sorted(regular):
-        bucket = relative.split("/")[0]
+        bucket = "reference" if relative in {"README.md", "readme.md"} else relative.split("/")[0]
         if relative in indexed or (cataloged and bucket in {"wiki", "drafts"}):
             continue
         if approved_only and bucket != "wiki":

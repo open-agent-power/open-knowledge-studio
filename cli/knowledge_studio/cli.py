@@ -192,6 +192,7 @@ mail_app = typer.Typer(help="Agent-to-agent mail (inbox/sent).")
 registry_app = typer.Typer(help="Terminal registry (agent+cwd -> profile/goal).")
 eval_app = typer.Typer(help="Offline recall evaluation and run comparison.")
 sources_app = typer.Typer(help="Link independent read-only Git knowledge repositories.")
+onboarding_app = typer.Typer(help="Shared conversation/Studio learning progress.", no_args_is_help=True)
 trace_app = typer.Typer(help="Append-only execution traces and feedback.")
 workbuddy_app = typer.Typer(
     help="WorkBuddy local Agent workflow.", no_args_is_help=True,
@@ -244,6 +245,7 @@ app.add_typer(tasks_app, name="task")
 app.add_typer(registry_app, name="registry")
 app.add_typer(eval_app, name="eval")
 app.add_typer(sources_app, name="sources")
+app.add_typer(onboarding_app, name="onboarding")
 app.add_typer(trace_app, name="trace")
 app.add_typer(workbuddy_app, name="workbuddy")
 app.add_typer(fs_app, name="fs")
@@ -919,6 +921,16 @@ def sources_link(path: Path, name: str = typer.Option(..., '--name'),
     try:
         _emit_json(link(_instance_root(None), name, path, repository, revision))
     except (OSError, ValueError, KeyError) as exc:
+        raise typer.BadParameter(str(exc))
+
+
+@sources_app.command('inspect')
+def sources_inspect(path: Path, revision: str = typer.Option('HEAD', '--revision')):
+    """Read a library's committed README requirements before registering it."""
+    from .linked_sources import inspect_library
+    try:
+        _emit_json(inspect_library(path, revision))
+    except (OSError, ValueError, UnicodeError) as exc:
         raise typer.BadParameter(str(exc))
 
 
@@ -2154,6 +2166,23 @@ oks wiki use <slug>            # 标记引用
 # Schemas and templates stay with the tool/Skill. Never seed a personal
 # instance with the tool author's team, active goals or example recipes.
 _SHARED_ASSETS = ("settings",)
+_INSTANCE_README_MD = """# Knowledge
+
+本库保存材料、待审核知识、Wiki、Skill、上下文、记录与配置。
+
+## 前置要求
+
+- 本地查询：Python 3.12+与可用的OKS CLI。
+- Git：用于版本管理或关联团队已提交知识；不自动推送。
+- GitHub、云效、飞书等账号仅在所选材料或工作流确实需要时配置，沿用用户已有身份。此空库不要求全部登录。
+- 不把密钥、Cookie或令牌写入README与知识正文。
+
+## 使用
+
+讨论明确理解，目标形成约定，学习提议并审核知识更新。Raw按任务读取，不逐份转换为Wiki。Wiki保存判断，Skill保存执行方法；来源与执行权限分开。
+
+团队库物理独立，关联前先读取其README中的工具、身份、权限及适用范围要求。README是配置参考，不自动授权执行脚本或访问服务。
+"""
 _DEFAULT_CORE_SKILLS = ('oh-my-oks',)
 
 # How each agent ecosystem's directory is assembled from the single-source
@@ -2265,10 +2294,6 @@ def _materialize_assets(root: Path, base: Path, overwrite: bool) -> list[str]:
     if index.is_file() and not (root / "profiles" / "INDEX.md").exists():
         store._atomic_write(root / "profiles" / "INDEX.md", index.read_text(encoding="utf-8"))
         done.append("profiles/INDEX.md")
-    from . import skill_bundle
-    core = base / 'skills' / skill_bundle.CORE
-    if core.is_dir() and skill_bundle.copy(root,core,'skills/'+skill_bundle.CORE,overwrite=overwrite):
-        done.append('skills/'+skill_bundle.CORE)
 
     for dest_name, spec in _AGENT_TARGETS.items():
         dest = root / dest_name
@@ -2363,6 +2388,9 @@ def init(
         p = root / d
         p.mkdir(parents=True, exist_ok=True)
         (p / ".gitkeep").touch()
+
+    if not (root / "README.md").exists():
+        store._atomic_write(root / "README.md", _INSTANCE_README_MD)
 
     base = _asset_source()
     if base is None:
@@ -2727,12 +2755,28 @@ def skills_install(
     force: bool = typer.Option(False, "--force", help="Overwrite existing skills"),
     all_bundled: bool = typer.Option(False,'--all-bundled',help='Opt in to legacy and specialized bundled Skills'),
     consolidate: bool = typer.Option(False,'--consolidate',help='Archive old bundled host Skills and keep the minimal core entry'),
+    global_install: bool = typer.Option(False, "--global", help="Install only oh-my-oks into one global host directory"),
+    editor: Optional[str] = typer.Option(None, "--editor", help="Global host: codex, claude or agents"),
 ) -> None:
     """Materialize bundled skills into supported Agent directories (current KB).
 
     Use after upgrading oks to refresh the minimal oh-my-oks entry,
     without re-running full `oks init`.
     """
+    if global_install:
+        if all_bundled or consolidate or not editor:
+            raise typer.BadParameter("Use --global --editor codex|claude|agents; do not combine with --all-bundled or --consolidate")
+        from . import skill_bundle
+        base = _asset_source()
+        if base is None:
+            raise typer.BadParameter("Bundled assets unavailable; reinstall OKS")
+        try:
+            _emit_json(skill_bundle.install_global(base, editor, overwrite=force))
+        except (OSError, ValueError) as exc:
+            raise typer.BadParameter(str(exc))
+        return
+    if editor:
+        raise typer.BadParameter("--editor is for --global installation")
     root = Path.cwd()
     if not (root / "wiki").is_dir():
         console.print("[red]Not in a knowledge base directory (no wiki/).[/red]")
@@ -2747,8 +2791,6 @@ def skills_install(
     if consolidate:
         archived=skill_bundle.consolidate(root,base,[name for name,spec in _AGENT_TARGETS.items() if spec['skills']])
         if archived.get('manifest'):console.print('Archived legacy packages: '+archived['manifest'],markup=False)
-    if (base/'skills'/skill_bundle.CORE).is_dir():
-        skill_bundle.copy(root,base/'skills'/skill_bundle.CORE,'skills/'+skill_bundle.CORE,overwrite=force)
     done: list[str] = []
     for dest_name, spec in _AGENT_TARGETS.items():
         skill_names = tuple(spec.get("skill_names", ()))
@@ -2789,6 +2831,44 @@ def _instance_root(path: str | None) -> Path:
         return Path(path).expanduser().resolve()
     from knowledge_studio.config import get_kb_root
     return get_kb_root()
+
+
+def _onboarding_root(path):
+    root = _instance_root(path)
+    if not (root / "wiki").is_dir():
+        raise typer.BadParameter("Choose an existing knowledge instance (--path)")
+    return root
+
+
+@onboarding_app.command("status")
+def onboarding_status(path: Optional[str] = typer.Option(None, "--path")):
+    """Read the same progress that Studio displays; no completion is inferred."""
+    from .studio_history import onboarding
+    _emit_json(onboarding(_onboarding_root(path)))
+
+
+@onboarding_app.command("complete")
+def onboarding_complete(step: str, path: Optional[str] = typer.Option(None, "--path")):
+    """Record an explicitly finished teaching step: discuss, goals or learning."""
+    from .studio_history import onboarding
+    try:
+        _emit_json(onboarding(_onboarding_root(path), {"action": "complete_step", "step": step}))
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc))
+
+
+@onboarding_app.command("skip")
+def onboarding_skip(path: Optional[str] = typer.Option(None, "--path")):
+    """Skip teaching without marking its steps complete."""
+    from .studio_history import onboarding
+    _emit_json(onboarding(_onboarding_root(path), {"action": "skip"}))
+
+
+@onboarding_app.command("reset")
+def onboarding_reset(path: Optional[str] = typer.Option(None, "--path")):
+    """Explicitly reopen the three-step teaching flow."""
+    from .studio_history import onboarding
+    _emit_json(onboarding(_onboarding_root(path), {"action": "reset"}))
 
 
 # Characters that cannot appear in a single portable path component: the POSIX

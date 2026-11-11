@@ -10,6 +10,33 @@ from . import store, tasks
 CORE = "oh-my-oks"
 
 
+def install_global(base, editor, *, overwrite=False):
+    """Install only the core entry, without needing or modifying a KB."""
+    import os
+    import shutil
+
+    hosts = {"codex": ".codex", "claude": ".claude", "agents": ".agents"}
+    if editor not in hosts:
+        raise ValueError("Global installation supports codex, claude or agents; use the actual host's documented Skill directory for other hosts")
+    home = Path.home()
+    host = (Path(os.environ["CODEX_HOME"]).expanduser() if editor == "codex" and os.environ.get("CODEX_HOME") else home / hosts[editor]).resolve()
+    source = Path(base) / "skills" / CORE
+    if not (source / "SKILL.md").is_file():
+        raise ValueError("Bundled oh-my-oks is missing")
+    dest = host / "skills" / CORE
+    if dest.is_symlink() or (dest.exists() and not dest.is_dir()):
+        raise ValueError("Existing Skill is a link or non-directory; inspect it before replacement")
+    backup = None
+    if dest.exists():
+        if not overwrite:
+            return {"status": "preserved", "path": str(dest), "editor": editor}
+        backup = home / ".oks" / "skill-backups" / (datetime.now(UTC).strftime("%Y%m%dT%H%M%S") + "-" + uuid4().hex[:8]) / CORE
+        shutil.copytree(dest, backup, symlinks=True)
+    copy(host, source, "skills/" + CORE, overwrite=overwrite)
+    return {"status": "installed", "path": str(dest), "editor": editor,
+            "backup": str(backup) if backup else None}
+
+
 def copy(root, source, relative, *, overwrite=False):
     dest = tasks._inside(root, relative)
     wrote = False

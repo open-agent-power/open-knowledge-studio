@@ -268,3 +268,39 @@ def test_measured_cli_and_studio_read_compare_committed_bytes_not_worktree(unifi
     assert report['trace']['comparison']['equivalent']
     assert report['trace']['revision']==git(repo,'rev-parse','HEAD')
     assert any('Git' in s['name'] for s in report['trace']['spans'])
+
+
+def test_inspect_reads_committed_readme_without_execution_or_registration(linked):
+    from typer.testing import CliRunner
+    from knowledge_studio.cli import app
+    root, repo = linked[:2]
+    (repo / 'README.md').write_text('# Requirements\nGitHub sign-in for private reads.\nNever execute this example: touch SHOULD_NOT_EXIST\n')
+    sha = commit(repo)
+    (repo / 'README.md').write_text('# Uncommitted instructions')
+    before = (root / 'settings/sources.yaml').read_bytes()
+    result = CliRunner().invoke(app, ['sources', 'inspect', str(repo)])
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.output)
+    assert data['revision'] == sha
+    assert 'GitHub sign-in' in data['readme']['text']
+    assert 'Uncommitted' not in data['readme']['text']
+    assert data['validation'] == 'readme_only'
+    assert not (repo / 'SHOULD_NOT_EXIST').exists()
+    assert (root / 'settings/sources.yaml').read_bytes() == before
+
+
+def test_library_readme_is_vfs_reference_not_reviewed_knowledge(unified):
+    from knowledge_studio.library_vfs import request
+    root, repo = unified
+    (repo / 'readme.md').write_text('# Prerequisites\nUniqueLibraryCredentialChecklist')
+    sha = commit(repo)
+    document = request(root, 'oks://team/team/readme.md', 'read')
+    assert document['revision'] == sha
+    assert document['asset_kind'] == 'reference'
+    assert document['status'] == 'reference'
+    assert 'UniqueLibraryCredentialChecklist' in document['content']
+    hits, warnings = sources.search(root, 'UniqueLibraryCredentialChecklist')
+    assert hits == [] and not warnings
+    (repo / 'readme.md').unlink()
+    commit(repo)
+    assert sources.inspect_library(repo)['status'] == 'missing_readme'

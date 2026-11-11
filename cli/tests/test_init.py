@@ -20,7 +20,7 @@ EXPECTED_BUCKETS = [
 ]
 EXPECTED_TOP_LEVEL = {
     ".claude", ".qoder", ".pi", ".codex", ".agents", ".codebuddy", ".workbuddy", "settings",
-    "profiles", "raw", "wiki", "drafts", "mail", "skills", "records", ".gitignore", "AGENTS.md",
+    "profiles", "raw", "wiki", "drafts", "mail", "skills", "records", ".gitignore", "AGENTS.md", "README.md",
 }
 
 
@@ -217,7 +217,7 @@ def test_init_materializes_shareable_assets(tmp_path):
     # Only operational assets arrive; schemas/templates stay with the tool.
     assert (target / ".claude" / "skills" / "oh-my-oks").is_dir()
     assert not (target / ".claude" / "skills" / "office").exists()
-    assert (target / "skills" / "oh-my-oks" / "SKILL.md").is_file()
+    assert not (target / "skills" / "oh-my-oks").exists()
     assert (target / ".claude" / "settings.json").is_file()
     assert not (target / "templates").exists()
     assert not (target / "_meta").exists()
@@ -456,12 +456,15 @@ def test_upgrade_preserves_overrides_and_does_not_reseed_removed_assets(tmp_path
     settings.write_text("search_backend: native\nrecall:\n  topn: 2\n", encoding="utf-8")
     context = target / "profiles" / "INDEX.md"
     context.write_text("# My context\n", encoding="utf-8")
+    readme = target / "README.md"
+    readme.write_text("# My prerequisites\n", encoding="utf-8")
     custom = target / "profiles" / "projects" / "mine.md"
     custom.write_text("# User project\n", encoding="utf-8")
     result = runner.invoke(app, [*args, "--upgrade"])
     assert result.exit_code == 0, result.output
     assert settings.read_text() == "search_backend: native\nrecall:\n  topn: 2\n"
     assert context.read_text() == "# My context\n"
+    assert readme.read_text() == "# My prerequisites\n"
     assert custom.read_text() == "# User project\n"
     assert not (target / "_meta").exists()
     assert not (target / "templates").exists()

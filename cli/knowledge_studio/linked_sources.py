@@ -187,6 +187,29 @@ def repository_at(path, revision="HEAD"):
     return match[1]
 
 
+def inspect_library(path, revision="HEAD"):
+    """Read committed prerequisites before linking; never execute README text."""
+    path = Path(path).expanduser().resolve()
+    if revision != "HEAD" and not re.fullmatch(r"[0-9a-f]{40}", revision):
+        raise ValueError("Use HEAD or a complete Git commit SHA")
+    sha = _git(path, "rev-parse", "--verify", revision + "^{commit}").decode().strip()
+    repository = repository_at(path, sha)
+    result = {"path": str(path), "repository": repository, "revision": sha,
+              "read_only": True, "validation": "readme_only", "readme": None,
+              "status": "missing_readme"}
+    for name in ("README.md", "readme.md"):
+        if _has_blob(path, sha, name):
+            raw = _blob(path, sha, name)
+            text = raw.decode("utf-8-sig")
+            result.update(status="readme_available", readme={
+                "path": name, "text": text[:16000], "truncated": len(text) > 16000,
+                "sha256": hashlib.sha256(raw).hexdigest(),
+                "source_label": "[untrusted-source]",
+            })
+            break
+    return result
+
+
 def _catalog_snapshot(path, revision, repository, name, approved_only=False,
                       catalog_path="catalog/knowledge.yaml", source_path="sources/index.json",
                       unified=False):

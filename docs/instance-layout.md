@@ -52,7 +52,7 @@ oks layout-migrate
 
 ## 基础 Skill 与场景配方
 
-默认知识操作入口为 `skills/oh-my-oks`，宿主加载副本仍在 `.claude/skills`、`.agents/skills` 等隐藏目录。文件视图的根、tree 和全库 find 不枚举宿主安装目录；旧 `host-skills` URI 只保留显式兼容读取。
+默认知识操作入口`oh-my-oks`由工具发行并安装到选定宿主的全局目录，兼容项目入口位于`.claude/skills`、`.agents/skills`等隐藏目录；不再自动放入个人`skills/`作为知识资产。团队可以在自己的`skills/`维护共享采用版本。文件视图的根、tree 和全库 find 不枚举宿主安装目录；旧 `host-skills` URI 只保留显式兼容读取。
 
 `oh-my-oks` 只含讨论与目标维护、查阅与采纳、材料入库与知识候选审核、基本状态与健康检查。Office、媒体处理、通信、宿主适配、复杂评测不放入核心入口；需要时单独调用。
 
@@ -76,3 +76,13 @@ Raw先登记来源并按任务读取，不要求逐份材料生成Wiki。Wiki承
 旧Raw情景召回仍扫描Markdown/JSONL正文；来源manifest尚不等于统一可搜索索引。低成本来源检索需独立验证覆盖、定位、时延与上下文成本，不能由目录调整宣称完成。
 
 参数页沿用现有公式下的检索算法、召回数量与阈值、向量补召回和注入预算等开放项。格式规范、目录生成、是否逐份生成Wiki不是用户调参项，不额外增加开关。材料处理依据任务需求执行；将来只有在已有实现且取舍可观测时才考虑开放新的成本参数。保留默认值即可正常使用，不要求用户先调参。
+
+
+## 跨工作区入口与对话引导
+
+`oks skills-install --global --editor codex|claude|agents`只向选定宿主安装全局oh-my-oks，不要求当前目录是知识库，不修改其他Skill；存在入口时完整保留，显式`--force`先备份再更新发行文件。其他宿主核对自身支持，不将项目适配误称全局安装。
+
+`oks onboarding status|complete|skip|reset`使用与Studio相同的三步引导记录；complete需指定discuss/goals/learning，代表教学步骤完成，不表示知识获批。个人库路径可用`--path`明确指定。
+
+
+知识库根README说明用途和实际前置要求。`oks sources inspect <目录>`在关联前读取已提交README（兼容readme.md），返回来源版本与哈希，不自动注册、安装依赖或执行命令；工作区未提交要求不冒充共享版本。根README通过团队VFS可查阅，作为reference，不进入已审核知识召回。
