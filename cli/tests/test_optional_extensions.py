@@ -68,22 +68,28 @@ def test_install_instructions_only_point_at_official_sources():
     assert not offenders, "install entry points must stay on official sources:\n" + "\n".join(offenders)
 
 
-def test_connect_skill_matches_install_and_review_boundaries():
-    """The canonical Agent install contract must not drift from shipped behavior."""
+def test_connect_skill_documented_install_works_without_creating_knowledge(tmp_path, monkeypatch):
+    """Execute the cloud contract's real global-install example in a clean host.
+
+    A wording snapshot cannot validate a revised setup flow. The documented
+    command must work outside a KB and must not fabricate memory for install.
+    """
+    import re
+    import shlex
     repo_root = Path(__file__).parents[2]
     text = (repo_root / "SKILL.md").read_text(encoding="utf-8")
-
-    assert ".claude/skills/" in text
-    assert ".agents/skills/" in text
-    assert ".codex/" in text
-    assert "including Codex discovery" in text
-    assert "--editor <claude|qoder|codex|both>" in text
-
-    assert "9 skills" not in text
-    assert "materializes .claude/skills, .codex, .agents" not in text
+    command = re.search(r"^oks skills-install --global[^\n]+", text, re.M)
+    assert command, "Cloud contract needs an executable global-install example"
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path / "host"))
+    monkeypatch.chdir(tmp_path)
+    result = runner.invoke(cli.app, shlex.split(command[0])[1:])
+    assert result.exit_code == 0, result.output
+    installed = Path(json.loads(result.output)["path"])
+    assert (installed / "SKILL.md").is_file()
+    assert (installed / "references/onboarding.md").is_file()
+    assert not (tmp_path / "wiki").exists()
+    assert not (tmp_path / "drafts").exists()
     assert "oks wiki create" not in text
-    assert "Do not immediately run `oks skills-install`" in text
-    assert "`--force` only authorizes scaffolding" in text
 
 
 def test_ingest_missing_connector_shows_explicit_action(monkeypatch):

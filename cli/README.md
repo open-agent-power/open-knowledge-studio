@@ -64,8 +64,7 @@ and `--limit`; `--knowledge-only` drops the episodic path.
 events under `raw/executions/`; generated Wiki/Skill proposals stay under
 `drafts/proposals/` until a human explicitly promotes them.
 
-`oks init` materializes the shareable layer (Claude Code skills, templates, schema,
-settings) and a git-tracked memory instance. No repo clone required.
+`oks init` creates a git-tracked memory instance, missing default settings and host Skill entries. Schemas remain bundled with OKS and templates belong to their Skills; existing settings and profiles survive upgrades. No repo clone required.
 
 ## Documentation
 

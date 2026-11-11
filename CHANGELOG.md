@@ -1,5 +1,16 @@
 ## Unreleased
 
+## [0.6.24] — 2026-11-11
+
+- One-sentence cloud setup now guides environment detection, host installation, optional team linking and conversational Discuss → Goal → Learning.
+- Add `oks skills-install --global --editor codex|claude|agents`; preserve existing entries unless explicitly forced, and back up replacements.
+- Add `oks onboarding status|complete|skip|reset`, sharing Studio's existing progress record without auto-approving knowledge.
+- Add committed README prerequisite inspection with `oks sources inspect`; expose library README as a read-only reference, outside approved knowledge recall.
+- Keep new instances minimal: no copied top-level schemas/templates, author-specific profiles, example recipes or invented team goals. Preserve existing settings and profiles during upgrade.
+- Keep bundled oh-my-oks in host installation locations rather than duplicating its source in personal skills/.
+- Improve Studio date navigation and timeline playback with synchronized stage cards; remove dates from Learning and add native library folder selection.
+- Federate standard team buckets with versioned read-only VFS access and preserve library/review identity.
+
 - Skill routing searches reviewed capability descriptions without falling back to instruction text.
 - Ordinary Wiki recall excludes Skill cards across retrieval backends; use `oks skills search` for capabilities.
 - Cached Python helpers can generate bytecode without breaking subsequent loads; source edits and unrelated files remain checked.

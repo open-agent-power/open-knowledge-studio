@@ -49,9 +49,10 @@ open-knowledge-studio/
 ├── drafts/                 # Candidate proposals, awaiting review
 ├── mail/                   # agent-to-agent: inbox/ + sent/ — never long-term knowledge
 ├── settings/               # recall.yaml (single param source), tool registry
-├── _meta/                  # schema layer: raw evidence, recall case, trace event
 └── records/                # versioned acceptance evidence + experiment runs
 ```
+
+Schemas are maintained by the OKS distribution; instances do not copy `_meta/` or top-level `templates/`. Existing configuration is preserved during upgrades.
 
 The local Studio has three primary views: **Discuss, Goal, Learning**. Discuss
 and Goal read date-indexed Markdown files. Learning combines the knowledge

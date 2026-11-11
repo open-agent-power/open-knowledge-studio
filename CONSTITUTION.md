@@ -183,6 +183,8 @@ existed.
 
 ### A1: Five cognitive buckets + two infrastructure layers
 
+Schema contracts belong to the versioned OKS tool distribution. New knowledge instances do not copy `_meta/` or top-level `templates/`; instance overrides live in `settings/`, and executable templates belong to their Skill. The schema layer below is a logical responsibility, not a required instance folder.
+
 The knowledge repo has **five cognitive and interaction buckets**: four hold the
 knowledge lifecycle (`profiles/`, `raw/`, `wiki/`, `drafts/`), while mandatory
 `mail/` holds short-lived coordination and human-Agent evaluation evidence.

@@ -11,7 +11,7 @@ search_exclude: true
 
 ## A1: 认知桶 + 两基础设施
 
-A1 列出 `profiles/` `raw/` `wiki/` `drafts/` `mail/`，并将 `settings/` `_meta/` 作为两个基础设施层。其中 `mail/` 保存 Agent 间的短期通信，不参与 Recall 或衰减。记忆生命周期：Observe → Write → Store → Retrieve → Inject → Forget。
+A1 列出 `profiles/` `raw/` `wiki/` `drafts/` `mail/`，并将 `settings/` `_meta/` 作为两个基础设施层。Schema层由OKS工具提供，不要求物化到每个实例；`settings/`保存实例配置。其中 `mail/` 保存 Agent 间的短期通信，不参与 Recall 或衰减。记忆生命周期：Observe → Write → Store → Retrieve → Inject → Forget。
 
 召回索引是**可重建的派生物**——从 Git 中已审核的 `wiki/` 生成；Git 里人审过的知识才是真正来源，索引丢了重跑 `oks recall` 即可重建。这划清三层：原始证据层（`raw/`，只增不改）/ 知识层（`wiki/`，可修订）/ 服务层（召回索引，可重建）。
 
