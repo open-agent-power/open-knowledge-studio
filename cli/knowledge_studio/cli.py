@@ -3400,6 +3400,7 @@ def mail_serve(
     mode: str = typer.Option("reader", "--mode", help="reader (read-only) or collaboration (legacy write API)"),
     local_review: bool = typer.Option(False, '--local-review', help='Allow local candidate review/export and inspected Draft promotion; Mail remains read-only in reader mode'),
     local_edit: bool = typer.Option(False, '--local-edit', help='Allow local Goal/task creation, bundled Skill draft import and review; Mail remains read-only'),
+    discussion_agent: str = typer.Option('', '--discussion-agent', help='Run claude or codex as the local discussion-comment receiver; requires --local-edit'),
     background: bool = typer.Option(False, "--background", help="Run independently of this terminal or host session"),
     status: bool = typer.Option(False, "--status", help="Probe the managed server without writing files"),
     stop: bool = typer.Option(False, "--stop", help="Stop only this instance's managed background server"),
@@ -3409,7 +3410,7 @@ def mail_serve(
 
     if sum((background, status, stop)) > 1:
         raise typer.BadParameter("Choose only one of --background, --status or --stop")
-    if (local_review or local_edit) and (background or status or stop):
+    if (local_review or local_edit or discussion_agent) and (background or status or stop):
         raise typer.BadParameter('--local-review / --local-edit are foreground options; run serve without --background, --status or --stop')
     if background or status or stop:
         from knowledge_studio.mail_server import start_background, server_status, stop_background
@@ -3424,7 +3425,8 @@ def mail_serve(
         return
 
     try:
-        server = create_server(_instance_root(path), port, mode=mode, local_review=local_review, local_edit=local_edit)
+        server = create_server(_instance_root(path), port, mode=mode, local_review=local_review, local_edit=local_edit,
+                               discussion_agent=discussion_agent)
     except (ValueError, OSError) as exc:
         console.print(f"[red]{exc}[/red]")
         raise typer.Exit(2)

@@ -19,6 +19,10 @@ import { createSettingsView } from "./studio/settings.js";
       status("保存中…");
       return false;
     }
+    if (state.commentDraft) {
+      status("请先发送或放弃未发送留言");
+      return false;
+    }
     if (state.dirty || state.settingsDirty) {
       status("请先保存修改");
       return false;
@@ -38,6 +42,8 @@ import { createSettingsView } from "./studio/settings.js";
     scopeFile,
     inspect,
     navigate,
+    updateRoute,
+    setDiscussionMode,
   };
   const librariesView = createLibrariesView({ dom, actions, api });
   $("instance").onclick = () => librariesView.open();
@@ -83,6 +89,10 @@ import { createSettingsView } from "./studio/settings.js";
     const p = new URLSearchParams({ tab: state.tab });
     if (state.date) p.set("date", state.date);
     if (state.selected && state.tab === "goals") p.set("file", state.selected);
+    if (state.tab === "discuss") {
+      if (state.discuss === "history") p.set("view", "history");
+      if (state.discuss === "graph" && state.scope) p.set("scope", state.scope);
+    }
     if (state.tab === "learning") p.set("view", state.learn);
     history.replaceState(null, "", "#" + p);
   }
@@ -122,6 +132,7 @@ import { createSettingsView } from "./studio/settings.js";
     if (!["discuss", "goals", "learning"].includes(state.tab))
       state.tab = "discuss";
     state.scope = params.get("scope") || "";
+    state.discuss = params.get("view") === "history" ? "history" : "graph";
     state.date =
       params.get("date") ||
       state.scope
@@ -130,12 +141,17 @@ import { createSettingsView } from "./studio/settings.js";
         .join("-") ||
       state.date;
     state.selected = params.get("file") || "";
-    state.learn =
-      params.get("view") ||
-      { messages: "mail", agents: "members" }[raw] ||
-      "graph";
+    if (state.tab === "learning")
+      state.learn = params.get("view") ||
+        { messages: "mail", agents: "members" }[raw] || "graph";
   }
   async function selectDate() {
+    if (state.tab === "discuss" && state.discuss === "graph") {
+      if (!state.date) state.date = localDate();
+      if (state.scope && !state.scope.startsWith("drafts/") && !state.scope.startsWith("raw/"))
+        state.scope = "";
+      return;
+    }
     if (state.tab === "learning") {
       $("scope").value = state.date || (state.date = localDate());
       state.scope = "";
@@ -150,17 +166,25 @@ import { createSettingsView } from "./studio/settings.js";
   }
   async function loadView(force = false) {
     if (state.viewLoading && !force) return;
-    if (!state.scope) {
+    if (!state.scope && !(state.tab === "discuss" && state.discuss === "graph")) {
       state.view = null;
       render();
       return;
     }
     const ticket = ++state.loading,
-      at = state.scope;
+      at = state.scope,
+      tab = state.tab,
+      date = state.date,
+      discuss = state.discuss,
+      context = state.context;
+    const current = () => ticket === state.loading && at === state.scope &&
+      tab === state.tab && date === state.date && discuss === state.discuss &&
+      context === state.context;
     state.viewLoading = true;
     let next;
     try {
       next = await request(
+        tab === "discuss" && discuss === "graph" ? "/api/studio/drafts" :
         "/api/studio/view?" +
           new URLSearchParams({
             kind: state.tab === "discuss" ? "discuss" : "goal",
@@ -170,7 +194,7 @@ import { createSettingsView } from "./studio/settings.js";
     } finally {
       if (ticket === state.loading) state.viewLoading = false;
     }
-    if (ticket !== state.loading || at !== state.scope) return;
+    if (!current()) return;
     if (next.knowledge_base !== state.context.knowledge_base) {
       window.OksWorkspace.recovery();
       status("知识库已切换，请重新连接");
@@ -188,16 +212,19 @@ import { createSettingsView } from "./studio/settings.js";
       state.view.version !== next.version ||
       state.view.scope !== next.scope
     ) {
+      const updateDiscussion = tab === "discuss" && discuss === "graph" &&
+        state.view?.scope === next.scope;
       state.view = next;
       if (
-        !state.view.files[state.selected] ||
+        !state.view.files?.[state.selected] ||
         state.view.files[state.selected].kind !== "goal"
       )
         state.selected = state.view.entry;
-      if (state.tab !== "learning") render();
+      if (updateDiscussion && discussionView.update()) updateRoute();
+      else if (state.tab !== "learning") render();
     }
     if (!state.settingsDirty && !state.dirty)
-      status(next.warnings.length ? next.warnings.join("；") : "");
+      status(next.warnings?.length ? next.warnings.join("；") : "");
   }
   async function navigate(tab) {
     if (!canLeave()) return;
@@ -208,6 +235,14 @@ import { createSettingsView } from "./studio/settings.js";
     if (tab !== "learning") await loadView(true);
     else render();
   }
+  async function setDiscussionMode(mode) {
+    if (!canLeave() || state.discuss === mode) return;
+    state.discuss = mode;
+    state.scope = state.selected = "";
+    state.view = null;
+    await selectDate();
+    await loadView(true);
+  }
   function render() {
     discussionView.destroy();
     goalsView.destroy();
@@ -217,8 +252,10 @@ import { createSettingsView } from "./studio/settings.js";
       else b.removeAttribute("aria-current");
     });
     $("scopeBar").hidden = false;
-    $("scope").hidden = state.tab === "learning";
-    document.querySelector('label[for="scope"]').hidden = state.tab === "learning";
+    const dated = state.tab === "goals" ||
+      (state.tab === "discuss" && state.discuss === "history");
+    $("scope").hidden = !dated;
+    document.querySelector('label[for="scope"]').hidden = !dated;
     $("scope").setAttribute("aria-label", "日期");
     $("newGoal").setAttribute(
       "aria-label",
@@ -231,6 +268,9 @@ import { createSettingsView } from "./studio/settings.js";
     document.title =
       "OKS · " +
       { discuss: "讨论", goals: "目标", learning: "学习" }[state.tab];
+    if (!writable()) $("newGoal").title = "当前只读，请使用启用本地编辑的连接";
+    if (state.tab === "discuss")
+      $("previousDay").hidden = $("nextDay").hidden = state.discuss !== "history";
     $("content").replaceChildren();
     renderOnboarding({ dom, state, actions, api });
     updateRoute();
@@ -238,7 +278,18 @@ import { createSettingsView } from "./studio/settings.js";
       renderLearning();
       return;
     }
-    if (!state.view || (state.tab !== "goals" && !state.view.entries?.length)) {
+    if (state.tab === "discuss") {
+      const tabs = el("div", "discussion-view-tabs");
+      for (const [mode, label] of [["graph", "待审草稿"], ["history", "讨论记录"]]) {
+        const tab = button(label, () => {
+          void setDiscussionMode(mode).catch((e) => status(e.message));
+        });
+        tab.setAttribute("aria-pressed", String(state.discuss === mode));
+        tabs.append(tab);
+      }
+      $("content").append(tabs);
+    }
+    if (!state.view || (state.tab === "discuss" && state.discuss === "history" && !state.view.entries?.length)) {
       $("content").append(
         el("div", "empty", state.tab === "discuss" ? "暂无讨论" : "暂无目标"),
       );
@@ -306,16 +357,25 @@ import { createSettingsView } from "./studio/settings.js";
   $("newGoal").onclick = () => {
     if (canLeave()) openNew();
   };
-  $("closeNew").onclick = () => $("newDialog").close();
+  const closeNew = () => { if (!state.saving) $("newDialog").close(); };
+  $("closeNew").onclick = closeNew;
+  $("cancelNew").onclick = closeNew;
+  $("newDialog").oncancel = (event) => { if (state.saving) event.preventDefault(); };
   $("closeFile").onclick = () => $("fileDialog").close();
   $("newForm").onsubmit = async (event) => {
     event.preventDefault();
+    if (state.saving || !writable()) return;
     const title = $("newPath").value.trim();
     if (!title || /[/\\\r\n]/.test(title)) {
       $("newError").textContent = "标题不能含路径分隔符";
       return;
     }
     const path = `profiles/${state.tab === "discuss" ? "discuss" : "goals"}/${state.date.replaceAll("-", "/")}/${title}.md`;
+    state.saving = true;
+    $("createNew").disabled = true;
+    $("cancelNew").disabled = true;
+    $("closeNew").disabled = true;
+    let committed = false;
     try {
       await post("/api/studio/file", {
         path,
@@ -323,14 +383,23 @@ import { createSettingsView } from "./studio/settings.js";
         create: true,
         expected_sha256: null,
       });
+      committed = true;
       $("newDialog").close();
       state.selected = path;
       state.scope = path;
       state.tab = path.startsWith("profiles/discuss/") ? "discuss" : "goals";
+      if (state.tab === "discuss") state.discuss = "history";
       await selectDate();
+      state.saving = false;
       await loadView(true);
     } catch (e) {
-      $("newError").textContent = e.message;
+      if (committed) status("已保存，刷新失败：" + e.message);
+      else $("newError").textContent = e.message;
+    } finally {
+      state.saving = false;
+      $("createNew").disabled = false;
+      $("cancelNew").disabled = false;
+      $("closeNew").disabled = false;
     }
   };
   document.querySelectorAll("[data-tab]").forEach(
@@ -360,6 +429,10 @@ import { createSettingsView } from "./studio/settings.js";
       event.preventDefault();
       event.returnValue = "";
     }
+    if (state.commentDraft) {
+      event.preventDefault();
+      event.returnValue = "";
+    }
   });
   window.addEventListener("hashchange", () => {
     if (!canLeave()) {
@@ -369,7 +442,8 @@ import { createSettingsView } from "./studio/settings.js";
     restore();
     void (async () => {
       await selectDate();
-      if (state.scope) await loadView(true);
+      if (state.scope || (state.tab === "discuss" && state.discuss === "graph"))
+        await loadView(true);
       else render();
       if (state.tab === "learning") render();
     })().catch((e) => status(e.message));
@@ -382,6 +456,7 @@ import { createSettingsView } from "./studio/settings.js";
     state.context = event.detail.context;
     if (event.detail.changedRoot) {
       state.dirty = state.settingsDirty = false;
+      state.commentDraft = null;
       state.view = null;
       state.scope = state.selected = "";
       await selectDate();
@@ -408,7 +483,7 @@ import { createSettingsView } from "./studio/settings.js";
     $("instance").title = state.context.knowledge_base;
     state.onboarding = await request("/api/studio/onboarding");
     await selectDate();
-    if (state.scope) await loadView(true);
+    if (state.scope || (state.tab === "discuss" && state.discuss === "graph")) await loadView(true);
     else render();
     if (state.tab === "learning") render();
   })().catch((e) => status(e.message));
@@ -422,7 +497,7 @@ import { createSettingsView } from "./studio/settings.js";
         (++listingTick % 5 === 0 || !state.scope)
       )
         await selectDate();
-      if (state.scope) await loadView();
+      if (state.scope || (state.tab === "discuss" && state.discuss === "graph")) await loadView();
     })().catch((e) => status(e.message));
   }, 2000);
 })();

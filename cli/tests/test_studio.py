@@ -9,7 +9,7 @@ from urllib.request import Request, urlopen
 import pytest
 
 from knowledge_studio import studio
-from knowledge_studio.mail_web import create_server
+from knowledge_studio.mail_web import ROOT, create_server
 
 
 @pytest.fixture
@@ -189,17 +189,29 @@ def test_http_edit_permissions_instance_binding_and_reused_views(kb, editing):
         return urlopen(req, timeout=5)
     try:
         with call('/') as response:
-            assert b'/studio.js' in response.read()
-        with call('/?panel=1#wiki-overview') as response:
-            assert b'app.js' in response.read()
-        for asset in ('studio.js', 'studio-model.js', 'studio.css', 'studio-theme.css', 'graph-labels.js',
+            page = response.read()
+            assert b'id="status" role="status"' in page
+            graph_script = b'src="/force-layout.js"'
+            assert page.count(graph_script) == 1
+            assert page.index(graph_script) < page.index(b'src="/studio.js"')
+            assert b'src="/graph-labels.js"' in page
+        with call('/mail#messages') as response:
+            page = response.read()
+            assert b'app.js' in page
+            assert b'/vendor/graph-engine/' not in page
+            assert b'mail-view-model.js' in page
+        for asset in ('studio.js', 'studio-model.js', 'studio.css', 'studio-theme.css',
                       'studio/api.js', 'studio/dom.js', 'studio/state.js', 'studio/graph.js',
-                      'studio/discussion.js', 'studio/goals.js', 'studio/learning.js', 'studio/settings.js',
+                      'studio/discussion.js', 'studio/draft-reader.js', 'studio/draft-discussion.css', 'studio/goals.js', 'studio/learning.js', 'studio/settings.js',
                       'studio/graph.css', 'studio/goals.css', 'studio/learning.css', 'studio/formulas.js', 'studio/knowledge.js', 'studio/knowledge-model.js', 'studio/evaluation.js', 'studio/evaluation-charts.js', 'studio/evaluation.css',
+                      'force-layout.js', 'graph-labels.js',
                       'vendor/katex/katex.min.js', 'vendor/katex/katex.min.css',
                       'vendor/katex/fonts/KaTeX_Main-Regular.woff2', 'studio-redirect.js'):
             with call('/' + asset) as response:
                 assert response.status == 200
+                if asset.startswith('vendor/graph-engine/'):
+                    assert response.headers.get_content_type() == 'text/javascript'
+                    assert response.read() == (ROOT / asset).read_bytes()
         with call('/api/studio/view?scope=goal%2Finterface') as response:
             assert json.load(response)['scope'] == 'goal/interface'
         payload = {'path': 'goal/new.md', 'text': '# New', 'create': True, 'expected_knowledge_base': str(kb)}
@@ -238,3 +250,196 @@ def test_discussion_dates_are_paths_and_contexts_keep_their_own_roles(kb):
     result = studio.context_catalog(kb)
     assert next(item for item in result['entries'] if item['path']=='profiles/projects/test.md')['type']=='project'
     assert {'a':'profiles/projects/test.md','b':'wiki/rule.md','type':'cites'} in result['edges']
+
+
+def test_mail_context_path_can_be_read_by_the_complete_document_reader(kb):
+    from knowledge_studio import mail
+    from urllib.parse import urlencode
+
+    body = '## 交接内容\n\n完整正文应能通过图谱读回。\n'
+    message = mail.write_message(kb, sender='reviewer', sender_kind='agent',
+        recipients=['human'], title='交接资料', body=body)
+    entry = next(item for item in studio.context_catalog(kb)['entries']
+                 if item['id'] == 'mail:' + message['message_id'])
+    assert entry['type'] == 'mail'
+    assert entry['path'] == message['path'].relative_to(kb).as_posix()
+    assert '\\' not in entry['path']
+    document = studio.read_file(kb, entry['path'])
+    assert document['path'] == entry['path']
+    assert document['text'] == message['path'].read_text(encoding='utf-8')
+    assert document['title'] == '交接资料'
+    assert body in document['text']
+    title_row = document['outline'][0]
+    assert title_row['text'] == '交接资料'
+    assert document['text'].splitlines()[title_row['line']] == '# 交接资料'
+    server = create_server(kb, 0)
+    worker = Thread(target=server.serve_forever, daemon=True)
+    worker.start()
+    try:
+        base = f'http://127.0.0.1:{server.server_port}'
+        with urlopen(base + '/api/studio/file?' + urlencode({'path': entry['path']}), timeout=5) as response:
+            result = json.load(response)
+        assert result['title'] == '交接资料'
+        assert result['outline'] == document['outline']
+        assert '# 交接资料' in result['body']
+        assert '<h2>交接资料</h2>' in result['body_html']
+        assert '<h3>交接内容</h3>' in result['body_html']
+        assert '完整正文应能通过图谱读回。' in result['body_html']
+        assert 'to: @human' not in result['body_html']
+    finally:
+        server.shutdown(); server.server_close(); worker.join(timeout=5)
+
+
+def test_mail_frontmatter_parser_does_not_relax_other_markdown_validation(kb):
+    import yaml
+
+    path = kb / 'profiles/goals/mail-like.md'
+    text = '---\nto: @human\n---\n# This still requires valid YAML\n'
+    path.write_text(text, encoding='utf-8')
+    with pytest.raises(yaml.YAMLError):
+        studio.read_file(kb, path.relative_to(kb).as_posix())
+    assert path.read_text(encoding='utf-8') == text
+
+
+def test_discussion_revision_renders_retained_markdown_not_current_file(kb):
+    from knowledge_studio import studio_history
+    path = 'discuss/2026/11/04/interface.md'
+    historical = '---\ntitle: 历史\n---\n# 旧标题\n\n<script>alert(1)</script>\n'
+    event = studio_history.record(kb, path, None, historical, action='create')
+    (kb / path).write_text('# 当前标题\n\n当前内容', encoding='utf-8')
+    server = create_server(kb, 0)
+    worker = Thread(target=server.serve_forever, daemon=True)
+    worker.start()
+    try:
+        base = f'http://127.0.0.1:{server.server_port}'
+        with urlopen(base + '/api/studio/revision?id=' + event['id'], timeout=5) as response:
+            result = json.load(response)
+        item = result['files'][path]
+        assert item['text'] == historical
+        assert '<h2>旧标题</h2>' in item['body_html']
+        assert '&lt;script&gt;' in item['body_html']
+        assert '<script>' not in item['body_html']
+        assert '当前标题' not in item['body_html']
+    finally:
+        server.shutdown()
+        server.server_close()
+        worker.join(timeout=5)
+
+
+
+def test_projection_reuses_documents_only_within_the_current_request(kb, monkeypatch):
+    reads = []
+    original = studio.workspace._text_file
+
+    def record_read(root, relative, suffixes):
+        reads.append(relative)
+        return original(root, relative, suffixes)
+
+    monkeypatch.setattr(studio.workspace, '_text_file', record_read)
+    relative = 'discuss/2026/11/04/interface.md'
+    first = studio.view(kb, 'goal/interface')
+    assert reads.count(relative) == 1
+    assert all('outline' in item for item in first['files'].values())
+
+    document = kb / relative
+    document.write_text(document.read_text(encoding='utf-8') + '\n外部修改\n', encoding='utf-8')
+    reads.clear()
+    second = studio.view(kb, 'goal/interface')
+    assert reads.count(relative) == 1
+    assert second['version'] != first['version']
+    assert second['files'][relative]['text'].splitlines()[-1] == '外部修改'
+
+
+
+@pytest.mark.parametrize('editing', [False, True])
+def test_discussion_agent_review_http_permissions_and_readback(kb, editing):
+    from knowledge_studio import mail
+    from knowledge_studio.mail_runtime import FileMailRuntime
+
+    path = 'discuss/2026/11/04/interface.md'
+    before = (kb / path).read_bytes()
+    mail.register_session(kb, 'reviewer-session', 'reviewer')
+    server = create_server(kb, 0, local_review=True, local_edit=editing)
+    worker = Thread(target=server.serve_forever, daemon=True)
+    worker.start()
+    base = f'http://127.0.0.1:{server.server_port}'
+
+    def call(data=None, origin=base, route=None):
+        route = route or ('/api/studio/discussion-review/request' if data is not None
+                          else '/api/studio/discussion-review?path=' + path)
+        request = Request(base + route, data=json.dumps(data).encode() if data is not None else None,
+                          headers={'Content-Type': 'application/json', 'Origin': origin})
+        return urlopen(request, timeout=5)
+
+    try:
+        with call() as response:
+            initial = json.load(response)
+        assert initial['knowledge_base'] == str(kb)
+        assert initial['request'] is None
+        assert all(item['status'] == 'unrequested' for item in initial['items'])
+        assert '@reviewer' in {reviewer['id'] for reviewer in initial['reviewers']}
+        assert (kb / path).read_bytes() == before
+        payload = {'path': path, 'expected_sha256': initial['sha256'],
+                   'reviewer': '@reviewer', 'expected_knowledge_base': str(kb)}
+        with pytest.raises(HTTPError) as error:
+            call(payload, 'http://evil.invalid')
+        assert error.value.code == 403
+        if not editing:
+            with pytest.raises(HTTPError) as error:
+                call(payload)
+            assert error.value.code == 403
+            assert list(mail.iter_messages(kb, 'human')) == []
+            assert (kb / path).read_bytes() == before
+            return
+        with pytest.raises(HTTPError) as error:
+            call({**payload, 'expected_knowledge_base': str(kb.parent)})
+        assert error.value.code == 409
+        with pytest.raises(HTTPError) as error:
+            call({**payload, 'expected_sha256': 'stale'})
+        assert error.value.code == 409
+        with call(payload) as response:
+            requested = json.load(response)
+        request = requested['request']
+        assert request['status'] == 'pending'
+        assert requested['sha256'] == initial['sha256']
+        with call(payload) as response:
+            assert json.load(response)['request']['message_id'] == request['message_id']
+        runtime = FileMailRuntime(kb, 'reviewer', 'reviewer-session')
+        received = runtime.wait(timeout=0)
+        assert any(message['message_id'] == request['message_id'] for message in received['messages'])
+        mail.acknowledge_delivery(kb, 'reviewer-session', request['message_id'], agent_id='reviewer')
+        with call() as response:
+            acknowledged = json.load(response)
+        assert all(item['status'] == 'pending' for item in acknowledged['items'])
+        results = [{'item_id': item['id'], 'verdict': 'accepted' if index == 0 else 'disputed',
+                    'reason': 'Checked the source' if index == 0 else 'The requested behavior needs clarification',
+                    'evidence': [path]} for index, item in enumerate(initial['items'])]
+        message = mail.write_message(kb, sender='reviewer', sender_kind='agent', recipients=['@human'],
+            thread_id=request['thread_id'], reply_to=request['message_id'], origin_session_id='reviewer-session',
+            record_kind='result', body=json.dumps({'schema': 'oks.discussion-review.result.v1',
+                'request_message_id': request['message_id'], 'source_sha256': initial['sha256'], 'results': results}))
+        with call() as response:
+            reviewed = json.load(response)
+        assert reviewed['request']['status'] == 'reviewed'
+        assert reviewed['items'][0]['status'] == 'accepted'
+        assert reviewed['summary']['disputed'] > 0
+        assert reviewed['items'][0]['review']['reviewer'] == '@reviewer'
+        assert reviewed['items'][0]['review']['message_id'] == message['message_id']
+        with call(route='/api/mail/thread?id=' + request['thread_id']) as response:
+            thread = json.load(response)
+        assert all('display_body' in item for item in thread['messages'])
+        assert json.loads(thread['messages'][0]['body'])['source_sha256'] == initial['sha256']
+        assert 'Checked the source' in thread['messages'][-1]['display_body']
+        assert (kb / path).read_bytes() == before
+        (kb / path).write_bytes(before + b'\nChanged source context.\n')
+        with call() as response:
+            stale = json.load(response)
+        assert stale['request']['status'] == 'stale'
+        assert all(item['status'] == 'unrequested' for item in stale['items'])
+        with call({**payload, 'expected_sha256': stale['sha256']}) as response:
+            assert json.load(response)['request']['message_id'] != request['message_id']
+        assert set((kb / 'wiki').glob('*.md')) == {kb / 'wiki/rule.md'}
+    finally:
+        server.shutdown()
+        server.server_close()
+        worker.join(timeout=5)

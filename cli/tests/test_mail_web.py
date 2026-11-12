@@ -70,6 +70,48 @@ def test_web_reads_real_threads_and_rejects_unsafe_requests(kb):
         worker.join(timeout=5)
 
 
+def test_native_mail_writes_bind_to_the_inspected_knowledge_base(kb):
+    original = mail.write_message(kb, sender="worker", recipients="human", body="source", title="Original")
+    server = create_server(kb, 0, mode="collaboration")
+    worker = threading.Thread(target=server.serve_forever, daemon=True)
+    worker.start()
+    base = f"http://127.0.0.1:{server.server_port}"
+
+    def post(route, payload):
+        request = Request(base + route, data=json.dumps(payload).encode(),
+                          headers={"Content-Type": "application/json"})
+        return urlopen(request, timeout=5)
+
+    def snapshot():
+        return {path.relative_to(kb).as_posix(): path.read_bytes()
+                for path in kb.rglob("*") if path.is_file()}
+
+    try:
+        before = snapshot()
+        for route, payload in (
+            ("send", {"to": "worker", "title": "New", "body": "message"}),
+            ("reply", {"thread_id": original["thread_id"], "body": "reply"}),
+            ("read", {"message_id": original["message_id"]}),
+        ):
+            with pytest.raises(HTTPError) as error:
+                post("/api/mail/" + route, {**payload, "expected_knowledge_base": "/other-kb"})
+            assert error.value.code == 409
+        assert snapshot() == before
+        with urlopen(base + "/api/mail/thread?id=" + original["thread_id"], timeout=5) as response:
+            assert json.load(response)["messages"][0]["read_at"] is None
+        assert snapshot() == before
+        with post("/api/mail/send", {"to": "worker", "title": "New", "body": "message",
+                                      "expected_knowledge_base": str(kb)}) as response:
+            assert response.status == 201
+        with post("/api/mail/reply", {"thread_id": original["thread_id"], "body": "reply",
+                                       "expected_knowledge_base": str(kb)}) as response:
+            assert response.status == 201
+    finally:
+        server.shutdown()
+        server.server_close()
+        worker.join(timeout=5)
+
+
 # ── 独立 Wiki 页：面向普通读者的显示契约（R6）────────────────────────────
 #
 # 这一页是「有人点进来才看到」的深页面，最容易漏出维护者字段。

@@ -123,3 +123,24 @@ jobs:
             ${{ runner.temp }}/oks-installed/*/*.log
             ${{ runner.temp }}/oks-installed/*/probe.json
           if-no-files-found: warn
+
+  studio:
+    name: Studio interactions and reproducible graph runtime
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Run Studio and graph contracts
+        run: node --test cli/tests/test_*.js cli/tests/test_learning_graph*.cjs
+      - name: Rebuild the pinned graph runtime outside the checkout
+        shell: bash
+        run: |
+          build_dir="$(mktemp -d)"
+          engine="assets/mail-web/vendor/graph-engine"
+          cp "$engine/build-package.json" "$build_dir/package.json"
+          cp "$engine/build-package-lock.json" "$build_dir/package-lock.json"
+          npm ci --prefix "$build_dir" --registry=https://registry.npmjs.org --no-audit --no-fund
+          node "$engine/build.mjs" "$build_dir"
+          git diff --exit-code -- "$engine/graph-3d.worker.js" "$engine/position-smoothing.js" "$engine/THIRD-PARTY-NOTICES"

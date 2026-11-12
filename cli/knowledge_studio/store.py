@@ -898,9 +898,9 @@ def list_drafts() -> list[dict]:
         return []
 
     drafts: list[dict] = []
-    from .task_workflow import _promotions, _rejections, candidate_disposition
+    from .task_workflow import _rejections, candidate_disposition
     from . import draft_review
-    promotions, rejections = _promotions(repo_root()), _rejections(repo_root())
+    promotions, rejections = draft_review.promotions(repo_root()), _rejections(repo_root())
     for f in sorted(dd.glob("*.md")):
         relative = f.relative_to(repo_root()).as_posix()
         try:
@@ -908,7 +908,7 @@ def list_drafts() -> list[dict]:
         except OSError:
             continue
         if (candidate_disposition(repo_root(), relative, raw=raw, promotions=promotions, rejections=rejections)
-                or draft_review.disposition(repo_root(), relative, hashlib.sha256(raw).hexdigest())):
+                or draft_review.disposition(repo_root(), relative, hashlib.sha256(raw).hexdigest(), promotions=promotions)):
             continue
         meta = parse_wiki_file(f)
         if not meta:
@@ -1002,6 +1002,7 @@ def _promote_draft(
     reviewed_text: str | None = None,
     reviewed_bytes: bytes | None = None,
 ) -> str:
+    from . import draft_review
     draft_path = _draft_path(slug)
     if not draft_path.exists():
         raise FileNotFoundError(f"Draft not found: {slug}")
@@ -1031,14 +1032,14 @@ def _promote_draft(
     if re.fullmatch(r'task-learning-[0-9a-f]{28}', slug) and not isinstance(meta.get('workflow_source'), dict):
         raise ValueError('Task learning source markers missing; Draft retained')
     if meta.get('workflow_source'):
-        from knowledge_studio.task_workflow import require_current_draft, preserve_review, candidate_disposition
+        from knowledge_studio.task_workflow import require_current_draft, candidate_disposition
         disposition = candidate_disposition(repo_root(), draft_path.relative_to(repo_root()).as_posix(), reviewed_bytes)
         if disposition == 'not_proposed':
             raise ValueError('No proposed learning content; original record retained')
         if disposition is not None:
             raise ValueError('Draft already reviewed; original evidence retained')
         require_current_draft(repo_root(), reviewed_text)
-        meta['reviewed_source'] = preserve_review(repo_root(), draft_path.relative_to(repo_root()).as_posix(), reviewed_bytes if reviewed_bytes is not None else reviewed_text.encode('utf-8'))
+        meta['reviewed_source'] = draft_review.preserve_original(repo_root(), draft_path.relative_to(repo_root()).as_posix(), reviewed_bytes if reviewed_bytes is not None else reviewed_text.encode('utf-8'))
         meta['workflow_reviews'] = [{'workflow_source': meta['workflow_source'], 'reviewed_source': meta['reviewed_source'], 'reviewed_at': datetime.now(UTC).isoformat()}]
 
     final_title = title or meta.get("title", slug)
@@ -1091,7 +1092,6 @@ def _promote_draft(
         # Preserve exact review evidence before writing Wiki. If the canonical
         # Draft decision receipt later fails, the reviewed Wiki metadata and
         # this content-addressed original together recover the decision.
-        from . import draft_review
         raw_for_review = reviewed_bytes if reviewed_bytes is not None else reviewed_text.encode('utf-8')
         review_proof = draft_review.preserve_original(
             repo_root(), draft_path.relative_to(repo_root()).as_posix(), raw_for_review)
@@ -1138,7 +1138,6 @@ def _promote_draft(
         # Exact reviewed bytes are excluded from pending projections; any new
         # bytes at this path remain a separate, unapproved revision.
         return path.stem
-    from . import draft_review
     raw = reviewed_bytes if reviewed_bytes is not None else reviewed_text.encode('utf-8')
     draft_review.record_decision(repo_root(), slug, raw, 'promoted',
                                  wiki_path=path.relative_to(repo_root()).as_posix())

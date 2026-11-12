@@ -1,3 +1,4 @@
+import {drawLearningGraph} from './learning-graph.js';
 // SVG interaction and lifecycle; reuses the existing force-layout engine.
 export function drawGraph(
   svg,
@@ -7,6 +8,7 @@ export function drawGraph(
   onSelect,
   { entry, button, nodeFill, nodeRadius, nodeDashed, nodeRegion, regionColor, showEdgeLabels = true, separated = false, onLasso, insetTop = 0, insetBottom = 0, screenSize = false },
 ) {
+  if(svg.parentElement?.classList.contains('knowledge-stage')) return drawLearningGraph(svg,nodes,edges,tools,onSelect,{entry,button,nodeFill,nodeRadius,nodeDashed,nodeRegion,regionColor,showEdgeLabels,separated,onLasso,insetTop,insetBottom,screenSize});
   const ns = "http://www.w3.org/2000/svg",
     make = (tag, attrs = {}) => {
       const n = document.createElementNS(ns, tag);
@@ -71,8 +73,12 @@ export function drawGraph(
   });
   const labels = (showEdgeLabels ? layout.edges : []).map((edge) => {
     const n = make("text", { "text-anchor": "middle", class: "edge-label" });
-    n.textContent =
-      { contains: "包含", cites: "引用", states: "记录", source: "来源" }[
+    n.textContent = edge.type_label ||
+      { contains: "包含", cites: "引用", states: "记录", source: "来源",
+        reference: "来源", internal_link: "正文引用", related: "关联",
+        depends_on: "依赖 / 前置", supports: "支持 / 依据", contrast: "对比 / 冲突", applies_to: "应用于",
+        supersedes: "取代", enriches: "补充", confirms: "印证", challenges: "质疑",
+        reply_to: "回复" }[
         edge.type
       ] || edge.type;
     layer.append(n);
@@ -220,20 +226,22 @@ export function drawGraph(
   }
   layout.settle();
   fit();
-  function addZoom(label, fn) {
+  function addZoom(label, title, fn) {
     const b = button(label, fn);
     b.dataset.zoom = "1";
+    b.title = title;
+    b.setAttribute('aria-label', title);
     tools.append(b);
   }
-  addZoom("＋", () => {
+  addZoom("＋", "放大图谱", () => {
     zoom = Math.min(3.5, zoom * 1.2);
     draw();
   });
-  addZoom("−", () => {
+  addZoom("−", "缩小图谱", () => {
     zoom = Math.max(0.2, zoom / 1.2);
     draw();
   });
-  addZoom("⌾", fit);
+  addZoom("⌾", "适配画布", fit);
   let lassoButton;
   if (onLasso) {
     lassoButton = button('圈选', () => {

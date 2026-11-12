@@ -320,6 +320,29 @@ def test_review_preserves_exact_bytes_and_reopens_without_reapproving(setup):
     assert reader.draft(kb,candidate)['snapshot_status']=='retained_original'
 
 
+@pytest.mark.parametrize('promoted', [False, True])
+def test_task_draft_reader_reuses_one_promotion_index(setup, monkeypatch, promoted):
+    from knowledge_studio import draft_review, workspace as reader
+    kb, project = setup
+    _, run = write_and_return(kb, project)
+    candidate = run['draft_path']
+    if promoted:
+        store.promote_draft(Path(candidate).stem)
+    scans = []
+    original = draft_review.promotions
+
+    def counted(root):
+        scans.append(root)
+        return original(root)
+
+    monkeypatch.setattr(draft_review, 'promotions', counted)
+    result = reader.draft(kb, candidate)
+
+    assert scans == [kb]
+    assert result['review_status'] == ('promoted' if promoted else 'draft')
+    assert result['workflow_context']['source_status'] == ('historical' if promoted else 'current')
+
+
 def test_related_proposals_group_but_approval_does_not_spread(setup):
     kb,project=setup
     final,run=write_and_return(kb,project)

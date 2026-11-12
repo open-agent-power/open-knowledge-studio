@@ -10,6 +10,7 @@ import json
 import re
 from contextlib import contextmanager
 from datetime import UTC, datetime
+from itertools import islice
 from pathlib import Path
 
 
@@ -69,16 +70,38 @@ def preserve_original(root: Path, relative: str, raw: bytes) -> dict:
     return {"path": relative_snapshot, "sha256": digest, "candidate_path": relative}
 
 
-def _recover_promotion(root: Path, slug: str, sha256: str) -> dict | None:
+def promotions(root: Path) -> dict:
+    """Index retained Wiki evidence by the exact Draft path it records."""
+    result = {}
+    store = _store()
+    for path in islice((root / 'wiki').rglob('*.md'), 10000):
+        try:
+            safe = _inside(root, path.relative_to(root).as_posix())
+            meta = store.parse_wiki_file(safe) or {}
+            if not meta.get('human_reviewed_at') or not isinstance(meta.get('source_candidates'), list):
+                continue
+            for relative in meta['source_candidates']:
+                if isinstance(relative, str):
+                    reviews = [entry for entry in meta.get('workflow_reviews', []) if isinstance(entry, dict) and isinstance(entry.get('reviewed_source'), dict) and entry['reviewed_source'].get('candidate_path') == relative] if isinstance(meta.get('workflow_reviews'), list) else []
+                    reviews = reviews or [{'workflow_source': meta.get('workflow_source'), 'reviewed_source': meta.get('reviewed_source'), 'reviewed_at': str(meta['human_reviewed_at'])}]
+                    for review in reviews:
+                        result.setdefault(relative, []).append({'wiki_path': path.relative_to(root).as_posix(),
+                        'title': meta.get('title') or '任务经验',
+                        'workflow_source': review.get('workflow_source'), 'reviewed_source': review.get('reviewed_source'), 'reviewed_at': str(review.get('reviewed_at') or meta['human_reviewed_at'])})
+        except (OSError, ValueError, TypeError):
+            continue
+    return result
+
+
+def _recover_promotion(root: Path, slug: str, sha256: str, promotion_index=None) -> dict | None:
     """Recover a promoted decision from its exact reviewed Wiki evidence."""
     if slug.startswith("task-learning-"):
         return None  # Task-learning keeps its own projection and receipt contract.
     expected_relative = f"drafts/{slug}.md"
     original = {"path": f".oks/reviewed-drafts/{sha256}.md", "sha256": sha256,
                 "candidate_path": expected_relative}
-    from .task_workflow import _promotions
     from . import store
-    matches = _promotions(root).get(expected_relative, [])
+    matches = (promotion_index if promotion_index is not None else promotions(root)).get(expected_relative, [])
     exact = [item for item in matches
              if isinstance(item.get("reviewed_source"), dict)
              and item["reviewed_source"] == original]
@@ -133,7 +156,7 @@ def record_decision(root: Path, slug: str, raw: bytes, decision: str, *, wiki_pa
     return record
 
 
-def read_receipt(root: Path, slug: str, sha256: str | None = None) -> dict | None:
+def read_receipt(root: Path, slug: str, sha256: str | None = None, *, promotions=None) -> dict | None:
     _safe_slug(slug)
     if sha256 is not None and (len(sha256) != 64 or any(c not in "0123456789abcdef" for c in sha256)):
         raise ValueError("Invalid Draft revision hash")
@@ -143,7 +166,7 @@ def read_receipt(root: Path, slug: str, sha256: str | None = None) -> dict | Non
             paths = sorted(folder.glob("*.json"))
         except OSError:
             return None
-        receipts = [read_receipt(root, slug, path.stem) for path in paths
+        receipts = [read_receipt(root, slug, path.stem, promotions=promotions) for path in paths
                     if re.fullmatch(r"[0-9a-f]{64}", path.stem)]
         receipts = [item for item in receipts if item is not None]
         return max(receipts, key=lambda item: item.get("decided_at", "")) if receipts else None
@@ -151,7 +174,7 @@ def read_receipt(root: Path, slug: str, sha256: str | None = None) -> dict | Non
     try:
         item = json.loads(path.read_text(encoding="utf-8"))
     except FileNotFoundError:
-        return _recover_promotion(root, slug, sha256)
+        return _recover_promotion(root, slug, sha256, promotions)
     except (OSError, json.JSONDecodeError, UnicodeError) as exc:
         raise ValueError("Draft review receipt is unreadable; keep the Draft for review") from exc
     if not isinstance(item, dict):
@@ -184,12 +207,12 @@ def read_receipt(root: Path, slug: str, sha256: str | None = None) -> dict | Non
     return item
 
 
-def disposition(root: Path, relative: str, sha256: str) -> dict | None:
+def disposition(root: Path, relative: str, sha256: str, *, promotions=None) -> dict | None:
     if not relative.startswith("drafts/") or not relative.endswith(".md") or relative.count("/") != 1:
         return None
     slug = relative[len("drafts/"):-3]
     _safe_slug(slug)
-    item = read_receipt(root, slug, sha256)
+    item = read_receipt(root, slug, sha256, promotions=promotions)
     return item
 
 

@@ -38,18 +38,17 @@ def prose_only(text: str) -> str:
 
 
 def document_path(root: Path, relative: str) -> Path:
-    root = root.resolve()
-    path = (root / relative).resolve()
-    relative_path = Path(relative)
-    if (relative_path.is_absolute() or not path.is_relative_to(root)
-            or not path.relative_to(root).parts
-            or path.relative_to(root).parts[0] not in {'wiki', 'drafts'}
-            or path.suffix.lower() != '.md' or not path.is_file()):
+    from .studio import _path
+
+    path = _path(root, relative)
+    if path.suffix.lower() != '.md' or not path.is_file():
         raise FileNotFoundError('Knowledge document unavailable')
     return path
 
 
 def resolve_image(root: Path, document: Path, target: str) -> Path:
+    from .studio import READ_ROOTS
+
     root = root.resolve()
     value = unquote(html.unescape(target.strip().strip('<>'))).replace('\\', '/')
     if (not value or value.startswith('//') or '\x00' in value
@@ -58,10 +57,11 @@ def resolve_image(root: Path, document: Path, target: str) -> Path:
         raise FileNotFoundError('Image unavailable')
     path = Path(value)
     if not path.is_absolute():
-        path = (root if value.split('/')[0] in {'raw', 'wiki', 'drafts'} else document.parent) / path
+        path = (root if value.split('/')[0] in READ_ROOTS else document.parent) / path
     path = path.resolve()
     relative = path.relative_to(root) if path.is_relative_to(root) else None
-    if (relative is None or not relative.parts or relative.parts[0] not in {'raw', 'wiki', 'drafts'}
+    if (relative is None or not relative.parts or relative.parts[0] not in READ_ROOTS
+            or any(part.startswith('.') for part in relative.parts)
             or path.suffix.lower() not in RASTER or not path.is_file()
             or path.stat().st_size > MAX_IMAGE_BYTES):
         raise FileNotFoundError('Image unavailable')

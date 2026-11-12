@@ -6,9 +6,11 @@
     <title>OKS</title>
     <link rel="icon" href="/favicon.svg" />
     <link rel="stylesheet" href="/studio.css" />
+    <link rel="stylesheet" href="/studio/draft-discussion.css" />
     <link rel="stylesheet" href="/studio/graph.css" />
     <link rel="stylesheet" href="/studio/goals.css" />
     <link rel="stylesheet" href="/studio/learning.css" />
+    <link rel="stylesheet" href="/knowledge-reading.css" />
     <link rel="stylesheet" href="/studio/evaluation.css" />
     <link rel="stylesheet" href="/vendor/katex/katex.min.css" />
     <script src="/vendor/katex/katex.min.js" defer></script>
@@ -94,7 +96,10 @@
         /><label for="newText">Markdown</label
         ><textarea id="newText" required rows="9"></textarea>
         <p id="newError" role="alert"></p>
-        <button type="submit">创建</button>
+        <footer class="new-document-actions">
+          <button type="button" id="cancelNew">取消</button>
+          <button type="submit" id="createNew">保存</button>
+        </footer>
       </form>
     </dialog>
   </body>

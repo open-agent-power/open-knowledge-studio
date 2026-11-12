@@ -397,7 +397,7 @@ def artifact_source(root, task_id, relative, revision, source):
     return {**result, 'status': 'current_source', 'notice': '当前引用原文；没有保存该来源的历史正文。'}
 
 
-def draft(root, relative, review_sha256=None):
+def draft(root, relative, review_sha256=None, *, promotions=None):
     handoff._relative(relative, 'drafts')
     if len(relative.split('/')) != 2:
         raise ValueError('Review a Draft directly under drafts/; nested Draft promotion is unsupported')
@@ -407,8 +407,14 @@ def draft(root, relative, review_sha256=None):
     except FileNotFoundError:
         result = None
     from . import draft_review
+    review_hash = review_sha256 or (result['sha256'] if result is not None else None)
+    # Exact receipts need no Wiki scan. Share one request-local index only when
+    # recovery or the task-learning projection actually needs it.
     ordinary = draft_review.read_receipt(root, Path(relative).stem,
-        review_sha256 or (result['sha256'] if result is not None else None))
+        review_hash, promotions=promotions if promotions is not None else {})
+    if ordinary is None and promotions is None:
+        promotions = draft_review.promotions(root)
+        ordinary = draft_review.read_receipt(root, Path(relative).stem, review_hash, promotions=promotions)
     if ordinary is not None:
         original = draft_review.read_original(root, ordinary)
         if original is None:
@@ -425,10 +431,11 @@ def draft(root, relative, review_sha256=None):
             except (OSError, ValueError, KeyError, TypeError, UnicodeError):
                 value['reuse'] = {'status': 'unavailable', 'tasks': []}
         return value
-    disposition = candidate_disposition(root, relative, sha256=result['sha256']) if result is not None else None
+    disposition = candidate_disposition(root, relative, sha256=result['sha256'], promotions=promotions) if result is not None else None
     if review_sha256 is not None and not re.fullmatch(r'[0-9a-f]{64}', review_sha256):
         raise ValueError('Choose an exact review revision')
-    reviewed = reviewed_candidate(root, relative, sha256=review_sha256 or (result['sha256'] if disposition == 'promoted' else None))
+    reviewed = reviewed_candidate(root, relative, promotions=promotions,
+                                  sha256=review_sha256 or (result['sha256'] if disposition == 'promoted' else None))
     if review_sha256 is not None and not reviewed:
         raise ValueError('Reviewed revision unavailable; current Draft is not that review')
     if reviewed and (review_sha256 is not None or result is None or disposition == 'promoted'):

@@ -1,0 +1,24 @@
+Graph runtime source attribution
+
+Graph camera gestures adapt Graphs Plus, copyright 2026 John Morabito, MIT:
+https://github.com/jsmorabito/obsidian-graphs-plus/tree/55733d905900bf668c689141d461e75bdaa1afc0/src
+License: licenses/graphs-plus-LICENSE
+
+Worker scheduling, deterministic seeds and position smoothing adapt Advanced
+Graph View, copyright 2026 n23eos, MIT:
+https://github.com/n23eos/advanced_graph_view/tree/17e3eb1fd0e64d4d13d9a130c4bd77b2f287b48d/src
+License: LICENSE
+
+Degree-based collision follows Quartz Graph, copyright 2026 Quartz Community, MIT:
+https://github.com/quartz-community/graph/blob/e647019c05ab2a3279c9cddd7bc2f18acb9858b8/src/components/scripts/graph.inline.ts
+License: licenses/quartz-graph-LICENSE
+
+The retained layout-engine.js is a consolidated source adaptation. build.mjs
+applies the explicit x/y/z extension and bundles its d3-force-3d runtime.
+THIRD-PARTY-NOTICES is regenerated from the actual bundled runtime packages.
+
+Rebuild in an empty directory outside the checkout:
+copy build-package.json and build-package-lock.json to package.json and
+package-lock.json, run npm ci --registry=https://registry.npmjs.org there,
+then run node <this-directory>/build.mjs <the-build-directory>.
+No node_modules directory or local build cache is shipped in the package.
