@@ -1,3 +1,5 @@
+import pytest
+
 from knowledge_studio import capability_commands
 
 
@@ -70,3 +72,51 @@ def test_required_command_failure_still_marks_doctor_unhealthy(
     assert provider_result["status"] == "unavailable"
     assert provider_result["healthy"] is False
     assert result["overall"] == "issues_found"
+
+
+def test_catalog_yaml_preserves_scalar_strings_and_yaml_structure(tmp_path):
+    path = tmp_path / "provider.yaml"
+    path.write_text(
+        "id: 001\n"
+        "enabled: true\n"
+        "validated: 2026-08-06\n"
+        "missing: null\n"
+        "cost: 0\n"
+        "requirements: {}\n"
+        'label: \'A "quoted" label\'\n'
+        "known_limits: [one, 'two, three']\n"
+        "description: |\n  First line.\n  Second line.\n",
+        encoding="utf-8",
+    )
+
+    assert capability_commands._load_yaml_mapping(path) == {
+        "id": "001",
+        "enabled": "true",
+        "validated": "2026-08-06",
+        "missing": "null",
+        "cost": "0",
+        "requirements": {},
+        "label": 'A "quoted" label',
+        "known_limits": ["one", "two, three"],
+        "description": "First line.\nSecond line.\n",
+    }
+
+
+@pytest.mark.parametrize("text", ["label: [", "- one\n- two\n", ""])
+def test_catalog_yaml_skips_invalid_or_non_mapping_documents(tmp_path, text):
+    path = tmp_path / "provider.yaml"
+    path.write_text(text, encoding="utf-8")
+
+    assert capability_commands._load_yaml_mapping(path) is None
+
+
+def test_action_metadata_uses_the_same_string_preserving_yaml_loader(tmp_path, monkeypatch):
+    (tmp_path / "actions.yaml").write_text(
+        "actions:\n  custom.action:\n    label: true\n    description: 2026-08-06\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(capability_commands, "files", lambda _package: tmp_path)
+
+    assert capability_commands._load_actions_metadata() == {
+        "custom.action": {"label": "true", "description": "2026-08-06"}
+    }

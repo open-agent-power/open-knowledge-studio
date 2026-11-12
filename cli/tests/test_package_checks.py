@@ -29,12 +29,24 @@ def checker(tmp_path, monkeypatch):
 @pytest.mark.parametrize("missing", ["schema", "module"])
 def test_distribution_missing_evaluation_contract_fails(checker, kind, missing):
     schema = "knowledge_studio/_assets/_meta/recall-case-v2.schema.json"
-    names = list(checker._REQUIRED_MODULES) + [schema]
+    names = list(checker._REQUIRED_MODULES) + checker._schema_paths() + [schema]
     check = getattr(checker, f"check_{kind}")
     assert check(names) == []
     omitted = schema if missing == "schema" else "knowledge_studio/evaluation_dataset.py"
     names.remove(omitted)
     assert any(omitted in problem for problem in check(names))
+
+
+@pytest.mark.parametrize("kind", ["wheel", "sdist"])
+@pytest.mark.parametrize("generated", [False, True])
+def test_distribution_requires_canonical_and_generated_schemas(checker, kind, generated):
+    names = list(checker._REQUIRED_MODULES) + checker._schema_paths() + [
+        "knowledge_studio/_assets/_meta/recall-case-v2.schema.json"
+    ]
+    prefix = "knowledge_studio/_assets/_meta/schemas/" if generated else "knowledge_studio/schemas/"
+    missing = prefix + "capture-envelope.schema.json"
+    names.remove(missing)
+    assert any(missing in problem for problem in getattr(checker, f"check_{kind}")(names))
 
 
 def test_smoke_removes_ambient_source_and_recall_overrides(monkeypatch):
