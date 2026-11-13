@@ -1,5 +1,6 @@
 """The graph reader renders retained Markdown and document-scoped local images."""
 import html
+import hashlib
 import json
 import re
 import struct
@@ -76,6 +77,48 @@ def test_studio_markdown_reader_preserves_source_and_renders_images_in_readable_
         with urlopen(base + image_url, timeout=5) as response:
             assert response.read() == PNG and response.headers['Content-Type'] == 'image/png'
         assert before == (note.read_bytes(), note.stat().st_mtime_ns, image.read_bytes(), image.stat().st_mtime_ns)
+
+
+@pytest.mark.parametrize('newline', ['\n', '\r\n'], ids=['LF', 'CRLF'])
+@pytest.mark.parametrize('frontmatter', [False, True], ids=['no-frontmatter', 'frontmatter'])
+@pytest.mark.parametrize('leading', ['', '\n', ' \t\n\n'], ids=['no-blank', 'blank', 'whitespace-and-blanks'])
+def test_mail_reader_consumes_only_frontmatter_line_end_and_keeps_body_source_lines(reader, newline, frontmatter, leading):
+    root, base = reader
+    header = '---\nfrom: reviewer\nto: @human\nrecord_kind: message\n---\n' if frontmatter else ''
+    body = leading + '# Mail 原文\n\n- [ ] 确认配图\n  - [x] 已核对来源\n\n![配图](figure.png)\n\n'
+    body += '```md\n# 示例标题\n```\n\n段落里的 --- 保持原文。\n'
+    header, body = header.replace('\n', newline), body.replace('\n', newline)
+    source = header + body
+    note = root / 'mail/note.md'
+    original = source.encode('utf-8')
+    note.write_bytes(original)
+    (root / 'mail/figure.png').write_bytes(PNG)
+
+    item, meta, extracted, offset = studio._read_document(root, 'mail/note.md')
+    assert extracted == body and offset == header.count('\n')
+    assert item['text'] == source
+    if frontmatter:
+        assert meta['to'] == ['@human']
+    document = get_document(base, 'mail/note.md')
+    assert document['title'] == 'Mail 原文'
+    assert document['body'] == body and document['text'] == source
+    assert document['sha256'] == hashlib.sha256(original).hexdigest()
+    lines = source.splitlines()
+    rows = {row['text']: row for row in document['outline']}
+    heading, task, nested = (rows[text] for text in ['Mail 原文', '确认配图', '已核对来源'])
+    assert heading['kind'] == 'heading' and heading['line'] == lines.index('# Mail 原文')
+    assert task['kind'] == 'task' and not task['checked']
+    assert task['line'] == lines.index('- [ ] 确认配图') and task['parent'] == heading['line']
+    assert nested['kind'] == 'task' and nested['checked']
+    assert nested['line'] == lines.index('  - [x] 已核对来源') and nested['parent'] == task['line']
+    assert '示例标题' not in rows
+    markup = document['body_html']
+    assert '<h2>Mail 原文</h2>' in markup and '<pre><code># 示例标题</code></pre>' in markup
+    assert 'to: @human' not in markup and markup.count('<img ') == 1
+    image_url = html.unescape(re.search(r'<img src="([^"]+)"', markup)[1])
+    with urlopen(base + image_url, timeout=5) as response:
+        assert response.read() == PNG and response.headers['Content-Type'] == 'image/png'
+    assert note.read_bytes() == original
 
 
 def test_studio_reader_rejects_hidden_outside_unreferenced_and_non_image_assets(reader):

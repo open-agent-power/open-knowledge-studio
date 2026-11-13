@@ -50,8 +50,8 @@ def _read_document(root, relative):
         from .mail import parse_message_text
         meta = parse_message_text(root / relative, item['text'])['meta']
         # Keep the original Markdown heading, whitespace and source line identities.
-        parts = item['text'].split('---', 2) if item['text'].startswith('---') else []
-        body = parts[2] if len(parts) == 3 else item['text']
+        front = re.match(r'\A\ufeff?---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)', item['text'])
+        body = item['text'][front.end():] if front else item['text']
         offset = item['text'][:len(item['text']) - len(body)].count('\n')
     else:
         meta, body, offset = _markdown(item['text'])
