@@ -5,6 +5,8 @@ from pathlib import Path
 import struct
 import subprocess
 import sys
+from concurrent.futures import ThreadPoolExecutor
+from threading import Event
 from types import SimpleNamespace
 import zlib
 
@@ -239,6 +241,45 @@ def test_same_session_running_job_is_skipped_without_competing_result(kb, monkey
     calls = model_answer(monkeypatch, worker)
     worker.scan()
     assert not calls and not results(kb, record)
+
+
+def test_live_receiver_is_not_mistaken_for_an_interrupted_session(kb, monkeypatch):
+    first, second = agent(kb), agent(kb)
+    record = send(kb, first)
+    entered, release, lock_attempted = Event(), Event(), Event()
+    from contextlib import contextmanager
+    original_lock = receiver.store._file_lock
+
+    @contextmanager
+    def observed_lock(path):
+        if path.name.startswith('discussion-agent-') and entered.is_set():
+            lock_attempted.set()
+        with original_lock(path):
+            yield
+
+    def answer(*_args):
+        entered.set()
+        assert release.wait(5)
+        return {'reply': '已处理。', 'replacement': None, 'needs_info': False}
+
+    monkeypatch.setattr(receiver.store, '_file_lock', observed_lock)
+    monkeypatch.setattr(first, '_answer', answer)
+    second_calls = model_answer(monkeypatch, second)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        active = pool.submit(first.scan)
+        try:
+            assert entered.wait(5)
+            waiting = pool.submit(second.scan)
+            assert lock_attempted.wait(5)
+            assert not results(kb, record)
+        finally:
+            release.set()
+        active.result(timeout=5)
+        waiting.result(timeout=5)
+    assert not second_calls
+    replies = results(kb, record)
+    assert len(replies) == 1
+    assert json.loads(replies[0]['body'])['status'] == 'answered'
 
 
 def test_host_command_uses_executable_or_node_entry_with_direct_argv(tmp_path, monkeypatch):

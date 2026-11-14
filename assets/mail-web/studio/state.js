@@ -8,7 +8,7 @@ export function createStudioState() {
     scope: "",
     view: null,
     tab: "discuss",
-    discuss: "graph",
+    discuss: "history",
     selected: "",
     mode: "list",
     dirty: false,

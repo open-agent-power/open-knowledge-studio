@@ -17,6 +17,9 @@ afterEach(() => {
 
 const all = (node) => [node, ...(node.children?.flatMap(all) || [])];
 class Node extends Element {
+  showModal() { this.open = true; }
+  close() { this.open = false; }
+  get firstElementChild() { return this.children[0] || null; }
   constructor(tag) {
     super(tag);
     const classes = () => (this.className || "").split(/\s+/).filter(Boolean);
@@ -122,6 +125,8 @@ async function fixture(read) {
   ]);
   const inputBefore = JSON.stringify([...seeds.values()]);
   const ids = new Map(), graphs = [], reads = [], writes = [], statuses = [], timers = new Map();
+  const reviewCalls = [], reviewCloses = [];
+  const state = { tab: "learning", learn: "graph", date: "2026-11-12" };
   const dom = {
     $(id) {
       if (!ids.has(id)) ids.set(id, new Node("div"));
@@ -158,14 +163,20 @@ async function fixture(read) {
     },
     callTimeline: () => new Node("div"),
     showWorkflow() { throw Error("Reading a document must not start a workflow"); },
+    createDraftReader(options) {
+      return {
+        open(container, path) { reviewCalls.push({ container, path, options }); },
+        close() { reviewCloses.push(true); },
+      };
+    },
   };
   const code = source("studio/knowledge.js")
     .replace(/^import\s+[\s\S]*?\s+from\s+["'][^"']+["'];\r?\n/gm, "")
     .replace("export function createKnowledgeView", "function createKnowledgeView");
   vm.runInNewContext(code + "\nthis.createKnowledgeView = createKnowledgeView;", sandbox);
   const view = sandbox.createKnowledgeView({
-    dom, api, state: { tab: "learning", learn: "graph", date: "2026-11-12" },
-    actions: { status: (message) => statuses.push(message) },
+    dom, api, state,
+    actions: { status: (message) => statuses.push(message), canLeave: () => !state.commentDraft },
   });
   cleanups.push(() => view.destroy());
   await view.render();
@@ -177,7 +188,7 @@ async function fixture(read) {
     }
   };
   return {
-    view, reads, writes, statuses, graphs, timers,
+    view, reads, writes, statuses, graphs, timers, state, reviewCalls, reviewCloses,
     aside: dom.$("content").querySelector("aside"),
     shell: dom.$("content").querySelector(".knowledge-map"),
     input: () => JSON.stringify([...seeds.values()]), inputBefore,
@@ -319,4 +330,25 @@ test("a failed read shows a retry that fetches the document again without using 
   assert.doesNotMatch(page.aside.textContent, /Document temporarily unavailable/);
   assert.equal(page.input(), page.inputBefore);
   assert.deepEqual(page.writes, []);
+});
+
+test("Learning reviews a Draft with the shared reader and preserves unsent comments on close", async () => {
+  const page = await fixture();
+  await page.reveal("draft");
+  await page.click("draft");
+  const review = all(page.aside).find(node => node.tagName === "button" && node.textContent === "审核");
+  assert.ok(review);
+  review.onclick();
+  assert.equal(page.reviewCalls.length, 1);
+  const call = page.reviewCalls[0], dialog = call.container.parentNode;
+  assert.equal(call.path, "drafts/reader.md");
+  assert.equal(dialog.open, true);
+  assert.equal(page.aside.querySelector("iframe"), null);
+  page.state.commentDraft = Symbol("pending");
+  call.options.onClose();
+  assert.equal(dialog.open, true);
+  page.state.commentDraft = null;
+  call.options.onClose();
+  assert.equal(dialog.open, false);
+  assert.equal(page.writes.length, 0);
 });

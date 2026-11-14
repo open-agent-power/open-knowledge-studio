@@ -142,6 +142,25 @@
 .draft-reader[hidden] {
   display: none;
 }
+.learning-draft-review {
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  width: min(760px, calc(100vw - 32px));
+  height: min(880px, calc(100dvh - 32px));
+  min-height: 0;
+  padding: 0;
+}
+.learning-draft-review::backdrop {
+  background: rgb(31 48 81 / 25%);
+}
+.learning-draft-review .draft-reader {
+  position: static;
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  border-radius: inherit;
+}
 .draft-reader-header {
   flex: none;
   padding: 18px;

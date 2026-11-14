@@ -1,6 +1,7 @@
 import { drawGraph } from "./graph.js";
 import { callTimeline } from './call-trace.js';
 import { showWorkflow } from './workflow.js';
+import { createDraftReader } from './draft-reader.js';
 import {
   knowledgeTree,
   projectKnowledge,
@@ -35,8 +36,13 @@ export function createKnowledgeView({ dom, state, actions, api }) {
     querySequence = 0,
     query = "",
     selected = null,
-    readSequence = 0;
+    readSequence = 0,
+    reviewReader = null,
+    reviewDialog = null;
   function destroy() {
+    reviewReader?.close();
+    reviewDialog?.remove();
+    reviewReader = reviewDialog = null;
     ticket++;
     readSequence++;
     dispose();
@@ -293,13 +299,30 @@ export function createKnowledgeView({ dom, state, actions, api }) {
             button(
               "审核",
               () => {
-                aside.replaceChildren(heading);
-                const frame = el("iframe", "knowledge-review");
-                frame.title = "审核 " + node.title;
-                frame.src =
-                  "/review?panel=1&detail=1&draft=" +
-                  encodeURIComponent(node.path);
-                aside.append(frame);
+                if (actions.canLeave?.() === false) return;
+                if (!reviewDialog) {
+                  reviewDialog = el("dialog", "draft-discussion learning-draft-review");
+                  reviewDialog.setAttribute("aria-label", "草稿审阅");
+                  const pane = el("section", "draft-reader");
+                  reviewDialog.append(pane);
+                  shell.append(reviewDialog);
+                  const closeReview = () => {
+                    if (actions.canLeave?.() === false) return;
+                    reviewReader.close();
+                    reviewDialog.close();
+                  };
+                  reviewDialog.oncancel = event => {
+                    event.preventDefault();
+                    closeReview();
+                  };
+                  reviewReader = createDraftReader({
+                    dom, state, actions, api,
+                    onClose: closeReview,
+                    onChange: () => void refresh(),
+                  });
+                }
+                reviewDialog.showModal();
+                void reviewReader.open(reviewDialog.firstElementChild, node.path);
               },
               "soft",
             ),

@@ -91,6 +91,7 @@ import { createSettingsView } from "./studio/settings.js";
     if (state.selected && state.tab === "goals") p.set("file", state.selected);
     if (state.tab === "discuss") {
       if (state.discuss === "history") p.set("view", "history");
+      else p.set("view", "graph"); // Preserve explicitly opened legacy Draft links.
       if (state.discuss === "graph" && state.scope) p.set("scope", state.scope);
     }
     if (state.tab === "learning") p.set("view", state.learn);
@@ -132,7 +133,9 @@ import { createSettingsView } from "./studio/settings.js";
     if (!["discuss", "goals", "learning"].includes(state.tab))
       state.tab = "discuss";
     state.scope = params.get("scope") || "";
-    state.discuss = params.get("view") === "history" ? "history" : "graph";
+    state.discuss = params.get("view") === "graph" ||
+      (!params.has("view") && state.scope.startsWith("drafts/"))
+      ? "graph" : "history";
     state.date =
       params.get("date") ||
       state.scope
@@ -280,17 +283,6 @@ import { createSettingsView } from "./studio/settings.js";
     if (state.tab === "learning") {
       renderLearning();
       return;
-    }
-    if (state.tab === "discuss") {
-      const tabs = el("div", "discussion-view-tabs");
-      for (const [mode, label] of [["graph", "待审草稿"], ["history", "讨论记录"]]) {
-        const tab = button(label, () => {
-          void setDiscussionMode(mode).catch((e) => status(e.message));
-        });
-        tab.setAttribute("aria-pressed", String(state.discuss === mode));
-        tabs.append(tab);
-      }
-      $("content").append(tabs);
     }
     if (!state.view || (state.tab === "discuss" && state.discuss === "history" && !state.view.entries?.length)) {
       $("content").append(

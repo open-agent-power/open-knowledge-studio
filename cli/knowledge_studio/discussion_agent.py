@@ -135,16 +135,26 @@ class DiscussionAgent:
                 continue
             message_id = row['meta']['message_id']
             directory = self._job(message_id)
-            if (directory / 'state.json').is_file():
-                state = json.loads((directory / 'state.json').read_text(encoding='utf-8'))
-                if state.get('status') == 'running' and state.get('session_id') != self.session_id:
-                    self._interrupted(row, body, directory)
-                continue  # A restart never silently repeats an uncertain mutation.
-            projection = comments.read(self.root, body['path'])
-            existing = next((c for c in projection['comments'] if c['message_id'] == message_id), None)
-            if existing and existing['replies']:
-                continue
-            self.process_comment(row, body, directory)
+            # Keep ownership through the model call and result publication. A
+            # different Session can be a live receiver, not a crashed predecessor.
+            lock = tasks._inside(self.root, '.oks/locks/discussion-agent-' + mail.safe_id(message_id) + '.lock')
+            with store._file_lock(lock):
+                if not self._active():
+                    return
+                self._scan_comment(row, body, directory)
+
+    def _scan_comment(self, row, body, directory):
+        message_id = row['meta']['message_id']
+        if (directory / 'state.json').is_file():
+            state = json.loads((directory / 'state.json').read_text(encoding='utf-8'))
+            if state.get('status') == 'running' and state.get('session_id') != self.session_id:
+                self._interrupted(row, body, directory)
+            return  # A restart never silently repeats an uncertain mutation.
+        projection = comments.read(self.root, body['path'])
+        existing = next((c for c in projection['comments'] if c['message_id'] == message_id), None)
+        if existing and existing['replies']:
+            return
+        self.process_comment(row, body, directory)
 
     def _interrupted(self, row, body, directory):
         message_id = row['meta']['message_id']

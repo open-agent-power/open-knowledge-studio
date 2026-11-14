@@ -65,12 +65,23 @@ async function controller(options = {}) {
   return { dom, state, actions, events, timers, calls, posts, renders, updates, location };
 }
 
-test("default discussion loads pending Drafts and explicit scope stays addressable", async () => {
+test("legacy Draft deep links remain addressable without becoming the default discussion", async () => {
   const page = await controller({ hash: "#tab=discuss&scope=drafts%2Fone.md" });
   assert.ok(page.calls.includes("/api/studio/drafts"));
   assert.equal(page.state.scope, "drafts/one.md");
   assert.equal(page.state.discuss, "graph");
   assert.equal(page.dom.$("scope").hidden, true);
+});
+
+test("default discussion keeps date navigation and does not load Draft review", async () => {
+  const page = await controller({ hash: "#tab=discuss&date=2026-11-11" });
+  assert.equal(page.state.discuss, "history");
+  assert.equal(page.dom.$("scope").hidden, false);
+  assert.equal(page.dom.$("previousDay").hidden, false);
+  assert.equal(page.dom.$("nextDay").hidden, false);
+  assert.ok(page.calls.some(url => url.includes("kind=discuss") && url.includes("date=2026-11-11")));
+  assert.equal(page.calls.includes("/api/studio/drafts"), false);
+  assert.equal(page.dom.$("content").children.some(node => node.className === "discussion-view-tabs"), false);
 });
 
 test("read-only discussion create action remains visible with a concrete disabled reason", async () => {
@@ -92,7 +103,7 @@ test("pending comments block primary navigation and browser unload", async () =>
 });
 
 test("refresh updates the mounted draft reader instead of remounting it", async () => {
-  const page = await controller();
+  const page = await controller({ hash: "#tab=discuss&view=graph" });
   const rendered = page.renders.length;
   await page.actions.loadView(true);
   assert.equal(page.renders.length, rendered);
@@ -140,7 +151,7 @@ test("a discussion cannot be dismissed or submitted twice while its creation is 
 
 test("late draft listing cannot overwrite a more recently selected goal view", async () => {
   const pending = deferred(); let hold = false;
-  const page = await controller({ request: url => url === "/api/studio/drafts" && hold ? pending.promise : undefined });
+  const page = await controller({ hash: "#tab=discuss&view=graph", request: url => url === "/api/studio/drafts" && hold ? pending.promise : undefined });
   hold = true;
   const refresh = page.actions.loadView(true);
   await page.actions.navigate("goals");
