@@ -131,9 +131,9 @@ def test_reference_scope_and_path_boundaries(kb, tmp_path):
     (kb / "raw" / "other.png").write_bytes(PNG)
     (kb / "raw" / "private.md").write_text("![x](screen%20shot.png)", encoding="utf-8")
     write_note(kb, "![x](../raw/screen%20shot.png)")
+    assert mail_media.read_image(kb, "raw/private.md", "raw/screen shot.png")[0] == PNG
     for document, asset in [
         ("wiki/a.md", "raw/other.png"),
-        ("raw/private.md", "raw/screen shot.png"),
         ("../wiki/a.md", "raw/screen shot.png"),
         (str(kb / "wiki" / "a.md"), "raw/screen shot.png"),
         ("wiki/a.md", str(outside)),

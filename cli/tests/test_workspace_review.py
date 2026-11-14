@@ -44,12 +44,46 @@ def ordinary(tmp_path, monkeypatch):
     return root, candidate
 
 
+@pytest.mark.parametrize('reviewed', [False, True])
+def test_draft_reader_scans_only_without_an_exact_receipt(ordinary, monkeypatch, reviewed):
+    from knowledge_studio import draft_review
+    root, candidate = ordinary
+    if reviewed:
+        draft_review.record_decision(root, candidate.stem, candidate.read_bytes(), 'rejected')
+    scans = []
+    original = draft_review.promotions
+
+    def counted(knowledge_base):
+        scans.append(knowledge_base)
+        return original(knowledge_base)
+
+    monkeypatch.setattr(draft_review, 'promotions', counted)
+    result = workspace.draft(root, 'drafts/ordinary.md')
+
+    assert scans == ([] if reviewed else [root])
+    assert result['review_status'] == ('rejected' if reviewed else 'draft')
+
+
+def test_draft_reader_reuses_a_supplied_empty_promotion_index(ordinary, monkeypatch):
+    from knowledge_studio import draft_review
+    root, _ = ordinary
+
+    def no_rescan(knowledge_base):
+        raise AssertionError('Reader must reuse the supplied promotion index')
+
+    monkeypatch.setattr(draft_review, 'promotions', no_rescan)
+
+    assert workspace.draft(root, 'drafts/ordinary.md', promotions={})['review_status'] == 'draft'
+
+
 def test_rejection_checks_origin_and_exact_version_and_retains_history(ordinary):
     root, candidate = ordinary
     original = candidate.read_bytes()
     with server(root) as request:
         document = request('/api/learning/draft?path=drafts/ordinary.md')
-        body = {'path': document['path'], 'expected_sha256': document['sha256'], 'confirm_reject': True}
+        assert document['knowledge_base'] == str(root)
+        body = {'path': document['path'], 'expected_sha256': document['sha256'],
+                'expected_knowledge_base': document['knowledge_base'], 'confirm_reject': True}
         with pytest.raises(HTTPError) as missing_origin:
             request('/api/learning/reject', body, origin=False)
         assert missing_origin.value.code == 403
@@ -79,6 +113,25 @@ def test_read_only_server_rejects_decision_without_writing(ordinary):
             request('/api/learning/reject', body)
         assert denied.value.code == 403
     assert candidate.read_bytes() == original and not (root / '.oks/draft-reviews').exists()
+
+
+@pytest.mark.parametrize('route', ['/api/learning/promote', '/api/learning/reject'])
+@pytest.mark.parametrize('expected_root', [None, 'another-knowledge-base'])
+def test_draft_decisions_reject_missing_or_changed_instance(ordinary, route, expected_root):
+    root, candidate = ordinary
+    original = candidate.read_bytes()
+    with server(root) as request:
+        body = {'path': 'drafts/ordinary.md', 'expected_sha256': hashlib.sha256(original).hexdigest(),
+                'confirm_review': True, 'confirm_reject': True}
+        if expected_root is not None:
+            body['expected_knowledge_base'] = expected_root
+        with pytest.raises(HTTPError) as denied:
+            request(route, body)
+        assert denied.value.code == 409
+        assert json.load(denied.value)['code'] == 'instance_changed'
+    assert candidate.read_bytes() == original
+    assert not (root / '.oks/draft-reviews').exists()
+    assert not list((root / 'wiki').rglob('*.md'))
 
 
 def test_workspace_overview_and_audit_are_bound_to_server_root(ordinary):

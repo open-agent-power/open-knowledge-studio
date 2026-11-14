@@ -5,6 +5,7 @@ Two invariants matter more than the shape of the output:
 * every relation edge states where it came from, and
 * Concept / Strategy / Anti-Strategy never become the Wiki's taxonomy.
 """
+import hashlib
 import json
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -36,6 +37,134 @@ def point(projection, path):
                 if item["path"] == path:
                     return item
     raise AssertionError(f"{path} not in projection")
+
+
+def raw_bundle(root, name, text="Source excerpt", status="complete"):
+    base = f"raw/2026/11/08/{name}"
+    write(root, base + "/raw.md", "capture_id: same-session\n", "# Capture wrapper")
+    (root / base / "content.md").write_text(text, encoding="utf-8")
+    (root / base / "source").mkdir()
+    (root / base / "source/excerpt.txt").write_text(text, encoding="utf-8")
+    (root / base / "bundle.json").write_text(json.dumps({
+        "bundle_id": name, "capture_id": "same-session", "processing_status": status,
+        "files": {"content": "content.md"}, "sources": [{"path": "source/excerpt.txt"}],
+    }), encoding="utf-8")
+    return base
+
+
+def test_raw_bundles_are_single_distinct_sources_with_lazy_bodies(kb):
+    a = raw_bundle(kb, "a", "Original excerpt A", "partial")
+    b = raw_bundle(kb, "b", "Original excerpt B", "failed")
+    before = {p: p.read_bytes() for p in kb.rglob("*") if p.is_file()}
+    data = mail_knowledge.knowledge_map(kb)
+    assert {p["id"] for p in data["materials"]} == {a + "/raw.md", b + "/raw.md"}
+    assert data["counts"]["source_materials"] == 2
+    assert data["counts"]["candidates"] == 0
+    for p in data["materials"]:
+        assert p["body"] == "" and p["body_path"].endswith("/content.md")
+        assert p["review"]["state"] == "not_applicable"
+        assert p["title"].startswith("Original excerpt")
+    assert {p["processing_status"] for p in data["materials"]} == {"partial", "failed"}
+    assert {p: p.read_bytes() for p in kb.rglob("*") if p.is_file()} == before
+
+
+def test_source_edges_resolve_only_recorded_paths_and_bundle_aliases(kb):
+    a = raw_bundle(kb, "a")
+    raw_bundle(kb, "unreferenced")
+    write(kb, "drafts/idea.md", f'sources: ["{a}/source/excerpt.txt", "{a}/content.md", "raw/missing.md"]\n',
+          f'[Source](../{a}/content.md)')
+    data = mail_knowledge.knowledge_map(kb)
+    edge, = data["material_edges"]
+    assert (edge["a"], edge["b"]) == ("drafts/idea.md", a + "/raw.md")
+    assert "frontmatter sources" in edge["sources"][0]
+    link, = data["internal_links"]
+    assert link["b"] == a + "/raw.md"
+    limited = mail_knowledge.knowledge_map(kb, limit=1)
+    assert limited["scope"]["truncated"]
+    assert limited["material_edges"] == limited["internal_links"] == []
+
+
+@pytest.mark.parametrize('current_draft', ['changed', 'deleted'])
+@pytest.mark.parametrize('bom', [False, True])
+def test_wiki_sources_follow_the_exact_reviewed_draft(kb, monkeypatch, current_draft, bom):
+    monkeypatch.setenv('OKS_ROOT', str(kb))
+    original = raw_bundle(kb, 'original')
+    later = raw_bundle(kb, 'later')
+    draft_path = write(kb, 'drafts/from-raw.md',
+                       f'title: Retained source\ndraft_type: strategy\ndraft_area: computing\nsources: [{original}/source/excerpt.txt]\n')
+    if bom:
+        draft_path.write_bytes(b'\xef\xbb\xbf' + draft_path.read_bytes())
+    digest = hashlib.sha256(draft_path.read_bytes()).hexdigest()
+    wiki_slug = store.promote_draft('from-raw', expected_sha256=digest)
+    wiki_path = next(path for path in (kb / 'wiki').rglob('*.md') if path.stem == wiki_slug)
+    relative = wiki_path.relative_to(kb).as_posix()
+    if current_draft == 'changed':
+        write(kb, 'drafts/from-raw.md', f'title: Later version\nsources: [{later}/source/excerpt.txt]\n')
+    else:
+        draft_path.unlink()
+    before = {path: path.read_bytes() for path in kb.rglob('*') if path.is_file()}
+
+    data = mail_knowledge.knowledge_map(kb)
+    edges = [edge for edge in data['material_edges'] if edge['a'] == relative]
+    assert len(edges) == 1
+    assert edges[0]['b'] == original + '/raw.md'
+    assert any('drafts/from-raw.md' in source and digest in source for source in edges[0]['sources'])
+    assert {path: path.read_bytes() for path in kb.rglob('*') if path.is_file()} == before
+
+
+def test_wiki_does_not_inherit_sources_from_a_mismatched_review_snapshot(kb, monkeypatch):
+    monkeypatch.setenv('OKS_ROOT', str(kb))
+    base = raw_bundle(kb, 'original')
+    path = write(kb, 'drafts/from-raw.md',
+                 f'title: Retained source\ndraft_type: strategy\ndraft_area: computing\nsources: [{base}/source/excerpt.txt]\n')
+    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    store.promote_draft('from-raw', expected_sha256=digest)
+    path.unlink()
+    retained = kb / '.oks/reviewed-drafts' / (digest + '.md')
+    retained.write_bytes(retained.read_bytes() + b'\nChanged after review\n')
+    assert mail_knowledge.knowledge_map(kb)['material_edges'] == []
+
+
+@pytest.mark.parametrize('reference', ['sources', 'raw_link', 'wiki_link'])
+def test_isolated_point_count_uses_visible_sources_and_document_links(kb, reference):
+    base = raw_bundle(kb, 'original')
+    metadata, body = 'title: Origin\narea: computing\n', 'Origin body'
+    if reference == 'sources':
+        metadata += f'sources: [{base}/source/excerpt.txt]\n'
+    elif reference == 'raw_link':
+        body = f'[Source](../{base}/content.md)'
+    else:
+        body = '[Related](b.md)'
+        write(kb, 'wiki/b.md', 'title: Related\narea: computing\n')
+    write(kb, 'wiki/a.md', metadata, body)
+
+    projection = mail_knowledge.knowledge_map(kb)
+    assert projection['counts']['points_without_relations'] == 0
+    assert projection['counts']['edges'] == projection['counts']['relations'] == 0
+    assert mail_knowledge.knowledge_map(kb, limit=1)['counts']['points_without_relations'] == 1
+
+
+def test_source_title_skips_metadata_and_transport_markers(kb):
+    raw_bundle(kb, "a", "---\ntitle: transport\n---\n\n# 实际资料标题\n正文")
+    raw_bundle(kb, "b", "<send_user_message_question_reply>\n\n可读的原始内容\n</send_user_message_question_reply>")
+    titles = {p["title"] for p in mail_knowledge.knowledge_map(kb)["materials"]}
+    assert titles == {"实际资料标题", "可读的原始内容"}
+
+
+def test_raw_without_valid_bundle_is_readable_and_bad_content_path_is_not_followed(kb):
+    write(kb, "raw/note.md", "title: Standalone\nprocessing_status: partial\n")
+    a = raw_bundle(kb, "a")
+    manifest = kb / a / "bundle.json"
+    manifest.write_text(json.dumps({"files": {"content": "../../../../../../outside.md"}}), encoding="utf-8")
+    data = mail_knowledge.knowledge_map(kb)
+    raw = {p["id"]: p for p in data["materials"]}
+    assert raw["raw/note.md"]["processing_status"] == "partial"
+    assert raw[a + "/raw.md"]["body_path"] == a + "/raw.md"
+    assert not data["material_edges"]
+    manifest.write_text("{broken", encoding="utf-8")
+    data = mail_knowledge.knowledge_map(kb)
+    assert data["warnings"]
+    assert any(p["path"] == "raw/note.md" for p in data["materials"])
 
 
 def test_three_levels_come_from_area_and_tags(kb):
@@ -183,6 +312,70 @@ def test_shared_cluster_tag_becomes_a_sourced_relation(kb):
     assert projection["internal_links"] == []
     assert len(projection["shared_tag_edges"]) == 1
     assert "extra" in projection["shared_tag_edges"][0]["sources"][0]
+
+
+def test_limited_projection_keeps_off_page_name_ambiguity(kb):
+    write(kb, "wiki/00-source.md", 'title: Source\nrelations: "supports: Same title"\n')
+    write(kb, "wiki/01-one.md", 'title: Same title\n')
+    write(kb, "wiki/02-two.md", 'title: Same title\n')
+
+    data = mail_knowledge.knowledge_map(kb, limit=2)
+
+    relation, = point(data, "wiki/00-source.md")["relations"]
+    assert relation["resolution"] == "ambiguous"
+    assert data["explicit_edges"] == []
+    assert data["scope"]["points_total"] == 3
+    assert data["scope"]["points_returned"] == 2
+
+
+def test_limited_projection_keeps_drawer_and_visible_edges_after_its_cap(kb):
+    write(kb, "wiki/a-source.md", 'title: Source\ntags: [cluster, outside, inside]\n')
+    write(kb, "wiki/b-visible.md", 'title: Visible\ntags: [other, inside]\n')
+    for index in range(20):
+        write(kb, f"wiki/z{index:02}.md", f'title: Outside {index}\ntags: [other, outside]\n')
+    full = mail_knowledge.knowledge_map(kb)
+    limited = mail_knowledge.knowledge_map(kb, limit=2)
+
+    source = point(limited, "wiki/a-source.md")
+    assert source["relations"] == point(full, "wiki/a-source.md")["relations"]
+    assert len(source["relations"]) == 12
+    assert source["relations_truncated"] is True
+    assert all(relation["target_id"].startswith("wiki/z") for relation in source["relations"])
+    edge, = limited["shared_tag_edges"]
+    assert (edge["a"], edge["b"]) == ("wiki/a-source.md", "wiki/b-visible.md")
+    assert edge["declared_by"] == ["wiki/a-source.md", "wiki/b-visible.md"]
+
+
+def test_shared_edges_are_not_limited_to_drawer_entries(kb):
+    for index in range(16):
+        write(kb, f"wiki/{index:02}.md", f'title: Entry {index}\ntags: [cluster, shared]\n')
+
+    data = mail_knowledge.knowledge_map(kb)
+
+    assert len(data["shared_tag_edges"]) == 16 * 15 // 2
+    assert len(point(data, "wiki/00.md")["relations"]) == 12
+    assert point(data, "wiki/00.md")["relations_truncated"] is True
+
+
+def test_limited_projection_bounds_shared_relation_materialization(kb, monkeypatch):
+    class CountedLabels(dict):
+        shared_lookups = 0
+
+        def __getitem__(self, key):
+            if key == "related":
+                self.shared_lookups += 1
+            return super().__getitem__(key)
+
+    labels = CountedLabels(mail_knowledge.RELATION_TYPES)
+    monkeypatch.setattr(mail_knowledge, "RELATION_TYPES", labels)
+    for index in range(30):
+        write(kb, f"wiki/{index:02}.md", f'title: Entry {index}\ntags: [cluster, shared]\n')
+
+    data = mail_knowledge.knowledge_map(kb, limit=1)
+
+    assert labels.shared_lookups == 13
+    assert data["edges"] == []
+    assert point(data, "wiki/00.md")["relations_truncated"] is True
 
 
 def test_governance_types_stay_attributes_not_taxonomy(kb):

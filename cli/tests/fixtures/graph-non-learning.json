@@ -1,0 +1,546 @@
+{
+  "false": {
+    "svg": {
+      "tag": "svg",
+      "attrs": {},
+      "data": {},
+      "style": {},
+      "text": "包含知识知识当前真实条目当前真实条目",
+      "children": [
+        {
+          "tag": "g",
+          "attrs": {
+            "transform": "translate(450,291) scale(1.2)"
+          },
+          "data": {},
+          "style": {},
+          "text": "包含知识知识当前真实条目当前真实条目",
+          "children": [
+            {
+              "tag": "ellipse",
+              "attrs": {
+                "fill": "#dae4f3",
+                "opacity": ".18",
+                "pointer-events": "none",
+                "cx": "4.186241423157555e-15",
+                "cy": "0",
+                "rx": "38",
+                "ry": "110.28702950061216"
+              },
+              "data": {},
+              "style": {},
+              "text": "",
+              "children": []
+            },
+            {
+              "tag": "line",
+              "attrs": {
+                "stroke": "#dfe5ef",
+                "stroke-width": "1",
+                "stroke-dasharray": "4 4",
+                "x1": "4.186241423157555e-15",
+                "y1": "-72.28702950061216",
+                "x2": "4.186241423157555e-15",
+                "y2": "72.28702950061216"
+              },
+              "data": {},
+              "style": {},
+              "text": "",
+              "children": []
+            },
+            {
+              "tag": "text",
+              "attrs": {
+                "text-anchor": "middle",
+                "class": "edge-label",
+                "x": "4.186241423157555e-15",
+                "y": "-5"
+              },
+              "data": {},
+              "style": {},
+              "text": "包含",
+              "children": []
+            },
+            {
+              "tag": "g",
+              "attrs": {
+                "class": "studio-node",
+                "tabindex": "0",
+                "role": "button",
+                "aria-label": "知识",
+                "data-id": "group",
+                "transform": "translate(4.186241423157555e-15,-72.28702950061216)"
+              },
+              "data": {
+                "id": "group"
+              },
+              "style": {},
+              "text": "知识知识",
+              "children": [
+                {
+                  "tag": "circle",
+                  "attrs": {
+                    "r": "20",
+                    "fill": "transparent",
+                    "pointer-events": "all"
+                  },
+                  "data": {},
+                  "style": {},
+                  "text": "",
+                  "children": []
+                },
+                {
+                  "tag": "circle",
+                  "attrs": {
+                    "r": "48",
+                    "fill": "#ccddee",
+                    "stroke": "white",
+                    "stroke-width": "1.5",
+                    "stroke-dasharray": ""
+                  },
+                  "data": {},
+                  "style": {},
+                  "text": "",
+                  "children": []
+                },
+                {
+                  "tag": "text",
+                  "attrs": {
+                    "text-anchor": "middle",
+                    "y": "-16.666666666666657",
+                    "x": "-4.186241423157555e-15"
+                  },
+                  "data": {},
+                  "style": {
+                    "display": "",
+                    "fontSize": "9.166666666666668px"
+                  },
+                  "text": "知识",
+                  "children": []
+                },
+                {
+                  "tag": "title",
+                  "attrs": {},
+                  "data": {},
+                  "style": {},
+                  "text": "知识",
+                  "children": []
+                }
+              ]
+            },
+            {
+              "tag": "g",
+              "attrs": {
+                "class": "studio-node",
+                "tabindex": "0",
+                "role": "button",
+                "aria-label": "当前真实条目",
+                "data-id": "leaf",
+                "transform": "translate(4.186241423157555e-15,72.28702950061216)"
+              },
+              "data": {
+                "id": "leaf"
+              },
+              "style": {},
+              "text": "当前真实条目当前真实条目",
+              "children": [
+                {
+                  "tag": "circle",
+                  "attrs": {
+                    "r": "20",
+                    "fill": "transparent",
+                    "pointer-events": "all"
+                  },
+                  "data": {},
+                  "style": {},
+                  "text": "",
+                  "children": []
+                },
+                {
+                  "tag": "circle",
+                  "attrs": {
+                    "r": "48",
+                    "fill": "#aabbcc",
+                    "stroke": "#a1aaba",
+                    "stroke-width": "1.5",
+                    "stroke-dasharray": "3 3"
+                  },
+                  "data": {},
+                  "style": {},
+                  "text": "",
+                  "children": []
+                },
+                {
+                  "tag": "text",
+                  "attrs": {
+                    "text-anchor": "middle",
+                    "y": "-16.666666666666686",
+                    "x": "-4.186241423157555e-15"
+                  },
+                  "data": {},
+                  "style": {
+                    "display": "",
+                    "fontSize": "9.166666666666668px"
+                  },
+                  "text": "当前真实条目",
+                  "children": []
+                },
+                {
+                  "tag": "title",
+                  "attrs": {},
+                  "data": {},
+                  "style": {},
+                  "text": "当前真实条目",
+                  "children": []
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "tag": "path",
+          "attrs": {
+            "class": "graph-lasso",
+            "fill": "#6386c51a",
+            "stroke": "#6386c5",
+            "stroke-width": "1.5",
+            "stroke-dasharray": "5 4",
+            "pointer-events": "none"
+          },
+          "data": {},
+          "style": {},
+          "text": "",
+          "children": []
+        }
+      ]
+    },
+    "tools": {
+      "tag": "div",
+      "attrs": {},
+      "data": {},
+      "style": {},
+      "text": "＋−⌾圈选",
+      "children": [
+        {
+          "tag": "button",
+          "attrs": {
+            "aria-label": "放大图谱"
+          },
+          "data": {
+            "zoom": "1"
+          },
+          "style": {},
+          "text": "＋",
+          "children": []
+        },
+        {
+          "tag": "button",
+          "attrs": {
+            "aria-label": "缩小图谱"
+          },
+          "data": {
+            "zoom": "1"
+          },
+          "style": {},
+          "text": "−",
+          "children": []
+        },
+        {
+          "tag": "button",
+          "attrs": {
+            "aria-label": "适配画布"
+          },
+          "data": {
+            "zoom": "1"
+          },
+          "style": {},
+          "text": "⌾",
+          "children": []
+        },
+        {
+          "tag": "button",
+          "attrs": {
+            "aria-pressed": "false"
+          },
+          "data": {
+            "zoom": "1"
+          },
+          "style": {},
+          "text": "圈选",
+          "children": []
+        }
+      ]
+    }
+  },
+  "true": {
+    "svg": {
+      "tag": "svg",
+      "attrs": {},
+      "data": {},
+      "style": {},
+      "text": "包含知识知识当前真实条目当前真实条目",
+      "children": [
+        {
+          "tag": "g",
+          "attrs": {
+            "transform": "translate(450,291) scale(1.2)"
+          },
+          "data": {},
+          "style": {},
+          "text": "包含知识知识当前真实条目当前真实条目",
+          "children": [
+            {
+              "tag": "ellipse",
+              "attrs": {
+                "fill": "#dae4f3",
+                "opacity": ".18",
+                "pointer-events": "none",
+                "cx": "4.186241423157555e-15",
+                "cy": "0",
+                "rx": "38",
+                "ry": "110.28702950061216"
+              },
+              "data": {},
+              "style": {},
+              "text": "",
+              "children": []
+            },
+            {
+              "tag": "line",
+              "attrs": {
+                "stroke": "#dfe5ef",
+                "stroke-width": "1",
+                "stroke-dasharray": "4 4",
+                "x1": "4.186241423157555e-15",
+                "y1": "-72.28702950061216",
+                "x2": "4.186241423157555e-15",
+                "y2": "72.28702950061216"
+              },
+              "data": {},
+              "style": {},
+              "text": "",
+              "children": []
+            },
+            {
+              "tag": "text",
+              "attrs": {
+                "text-anchor": "middle",
+                "class": "edge-label",
+                "x": "4.186241423157555e-15",
+                "y": "-5"
+              },
+              "data": {},
+              "style": {},
+              "text": "包含",
+              "children": []
+            },
+            {
+              "tag": "g",
+              "attrs": {
+                "class": "studio-node",
+                "tabindex": "0",
+                "role": "button",
+                "aria-label": "知识",
+                "data-id": "group",
+                "transform": "translate(4.186241423157555e-15,-72.28702950061216)"
+              },
+              "data": {
+                "id": "group"
+              },
+              "style": {},
+              "text": "知识知识",
+              "children": [
+                {
+                  "tag": "circle",
+                  "attrs": {
+                    "r": "52.166666666666664",
+                    "fill": "transparent",
+                    "pointer-events": "all"
+                  },
+                  "data": {},
+                  "style": {},
+                  "text": "",
+                  "children": []
+                },
+                {
+                  "tag": "circle",
+                  "attrs": {
+                    "r": "48",
+                    "fill": "#ccddee",
+                    "stroke": "white",
+                    "stroke-width": "1.5",
+                    "stroke-dasharray": ""
+                  },
+                  "data": {},
+                  "style": {},
+                  "text": "",
+                  "children": []
+                },
+                {
+                  "tag": "text",
+                  "attrs": {
+                    "text-anchor": "middle",
+                    "y": "26"
+                  },
+                  "data": {},
+                  "style": {
+                    "display": "none",
+                    "fontSize": "9.166666666666668px"
+                  },
+                  "text": "知识",
+                  "children": []
+                },
+                {
+                  "tag": "title",
+                  "attrs": {},
+                  "data": {},
+                  "style": {},
+                  "text": "知识",
+                  "children": []
+                }
+              ]
+            },
+            {
+              "tag": "g",
+              "attrs": {
+                "class": "studio-node",
+                "tabindex": "0",
+                "role": "button",
+                "aria-label": "当前真实条目",
+                "data-id": "leaf",
+                "transform": "translate(4.186241423157555e-15,72.28702950061216)"
+              },
+              "data": {
+                "id": "leaf"
+              },
+              "style": {},
+              "text": "当前真实条目当前真实条目",
+              "children": [
+                {
+                  "tag": "circle",
+                  "attrs": {
+                    "r": "52.166666666666664",
+                    "fill": "transparent",
+                    "pointer-events": "all"
+                  },
+                  "data": {},
+                  "style": {},
+                  "text": "",
+                  "children": []
+                },
+                {
+                  "tag": "circle",
+                  "attrs": {
+                    "r": "48",
+                    "fill": "#aabbcc",
+                    "stroke": "#a1aaba",
+                    "stroke-width": "1.5",
+                    "stroke-dasharray": "3 3"
+                  },
+                  "data": {},
+                  "style": {},
+                  "text": "",
+                  "children": []
+                },
+                {
+                  "tag": "text",
+                  "attrs": {
+                    "text-anchor": "middle",
+                    "y": "31"
+                  },
+                  "data": {},
+                  "style": {
+                    "display": "none",
+                    "fontSize": "9.166666666666668px"
+                  },
+                  "text": "当前真实条目",
+                  "children": []
+                },
+                {
+                  "tag": "title",
+                  "attrs": {},
+                  "data": {},
+                  "style": {},
+                  "text": "当前真实条目",
+                  "children": []
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "tag": "path",
+          "attrs": {
+            "class": "graph-lasso",
+            "fill": "#6386c51a",
+            "stroke": "#6386c5",
+            "stroke-width": "1.5",
+            "stroke-dasharray": "5 4",
+            "pointer-events": "none"
+          },
+          "data": {},
+          "style": {},
+          "text": "",
+          "children": []
+        }
+      ]
+    },
+    "tools": {
+      "tag": "div",
+      "attrs": {},
+      "data": {},
+      "style": {},
+      "text": "＋−⌾圈选",
+      "children": [
+        {
+          "tag": "button",
+          "attrs": {
+            "aria-label": "放大图谱"
+          },
+          "data": {
+            "zoom": "1"
+          },
+          "style": {},
+          "text": "＋",
+          "children": []
+        },
+        {
+          "tag": "button",
+          "attrs": {
+            "aria-label": "缩小图谱"
+          },
+          "data": {
+            "zoom": "1"
+          },
+          "style": {},
+          "text": "−",
+          "children": []
+        },
+        {
+          "tag": "button",
+          "attrs": {
+            "aria-label": "适配画布"
+          },
+          "data": {
+            "zoom": "1"
+          },
+          "style": {},
+          "text": "⌾",
+          "children": []
+        },
+        {
+          "tag": "button",
+          "attrs": {
+            "aria-pressed": "false"
+          },
+          "data": {
+            "zoom": "1"
+          },
+          "style": {},
+          "text": "圈选",
+          "children": []
+        }
+      ]
+    }
+  }
+}

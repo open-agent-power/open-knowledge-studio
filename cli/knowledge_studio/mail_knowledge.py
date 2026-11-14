@@ -24,10 +24,11 @@ import posixpath
 import re
 import tempfile
 from urllib.parse import unquote, urlsplit
-from datetime import date, datetime, time, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 
-from knowledge_studio import store, worker_knowledge
+from knowledge_studio import document_metadata, draft_review, store, worker_knowledge
+from knowledge_studio.document_metadata import TIME_KEYS
 from knowledge_studio.knowledge_policy import is_source_material, DOMAIN_LABELS as CANONICAL_DOMAINS
 
 SCHEMA = "mail.knowledge-map.v1"
@@ -131,10 +132,6 @@ SKILL_BOUNDARY = {
     "next_gate": "Skill Candidate → Human Review → Skill Package 仍需人工判断。",
 }
 
-TIME_KEYS = (
-    "updated_at", "updated", "modified_at", "ingested_at",
-    "human_reviewed_at", "created",
-)
 
 #: 「这个时间是从哪来的」——把内部字段名翻成维护者也能直接读懂的人话。
 #: 每个 TIME_KEYS 成员都必须有名字，测试会盯着这张表不许漏。
@@ -153,50 +150,10 @@ def time_source_label(key) -> str:
     """时间来源的人话名字；表里没有的一律退成中性的「记录时间」，不外漏字段名。"""
     return TIME_SOURCE_LABELS.get(str(key or "").strip(), "记录时间")
 
-VISIBLE_INVISIBLE_STATUS = {"dropped", "superseded", "retired", "archived"}
-
-
-def _plain(value: str, limit: int = 240) -> str:
-    text = str(value or "")
-    text = re.sub(r"`([^`]*)`", r"\1", text)
-    text = re.sub(r"!?(?:\[([^\]]+)\]\([^)]*\))", r"\1", text)
-    text = re.sub(r"[*_~]", "", text)
-    text = re.sub(r"\s+", " ", text).strip()
-    return text if len(text) <= limit else text[: limit - 1].rstrip() + "…"
-
-
-def _parse_time(value):
-    if isinstance(value, datetime):
-        parsed = value
-    elif isinstance(value, date):
-        parsed = datetime.combine(value, time.min)
-    elif isinstance(value, str) and value.strip():
-        raw = value.strip().replace("Z", "+00:00")
-        try:
-            parsed = datetime.fromisoformat(raw)
-        except ValueError:
-            try:
-                parsed = datetime.combine(date.fromisoformat(raw), time.min)
-            except ValueError:
-                return None
-    else:
-        return None
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc)
-
-
-def _event_time(meta: dict, path: Path) -> tuple[str, str]:
-    for key in TIME_KEYS:
-        parsed = _parse_time(meta.get(key))
-        if parsed is not None:
-            return parsed.isoformat(), key
-    return datetime.fromtimestamp(path.stat().st_mtime, timezone.utc).isoformat(), "file_mtime"
-
 
 def review_summary(meta: dict, kind: str) -> dict:
     """Describe recorded human review without inferring it from location/status."""
-    reviewed_at = _parse_time(meta.get("human_reviewed_at")) if kind == "wiki" else None
+    reviewed_at = document_metadata.parse_time(meta.get("human_reviewed_at")) if kind == "wiki" else None
     reviewed = reviewed_at is not None
     state = "reviewed" if reviewed else ("unknown" if kind == "wiki" else "pending")
     return {
@@ -208,12 +165,6 @@ def review_summary(meta: dict, kind: str) -> dict:
             "已审核 Wiki" if reviewed else "Wiki · 审核记录未知"
         ) if kind == "wiki" else "Candidate 候选",
     }
-
-
-def _is_visible(meta: dict) -> bool:
-    status = str(meta.get("status") or "active").strip().lower()
-    archived = meta.get("archived") is True or str(meta.get("archived") or "").strip().lower() in {"1", "true", "yes"}
-    return not archived and status not in VISIBLE_INVISIBLE_STATUS
 
 
 def _as_list(value) -> list[str]:
@@ -231,34 +182,16 @@ def _as_float(value, default: float = 0.0) -> float:
         return default
 
 
-def _title(meta: dict, body: str, path: Path) -> str:
-    for key in ("title", "name"):
-        value = meta.get(key)
-        if isinstance(value, str) and value.strip():
-            return _plain(value.strip(), 140)
-    for line in body.splitlines():
-        match = re.match(r"^\s{0,3}#{1,6}\s+(.+?)\s*#*\s*$", line)
-        if match and match.group(1).strip():
-            return _plain(match.group(1), 140)
-    return _plain(path.stem.replace("-", " ").replace("_", " "), 140) or "未命名知识"
-
-
-def _summary(meta: dict, body: str) -> str:
-    for key in ("summary", "description", "abstract"):
-        value = meta.get(key)
-        if isinstance(value, str) and value.strip():
-            return _plain(value)
-    paragraph = []
-    for line in body.splitlines():
-        clean = line.strip()
-        if not clean:
-            if paragraph:
-                break
+def _source_title(meta: dict, body: str, path: Path, fallback: str) -> str:
+    text = re.sub(r"\A\s*---\s*\n.*?\n---(?:\s*\n|$)", "", body, count=1, flags=re.S)
+    if meta.get("title") or meta.get("name") or re.search(r"(?m)^\s{0,3}#{1,6}\s+\S", text):
+        return document_metadata.title(meta, text, path)
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or re.fullmatch(r"<[^>]+>|[-*_`~]+", line) or line.startswith(("[{", '{"')):
             continue
-        if clean.startswith("#") or clean.startswith("---") or clean.startswith(">"):
-            continue
-        paragraph.append(clean)
-    return _plain(" ".join(paragraph)) or "这份知识还没有可显示的摘要，打开详情查看原文。"
+        return document_metadata.plain(line, 100)
+    return fallback
 
 
 def _relations(meta: dict) -> list[dict]:
@@ -376,7 +309,107 @@ def _flat_edges(kept_ids: set[str], declared: list[tuple[str, dict]]) -> list[di
     return [merged[key] for key in order]
 
 
-def _internal_links(points: list[dict], bodies: dict[str, str]) -> list[dict]:
+def _raw_documents(root: Path, *, references: list[str] | None = None) -> tuple[dict, dict, list[str]]:
+    """One node per Raw Bundle; only manifest-listed files alias that node."""
+    root = root.resolve()
+    documents, aliases, warnings = {}, {}, []
+    raw = root / "raw"
+    if not raw.is_dir():
+        return documents, aliases, warnings
+
+    if references is None:
+        manifests = sorted(raw.rglob("bundle.json"))
+        standalone = _scan(root, "raw")
+    else:
+        manifests, standalone = set(), []
+        for value in references:
+            value = value.replace("\\", "/")
+            if not value.startswith("raw/"):
+                continue
+            path = (root / value).resolve()
+            if not path.is_relative_to(raw) or not path.is_file():
+                continue
+            if path.suffix.lower() == ".md":
+                standalone.append(path)
+            for parent in path.parents:
+                if not parent.is_relative_to(raw):
+                    break
+                manifest = parent / "bundle.json"
+                if manifest.is_file():
+                    manifests.add(manifest)
+                    break
+        manifests = sorted(manifests)
+
+    def local(base: Path, value) -> Path | None:
+        if not isinstance(value, str) or not value:
+            return None
+        path = (base / value).resolve()
+        return path if path.is_relative_to(base.resolve()) and path.is_relative_to(raw) and path.is_file() else None
+
+    for manifest in manifests:
+        try:
+            bundle = json.loads(manifest.read_text(encoding="utf-8"))
+            files = bundle.get("files", {})
+            if not isinstance(files, dict):
+                raise ValueError("invalid files")
+        except (OSError, ValueError, AttributeError):
+            warnings.append(f"来源清单无法读取：{manifest.relative_to(root).as_posix()}")
+            continue
+        content = local(manifest.parent, files.get("content"))
+        wrapper = local(manifest.parent, "raw.md")
+        canonical = wrapper or content
+        if canonical is None:
+            continue
+        key = canonical.relative_to(root).as_posix()
+        documents[key] = {
+            "body_path": (content or canonical).relative_to(root).as_posix(),
+            "processing_status": str(bundle.get("processing_status") or "unknown"),
+        }
+        sources = bundle.get("sources", [])
+        paths = [canonical, content] + [
+            local(manifest.parent, item.get("path"))
+            for item in sources if isinstance(item, dict)
+        ] if isinstance(sources, list) else [canonical, content]
+        for path in paths:
+            if path is not None:
+                aliases.setdefault(path.relative_to(root).as_posix(), set()).add(key)
+    aliases = {path: next(iter(keys)) for path, keys in aliases.items() if len(keys) == 1}
+    for path in standalone:
+        if not path.resolve().is_relative_to(raw):
+            continue
+        key = path.relative_to(root).as_posix()
+        if key not in aliases:
+            documents.setdefault(key, {"body_path": key, "processing_status": "unknown"})
+        aliases.setdefault(key, key)
+    return documents, aliases, warnings
+
+
+def _reviewed_sources(root, point, metadata, promotions):
+    """Read sources only from the exact original retained by this Wiki review."""
+    if (point["kind"] != "wiki" or not metadata.get("human_reviewed_at")
+            or metadata.get("status") != "active" or metadata.get("archived")):
+        return []
+    references = []
+    for candidate in _as_list(metadata.get("source_candidates")):
+        for review in promotions.get(candidate, []):
+            proof = review.get("reviewed_source")
+            if review.get("wiki_path") != point["id"] or not isinstance(proof, dict):
+                continue
+            original = draft_review.read_original(root, {
+                "draft_path": candidate, "draft_sha256": proof.get("sha256"), "original": proof,
+            })
+            if original is None:
+                continue
+            try:
+                parsed = store._parse_wiki_text(original.decode("utf-8-sig"), Path(candidate)) or {}
+            except UnicodeError:
+                continue
+            label = f'{candidate} reviewed_source {proof["sha256"]} frontmatter sources'
+            references.extend((value, label) for value in _as_list(parsed.get("sources")))
+    return references
+
+
+def _internal_links(points: list[dict], bodies: dict[str, str], aliases: dict | None = None) -> list[dict]:
     """Resolve written Markdown/Wiki links within the visible projection.
 
     Tags never create these edges. Ambiguous bare names remain unresolved.
@@ -418,7 +451,8 @@ def _internal_links(points: list[dict], bodies: dict[str, str]) -> list[dict]:
             candidates = []
             for base in (raw, posixpath.normpath(posixpath.join(posixpath.dirname(source), raw))):
                 candidates.extend([base, base + ".md"] if not base.endswith(".md") else [base])
-            resolved = next((value for value in candidates if value in ids), None)
+            resolved = next(((aliases or {}).get(value, value) for value in candidates
+                             if (aliases or {}).get(value, value) in ids), None)
             if resolved is None and wiki and "/" not in raw:
                 matches = names.get(raw.removesuffix(".md").casefold(), set())
                 if len(matches) == 1:
@@ -432,13 +466,15 @@ def _internal_links(points: list[dict], bodies: dict[str, str]) -> list[dict]:
 
 
 def knowledge_map(root: Path, limit: int = 400, *, worker_snapshot: dict | None = None) -> dict:
-    """Project wiki/drafts into domain → cluster → point with sourced edges."""
+    """Project Wiki, candidates and original sources with recorded relations."""
     limit = max(1, min(int(limit or 400), 2000))
     paths: list[tuple[Path, str]] = [(path, "wiki") for path in _scan(root, "wiki")]
     paths += [(path, "candidate") for path in _scan(root, "drafts")]
-    from .task_workflow import candidate_disposition, _promotions, _rejections
+    raw_documents, raw_aliases, raw_warnings = _raw_documents(root)
+    paths += [(root / path, "raw") for path in raw_documents]
+    from .task_workflow import candidate_disposition, _rejections
     from .draft_review import disposition as ordinary_review
-    promotions, rejections = _promotions(root), _rejections(root)
+    promotions, rejections = draft_review.promotions(root), _rejections(root)
 
     points: list[dict] = []
     bodies: dict[str, str] = {}
@@ -447,14 +483,22 @@ def knowledge_map(root: Path, limit: int = 400, *, worker_snapshot: dict | None 
     for path, kind in paths:
         if kind == 'candidate' and candidate_disposition(root, path.relative_to(root).as_posix(), promotions=promotions, rejections=rejections):
             continue
-        if kind == 'candidate' and ordinary_review(root, path.relative_to(root).as_posix(), hashlib.sha256(path.read_bytes()).hexdigest()):
+        if kind == 'candidate' and ordinary_review(root, path.relative_to(root).as_posix(), hashlib.sha256(path.read_bytes()).hexdigest(), promotions=promotions):
             continue
         parsed = store.parse_wiki_file(path) or {}
         body = str(parsed.pop("body", "") or "")
-        if not _is_visible(parsed):
+        document_title = document_metadata.title(parsed, body, path)
+        raw_info = raw_documents.get(path.relative_to(root).as_posix()) if kind == "raw" else None
+        if raw_info:
+            if raw_info["processing_status"] == "unknown":
+                raw_info["processing_status"] = str(parsed.get("processing_status") or "unknown")
+            with (root / raw_info["body_path"]).open(encoding="utf-8", errors="replace") as source:
+                body = source.read(12001)
+        if not document_metadata.is_visible(parsed):
             hidden += 1
             continue
-        updated_at, timestamp_source = _event_time(parsed, path)
+        updated_at, timestamp_source = document_metadata.event_time(parsed, path)
+        updated_at = updated_at.isoformat()
         tags = _as_list(parsed.get("tags"))
         # Candidates produced by the dreaming pipeline carry draft_* keys; they
         # describe the same two things, so they resolve into the same shape.
@@ -475,18 +519,22 @@ def knowledge_map(root: Path, limit: int = 400, *, worker_snapshot: dict | None 
         else:
             cluster, cluster_source = "未分组", "这条知识没有标签"
         review = review_summary(parsed, kind)
+        if kind == "raw":
+            review = {"state": "not_applicable", "label": "来源资料", "reviewed": False,
+                      "human_reviewed_at": None, "kind_label": "来源资料"}
         original_metadata[path.relative_to(root).as_posix()] = parsed
         bodies[path.relative_to(root).as_posix()] = body
         points.append({
             "id": path.relative_to(root).as_posix(),
             "path": path.relative_to(root).as_posix(),
-            "kind": "wiki" if kind == "wiki" else "candidate",
-            "kind_label": "来源资料 · 机器提取" if is_source_material(parsed) else review["kind_label"],
-            "content_role": "source_material" if is_source_material(parsed) else "knowledge",
+            "kind": kind,
+            "kind_label": "来源资料" if kind == "raw" else "来源资料 · 机器提取" if is_source_material(parsed) else review["kind_label"],
+            "content_role": "source_material" if kind == "raw" or is_source_material(parsed) else "knowledge",
             "review": review,
-            "title": _title(parsed, body, path),
-            "summary": _summary(parsed, body),
-            "body": body[:12000],
+            "title": _source_title(parsed, body, path, document_title) if kind == "raw" else document_title,
+            "summary": document_metadata.summary(parsed, body, skip_quotes=True),
+            "body": "" if kind == "raw" else body[:12000],
+            **(raw_info or {}),
             "body_truncated": len(body) > 12000,
             "area": area,
             "cluster": cluster,
@@ -543,8 +591,7 @@ def knowledge_map(root: Path, limit: int = 400, *, worker_snapshot: dict | None 
             if path.suffix.lower() == '.md':
                 reviewed = None
                 if path.is_file():
-                    from . import draft_review
-                    reviewed = draft_review.disposition(root, value, hashlib.sha256(path.read_bytes()).hexdigest())
+                    reviewed = draft_review.disposition(root, value, hashlib.sha256(path.read_bytes()).hexdigest(), promotions=promotions)
                 if not path.exists() or (reviewed and reviewed.get('decision') == 'promoted' and reviewed.get('wiki_path') == item['id']):
                     origins.setdefault(value, []).append(item)
     for value, matches in origins.items():
@@ -584,13 +631,15 @@ def knowledge_map(root: Path, limit: int = 400, *, worker_snapshot: dict | None 
                 continue
             tag_index.setdefault(tag, []).append(point["id"])
 
-    relation_count = 0
-    #: Every relation the entries declare, before truncation and dedup.  The
+    truncated = len(points) > limit
+    kept = points[:limit]
+    kept_ids = {point["id"] for point in kept}
+    #: Drawable relations before per-entry truncation and dedup.  The
     #: per-entry list is capped at 12 so the drawer stays readable; the main
     #: view must not lose lines just because of that cap, so the flat edge
     #: table is built from this accumulator instead.
     declared: list[tuple[str, dict]] = []
-    for point in points:
+    for point in kept:
         edges = []
         seen = set()
         for relation in point["relations"]:
@@ -620,6 +669,10 @@ def knowledge_map(root: Path, limit: int = 400, *, worker_snapshot: dict | None 
             for other in tag_index.get(tag, []):
                 if other == point["id"]:
                     continue
+                # Keep the drawer's first 12 entries and a truncation sentinel.
+                # Beyond that, only visible targets can contribute a drawn edge.
+                if len(edges) > 12 and other not in kept_ids:
+                    continue
                 key = ("related", other)
                 if key in seen:
                     continue
@@ -638,25 +691,39 @@ def knowledge_map(root: Path, limit: int = 400, *, worker_snapshot: dict | None 
                     "target_title": by_id[other]["title"],
                     "target_kind": by_id[other]["kind"],
                 })
-        declared.extend((point["id"], edge) for edge in edges)
+        declared.extend((point["id"], edge) for edge in edges if edge.get("target_id") in kept_ids)
         truncated_edges = len(edges) > 12
         point["relations"] = edges[:12]
         point["relations_truncated"] = truncated_edges
-        relation_count += len(point["relations"])
-
-    truncated = len(points) > limit
-    kept = points[:limit]
     worker_source = worker_knowledge.project(root, kept, original_metadata, worker_snapshot)
     for point in kept:
         point["governance"]["applicable"] = point["is_skill"]
-    kept_ids = {point["id"] for point in kept}
     material_ids = {point["id"] for point in kept if point["content_role"] == "source_material"}
     knowledge_ids = kept_ids - material_ids
     relation_edges = _flat_edges(knowledge_ids, declared)
     material_edges = [edge for edge in _flat_edges(kept_ids, declared)
                       if edge["a"] in material_ids or edge["b"] in material_ids]
+    for point in kept:
+        metadata = original_metadata[point["id"]]
+        references = [(value, f'{point["id"]} frontmatter sources')
+                      for value in _as_list(metadata.get("sources"))]
+        references += _reviewed_sources(root, point, metadata, promotions)
+        targets = {}
+        for value, evidence in references:
+            target = raw_aliases.get(value.replace("\\", "/"))
+            if target in material_ids and target != point["id"]:
+                sources = targets.setdefault(target, [])
+                if evidence not in sources:
+                    sources.append(evidence)
+        for target in sorted(targets):
+            material_edges.append({
+                "a": point["id"], "b": target, "type": "source", "type_label": "来源",
+                "declared_by": [point["id"]], "sources": targets[target],
+            })
     area_of = {point["id"]: point["area"] for point in kept}
-    connected = {end for edge in relation_edges for end in (edge["a"], edge["b"])}
+    internal_links = _internal_links(kept, bodies, raw_aliases)
+    connected = {end for edge in relation_edges + material_edges + internal_links
+                 for end in (edge["a"], edge["b"])}
 
     domains: dict[str, dict] = {}
     for point in kept:
@@ -728,6 +795,7 @@ def knowledge_map(root: Path, limit: int = 400, *, worker_snapshot: dict | None 
         "schema": SCHEMA,
         "materials": materials,
         "material_edges": material_edges,
+        "warnings": raw_warnings,
         "worker_source": worker_source,
         "scope": {
             "knowledge_base": str(root),
@@ -737,14 +805,14 @@ def knowledge_map(root: Path, limit: int = 400, *, worker_snapshot: dict | None 
             "truncated": truncated or len(points) != len(kept_ids),
             "hidden": hidden,
             "note": (
-                "这是 Wiki 的只读关系视图，每条关系都标了来源；"
-                "这里不包含原始素材和 Agent 的执行过程。"
+                "这是知识、候选和原始来源的只读关系视图，每条关系都标了来源；"
+                "这里不包含 Agent 的执行过程。"
             ),
             "why": (
-                "知识图只是把 Wiki 里已经写好的关系画出来，不新增任何知识。"
-                "主视图按知识域分组，每条穿过分组的线都是条目自己声明的关系，颜色对应关系类型。"
+                "知识图只显示文件中已经记录的关系，不新增任何知识。"
+                "文档关系视图展示真实文档；分类层级可按知识域分组。"
                 "两边都收录在图里、才会有一条线；没有一条是从「看起来相关」推出来的。"
-                "每条连线都标了来源。这里不含原始素材，也不含 Agent 的执行过程。"
+                "每条连线都标了来源。同一 Raw Bundle 只显示一份来源，不含 Agent 的执行过程。"
                 "图本身不写入任何东西；治理位也只展示，不在这里改。"
             ),
             "level_sources": [
@@ -790,7 +858,7 @@ def knowledge_map(root: Path, limit: int = 400, *, worker_snapshot: dict | None 
             (source, relation) for source, relation in declared
             if relation.get("source", "").startswith("shared tag: ")
         ]),
-        "internal_links": _internal_links([p for p in kept if p["id"] in knowledge_ids], bodies),
+        "internal_links": internal_links,
         # Counting the per-entry lists instead double-counted every undirected
         # relation (once from each end) and reported 29 edges for 14 drawable
         # ones.  A legend has to describe the picture next to it.

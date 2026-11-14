@@ -343,6 +343,11 @@ def parse_message(path: Path) -> dict[str, Any] | None:
         text = path.read_text(encoding="utf-8")
     except OSError:
         return None
+    return parse_message_text(path, text)
+
+
+def parse_message_text(path: Path, text: str) -> dict[str, Any]:
+    """Parse the Mail frontmatter format from an already-read document."""
     meta: dict[str, Any] = {}
     body = text
     if text.startswith("---"):

@@ -13,6 +13,16 @@ import {
   categoryLabels, nodeCategory, nodeSize, filterKnowledge, subtreeIds, knowledgeOverview,
 } from "./knowledge-model.js";
 
+// Reuse the full-document readers already used by the knowledge workspace.
+function documentRoute(node) {
+  if (node.type === 'wiki') return '/api/mail/memory/item?' + new URLSearchParams({path:node.path});
+  if (['raw','drafts'].includes(node.type)) return '/api/studio/draft-reader?' + new URLSearchParams({path:node.path});
+  if (node.type === 'team') return '/api/studio/library-document?' + new URLSearchParams({
+    library:node.library_id || node.id.slice(5).split('/')[0],
+    path:node.source_path || node.path,revision:node.revision});
+  return '/api/studio/file?' + new URLSearchParams({path:node.path});
+}
+
 export function createKnowledgeView({ dom, state, actions, api }) {
   const { $, el, button } = dom;
   let dispose = () => {},
@@ -24,9 +34,11 @@ export function createKnowledgeView({ dom, state, actions, api }) {
     queryMode = false,
     querySequence = 0,
     query = "",
-    selected = null;
+    selected = null,
+    readSequence = 0;
   function destroy() {
     ticket++;
+    readSequence++;
     dispose();
     dispose = () => {};
     clearInterval(timer);
@@ -52,6 +64,7 @@ export function createKnowledgeView({ dom, state, actions, api }) {
     search.value = query;
     search.setAttribute("aria-label", "搜索图谱");
     const reset = button("重置", () => {
+      readSequence++;
       expanded.clear();
       depth = 1;
       selected = null;
@@ -162,6 +175,8 @@ export function createKnowledgeView({ dom, state, actions, api }) {
     }
     async function select(node) {
       if (current !== ticket) return;
+      const sequence = ++readSequence;
+      let article = null;
       revealNode(roots, node.id, expanded);
       selected = node.id;
       aside.hidden = false;
@@ -169,6 +184,7 @@ export function createKnowledgeView({ dom, state, actions, api }) {
       aside.replaceChildren();
       const heading = el("header"),
         close = button("×", () => {
+          readSequence++;
           selected = null;
           aside.hidden = true;
           shell.classList.remove("with-detail");
@@ -261,18 +277,9 @@ export function createKnowledgeView({ dom, state, actions, api }) {
         );
         if (node.tags?.length)
           aside.append(el("div", "detail-meta", node.tags.join(" · ")));
-        const body = el("pre", "knowledge-body", node.body || "");
-        if (node.type === "skill") {
-          try {
-            const file = await api.request(
-              "/api/studio/file?" + new URLSearchParams({ path: node.path }),
-            );
-            if (current === ticket && selected === node.id)
-              body.textContent = file.text;
-          } catch (error) {
-            actions.status(error.message);
-          }
-        }
+        const body = el("article", "knowledge-body markdown-body", "正在读取文档…");
+        body.setAttribute('aria-busy','true');
+        article = body;
         if (node.url) {
           const link = el('a', 'detail-meta', '来源 ↗');
           link.href = node.url; link.target = '_blank'; link.rel = 'noopener noreferrer'; aside.append(link);
@@ -323,8 +330,6 @@ export function createKnowledgeView({ dom, state, actions, api }) {
           }
           aside.append(attrs);
         }
-        if (node.body_truncated)
-          aside.append(el("small", "detail-meta", "正文已截断"));
         if (current !== ticket) return;
         const related = (node.relations || []).filter((item) => item.resolved);
         if (related.length) {
@@ -355,6 +360,23 @@ export function createKnowledgeView({ dom, state, actions, api }) {
         }
       }
       paint();
+      if (!article) return;
+      try {
+        const file = await api.request(documentRoute(node));
+        if (current !== ticket || sequence !== readSequence || selected !== node.id) return;
+        if (node.type === 'team' && file.revision !== node.revision)
+          throw Error('团队资料版本不一致，请重新选择');
+        if (typeof file.body_html !== 'string') throw Error('文档未返回可阅读的正文');
+        article.innerHTML = file.body_html;
+        const first = article.firstElementChild;
+        if (first && /^H[1-6]$/.test(first.tagName) && first.textContent.trim() === node.title.trim()) first.remove();
+      } catch (error) {
+        if (current !== ticket || sequence !== readSequence || selected !== node.id) return;
+        article.replaceChildren(el('p',null,'这份文档暂时无法打开。'),button('重试',()=>void select(node),'soft'));
+        actions.status(error.message);
+      } finally {
+        if (current === ticket && sequence === readSequence && selected === node.id) article.removeAttribute('aria-busy');
+      }
     }
     search.oninput = () => {
       querySequence++;

@@ -11,7 +11,7 @@ from itertools import islice
 import frontmatter
 import yaml
 
-from . import handoff, store, tasks
+from . import draft_review, handoff, store, tasks
 from .security.redaction import redact_text, redact_mapping
 from .security.sensitive_fields import SENSITIVE_KEYS
 
@@ -327,29 +327,8 @@ def _propose(root, run, lesson, artifacts):
 
 
 def _promoted(root, relative):
-    matches = _promotions(root).get(relative, [])
+    matches = draft_review.promotions(root).get(relative, [])
     return matches[0]['wiki_path'] if len(matches) == 1 else None
-
-
-def _promotions(root):
-    result = {}
-    for path in islice((root / 'wiki').rglob('*.md'), 10000):
-        try:
-            safe = tasks._inside(root, path.relative_to(root).as_posix())
-            meta = store.parse_wiki_file(safe) or {}
-            if not meta.get('human_reviewed_at') or not isinstance(meta.get('source_candidates'), list):
-                continue
-            for relative in meta['source_candidates']:
-                if isinstance(relative, str):
-                    reviews = [entry for entry in meta.get('workflow_reviews', []) if isinstance(entry, dict) and isinstance(entry.get('reviewed_source'), dict) and entry['reviewed_source'].get('candidate_path') == relative] if isinstance(meta.get('workflow_reviews'), list) else []
-                    reviews = reviews or [{'workflow_source': meta.get('workflow_source'), 'reviewed_source': meta.get('reviewed_source'), 'reviewed_at': str(meta['human_reviewed_at'])}]
-                    for review in reviews:
-                        result.setdefault(relative, []).append({'wiki_path': path.relative_to(root).as_posix(),
-                        'title': meta.get('title') or '任务经验',
-                        'workflow_source': review.get('workflow_source'), 'reviewed_source': review.get('reviewed_source'), 'reviewed_at': str(review.get('reviewed_at') or meta['human_reviewed_at'])})
-        except (OSError, ValueError, TypeError):
-            continue
-    return result
 
 
 def _rejections(root):
@@ -385,7 +364,7 @@ def candidate_disposition(root, relative, raw=None, *, promotions=None, rejectio
     except OSError:
         return None
     digest = sha256 if sha256 is not None else hashlib.sha256(raw).hexdigest()
-    matches = (promotions if promotions is not None else _promotions(root)).get(relative, [])
+    matches = (promotions if promotions is not None else draft_review.promotions(root)).get(relative, [])
     exact = [item for item in matches if isinstance(item.get('reviewed_source'), dict) and item['reviewed_source'].get('sha256') == digest]
     if len(exact) == 1:
         return 'promoted'
@@ -403,21 +382,8 @@ def candidate_disposition(root, relative, raw=None, *, promotions=None, rejectio
     return None
 
 
-def preserve_review(root, relative, raw):
-    """Content-addressed original evidence; this write does not approve anything."""
-    digest = hashlib.sha256(raw).hexdigest()
-    snapshot = f'.oks/reviewed-drafts/{digest}.md'
-    path = tasks._inside(root, snapshot)
-    with store._file_lock(path.with_suffix('.lock')):
-        if path.exists() and path.read_bytes() != raw:
-            raise ValueError('Original review evidence changed; Draft retained')
-        if not path.exists():
-            store._atomic_write(path, raw)
-    return {'path': snapshot, 'sha256': digest, 'candidate_path': relative}
-
-
 def reviewed_candidate(root, relative, promotions=None, sha256=None):
-    matches = (promotions if promotions is not None else _promotions(root)).get(relative, [])
+    matches = (promotions if promotions is not None else draft_review.promotions(root)).get(relative, [])
     if sha256 is not None:
         matches = [item for item in matches if isinstance(item.get('reviewed_source'), dict) and item['reviewed_source'].get('sha256') == sha256]
     if len(matches) != 1:
@@ -604,7 +570,7 @@ def overview(root, task_id):
     tasks._id(task_id)
     folder = tasks._inside(root, '.oks/workflow-runs')
     runs, connections, drafts, threads, groups = [], [], {}, {}, {}
-    promotions, rejections = _promotions(root), _rejections(root)
+    promotions, rejections = draft_review.promotions(root), _rejections(root)
     unreadable = 0
     for path in sorted(folder.glob('*.json'))[:MAX_RUNS]:
         try:

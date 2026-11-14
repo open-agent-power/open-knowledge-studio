@@ -3,20 +3,22 @@ import html
 import json
 import hashlib
 import re
-from datetime import date, datetime, time, timezone
+import subprocess
+from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from socketserver import TCPServer
 from threading import Lock, RLock
 from urllib.parse import parse_qs, urlsplit
 
-from knowledge_studio import identity, mail, mail_media, store
+from knowledge_studio import document_metadata, draft_review, identity, mail, mail_media, store
 from knowledge_studio import mail_knowledge, mail_timeline, mail_observation, team_sync
 from knowledge_studio.mail_activity import activity_data, delivery_records
 from knowledge_studio.mail_setup import asset_root, validate_root, agent_id
 
 ROOT = asset_root() / "mail-web"
 FILES = {"/": ("index.html", "text/html"), "/style.css": ("style.css", "text/css"), "/app.js": ("app.js", "text/javascript"), "/favicon.svg": ("favicon.svg", "image/svg+xml")}
+FILES["/mail"] = ("index.html", "text/html")
 FILES["/layout.css"] = ("layout.css", "text/css")
 FILES["/wiki-page.css"] = ("wiki-page.css", "text/css")
 for _asset in ("force-layout.js", "graph-labels.js", "tag-graph.js", "mail-view-model.js", "knowledge-browser.js", "knowledge-navigation.js"):
@@ -45,6 +47,12 @@ for _module in ('api', 'dom', 'state', 'discussion', 'graph', 'goals', 'learning
 for _style in ('graph', 'goals', 'learning', 'evaluation'):
     FILES[f'/studio/{_style}.css'] = (f'studio/{_style}.css', 'text/css')
 FILES['/studio-theme.css'] = ('studio-theme.css', 'text/css')
+FILES['/studio/draft-reader.js'] = ('studio/draft-reader.js', 'text/javascript')
+FILES['/studio/draft-discussion.css'] = ('studio/draft-discussion.css', 'text/css')
+for _module in ('learning-graph', 'graph-text', 'graph-camera', 'graph-3d'):
+    FILES[f'/studio/{_module}.js'] = (f'studio/{_module}.js', 'text/javascript')
+for _module in ('position-smoothing', 'graph-3d.worker'):
+    FILES[f'/vendor/graph-engine/{_module}.js'] = (f'vendor/graph-engine/{_module}.js', 'text/javascript')
 FILES['/studio-redirect.js'] = ('studio-redirect.js', 'text/javascript')
 for _asset in ('katex.min.js', 'katex.min.css'):
     FILES['/vendor/katex/' + _asset] = ('vendor/katex/' + _asset, 'text/javascript' if _asset.endswith('.js') else 'text/css')
@@ -315,22 +323,22 @@ def memory_status(root):
 
     raw = files_under("raw", exclude={"executions", ".logs"})
     drafts = files_under("drafts")
-    from .task_workflow import candidate_disposition, _promotions, _rejections
-    promotions, rejections = _promotions(root), _rejections(root)
+    from .task_workflow import candidate_disposition, _rejections
+    promotions, rejections = draft_review.promotions(root), _rejections(root)
     drafts = [path for path in drafts if not candidate_disposition(root, path.relative_to(root).as_posix(), promotions=promotions, rejections=rejections)]
     from .draft_review import disposition as ordinary_review
-    drafts = [path for path in drafts if not ordinary_review(root, path.relative_to(root).as_posix(), hashlib.sha256(path.read_bytes()).hexdigest())]
+    drafts = [path for path in drafts if not ordinary_review(root, path.relative_to(root).as_posix(), hashlib.sha256(path.read_bytes()).hexdigest(), promotions=promotions)]
     wiki = files_under("wiki")
     knowledge = wiki + drafts
     visible = []
     excluded = 0
     for path in knowledge:
         meta, _body = _memory_meta(path)
-        if _memory_is_visible(meta):
+        if document_metadata.is_visible(meta):
             visible.append(path)
         else:
             excluded += 1
-    latest = sorted(visible, key=lambda path: _memory_event_time(_memory_meta(path)[0], path)[0], reverse=True)[:12]
+    latest = sorted(visible, key=lambda path: document_metadata.event_time(_memory_meta(path)[0], path)[0], reverse=True)[:12]
     recent = []
     facets = {"areas": {}, "types": {}}
     for path in visible:
@@ -358,100 +366,14 @@ def memory_status(root):
     }
 
 
-def _memory_plain(value: str, limit: int = 240) -> str:
-    """Make a small, safe human-facing summary without pretending to render Markdown."""
-    value = re.sub(r"`([^`]*)`", r"\1", str(value or ""))
-    value = re.sub(r"!?(?:\[([^\]]+)\]\([^)]*\))", r"\1", value)
-    value = re.sub(r"[*_~]", "", value)
-    value = re.sub(r"\s+", " ", value).strip()
-    return value if len(value) <= limit else value[: limit - 1].rstrip() + "…"
-
-
-_MEMORY_TIME_KEYS = (
-    "updated_at",
-    "updated",
-    "modified_at",
-    "ingested_at",
-    "human_reviewed_at",
-    "created",
-)
-
-
-def _parse_memory_time(value):
-    if isinstance(value, datetime):
-        parsed = value
-    elif isinstance(value, date):
-        parsed = datetime.combine(value, time.min)
-    elif isinstance(value, str) and value.strip():
-        raw = value.strip().replace("Z", "+00:00")
-        try:
-            parsed = datetime.fromisoformat(raw)
-        except ValueError:
-            try:
-                parsed = datetime.combine(date.fromisoformat(raw), time.min)
-            except ValueError:
-                return None
-    else:
-        return None
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc)
-
-
-def _memory_event_time(meta: dict, path: Path) -> tuple[datetime, str]:
-    """Prefer durable knowledge timestamps; use mtime only as a compatibility fallback."""
-    for key in _MEMORY_TIME_KEYS:
-        parsed = _parse_memory_time(meta.get(key))
-        if parsed is not None:
-            return parsed, key
-    return datetime.fromtimestamp(path.stat().st_mtime, timezone.utc), "file_mtime"
-
-
-def _memory_is_visible(meta: dict) -> bool:
-    status = str(meta.get("status") or "active").strip().lower()
-    archived = meta.get("archived") is True or str(meta.get("archived") or "").strip().lower() in {"1", "true", "yes"}
-    return not archived and status not in {"dropped", "superseded", "retired", "archived"}
-
-
 def _memory_meta(path: Path) -> tuple[dict, str]:
     parsed = store.parse_wiki_file(path) or {}
     body = str(parsed.pop("body", "") or "")
     return parsed, body
 
 
-def _memory_title(meta: dict, body: str, path: Path) -> str:
-    for key in ("title", "name"):
-        value = meta.get(key)
-        if isinstance(value, str) and value.strip():
-            return _memory_plain(value.strip(), 140)
-    for line in body.splitlines():
-        match = re.match(r"^\s{0,3}#{1,6}\s+(.+?)\s*#*\s*$", line)
-        if match and match.group(1).strip():
-            return _memory_plain(match.group(1), 140)
-    return _memory_plain(path.stem.replace("-", " ").replace("_", " "), 140) or "未命名知识"
-
-
 def _memory_summary(meta: dict, body: str, path: Path) -> dict:
-    summary = ""
-    for key in ("summary", "description", "abstract"):
-        value = meta.get(key)
-        if isinstance(value, str) and value.strip():
-            summary = _memory_plain(value)
-            break
-    if not summary:
-        paragraph = []
-        for line in body.splitlines():
-            clean = line.strip()
-            if not clean:
-                if paragraph:
-                    break
-                continue
-            if clean.startswith("#") or clean.startswith("---"):
-                continue
-            paragraph.append(clean)
-        summary = _memory_plain(" ".join(paragraph))
-    if not summary:
-        summary = "这份知识还没有可显示的摘要，打开详情查看原文。"
+    summary = document_metadata.summary(meta, body) or document_metadata.summary({}, body)
     kind = "wiki" if "wiki" in path.parts else "candidate"
     area = str(meta.get("area") or meta.get("domain") or meta.get("draft_area") or "未分类").strip() or "未分类"
     memory_type = str(meta.get("type") or ("wiki" if kind == "wiki" else "candidate")).strip() or ("wiki" if kind == "wiki" else "candidate")
@@ -460,7 +382,7 @@ def _memory_summary(meta: dict, body: str, path: Path) -> dict:
         tags = [tag.strip() for tag in tags.split(",") if tag.strip()]
     elif not isinstance(tags, list):
         tags = []
-    event_time, event_source = _memory_event_time(meta, path)
+    event_time, event_source = document_metadata.event_time(meta, path)
     status = str(meta.get("status", "active" if kind == "wiki" else "pending")).strip() or ("active" if kind == "wiki" else "pending")
     status_label = {
         "active": "当前条目",
@@ -477,7 +399,7 @@ def _memory_summary(meta: dict, body: str, path: Path) -> dict:
         "kind": kind,
         "kind_label": mail_knowledge.review_summary(meta, kind)["kind_label"],
         "review": mail_knowledge.review_summary(meta, kind),
-        "title": _memory_title(meta, body, path),
+        "title": document_metadata.title(meta, body, path),
         "summary": summary,
         "area": area,
         "area_label": area_label or area,
@@ -614,7 +536,7 @@ def member_profiles(root: Path) -> dict:
             stat = path.stat()
         except (OSError, ValueError):
             continue
-        title = _memory_title(meta, body, path)
+        title = document_metadata.title(meta, body, path)
         summary = _memory_summary(meta, body, path)["summary"]
         role = meta.get("role") or meta.get("responsibility") or meta.get("responsibilities") or ""
         scope = meta.get("scope") or meta.get("areas") or meta.get("area") or ""
@@ -721,8 +643,16 @@ def md_to_html(body: str, *, image_renderer=None) -> str:
     def close_list():
         nonlocal list_kind
         if items:
-            rows = "".join(f"<li>{_md_inline(html.escape(item))}</li>" for item in items)
-            out.append(f"<{list_kind}>{rows}</{list_kind}>")
+            rows = []
+            for item in items:
+                task = re.match(r'^\[([ xX])\]\s+(.*)$', item)
+                if task:
+                    checked = ' checked' if task[1].lower() == 'x' else ''
+                    rows.append(f'<li class="task-list-item"><input type="checkbox" disabled{checked}> '
+                                + _md_inline(html.escape(task[2])) + '</li>')
+                else:
+                    rows.append(f"<li>{_md_inline(html.escape(item))}</li>")
+            out.append(f"<{list_kind}>{''.join(rows)}</{list_kind}>")
             items.clear()
         list_kind = ""
 
@@ -922,6 +852,24 @@ def render_wiki_page(item: dict, embed: bool = False, return_to: str = "/#view=k
 """
 
 
+def library_document(root, library, relative, revision):
+    """Read one configured library document at the exact selected Git revision."""
+    from . import linked_sources
+
+    if not isinstance(revision, str) or not re.fullmatch(r'[0-9a-f]{40}', revision):
+        raise ValueError('Choose the document revision recorded by the graph')
+    source = next((row for row in linked_sources.configuration(root)
+                   if row['name'] == library), None)
+    if source is None:
+        raise ValueError('The selected library is not linked to this knowledge base')
+    snapshot = linked_sources.snapshot({**source, 'revision': revision})
+    entry = next((item for item in snapshot['entries'] if item['path'] == relative), None)
+    if entry is None:
+        raise ValueError('The selected document is unavailable in this library revision')
+    return {**entry, 'knowledge_base': str(root), 'read_only': True,
+            'body_html': md_to_html(entry['body'])}
+
+
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.kb_root = getattr(self.server, "kb_root", None)
@@ -954,24 +902,86 @@ class Handler(BaseHTTPRequestHandler):
             import yaml
             query = parse_qs(urlsplit(self.path).query)
             try:
-                if route == '/api/studio/scopes':
+                if route == '/api/studio/library-document':
+                    result = library_document(self.kb_root, query.get('library', [''])[0],
+                        query.get('path', [''])[0], query.get('revision', [''])[0])
+                elif route == '/api/studio/drafts':
+                    from .draft_discussion import graph
+                    result = graph(self.kb_root)
+                elif route == '/api/studio/draft-reader':
+                    from .draft_discussion import reader
+                    result = reader(self.kb_root, query.get('path', [''])[0])
+                    if result['format'] == 'text':
+                        body = result['text']
+                        result['body_html'] = '<pre>' + html.escape(body) + '</pre>'
+                    else:
+                        meta, body, _ = studio._markdown(result['text'])
+                        document = result.get('body_path', result['path'])
+                        result['body_html'] = mail_media.render_body(self.kb_root, document, meta, body, md_to_html)
+                    result['body'] = body
+                    if 'discussion' in result:
+                        result['discussion'] = self.discussion_projection(result['discussion'])
+                    for step in result['steps']:
+                        for artifact in step.get('inputs', []) + step.get('outputs', []):
+                            if isinstance(artifact.get('text'), str):
+                                artifact['html'] = md_to_html(artifact['text'])
+                elif route == '/api/studio/scopes':
                     result = studio.scopes(self.kb_root, query.get("kind", ["goal"])[0])
                 elif route == '/api/studio/view':
                     result = studio.day_view(self.kb_root, query.get('kind',['goal'])[0], query['date'][0]) if 'date' in query else studio.view(self.kb_root, query.get('scope', [''])[0])
                 elif route == '/api/studio/revision':
                     result = studio.revision_view(self.kb_root, query.get('id',[''])[0])
+                    for item in result['files'].values():
+                        if item.get('kind') == 'discuss':
+                            _, body, _ = studio._markdown(item['text'])
+                            item['body_html'] = md_to_html(body)
                 elif route == '/api/studio/onboarding':
                     from .studio_history import onboarding
                     result = onboarding(self.kb_root)
                 elif route == '/api/studio/activity':
                     result = studio.activity(self.kb_root,query.get('date',[''])[0])
                 elif route == '/api/studio/file':
-                    result = studio.read_file(self.kb_root, query.get('path', [''])[0])
+                    relative = query.get('path', [''])[0]
+                    if relative.startswith('raw/') and Path(relative).suffix.lower() == '.txt':
+                        from . import workspace
+                        path = studio._path(self.kb_root, relative)
+                        result = workspace._text_file(self.kb_root, path.relative_to(self.kb_root.resolve()).as_posix(), {'.txt'})
+                        result.update(title=path.stem, kind='raw', outline=[], body=result['text'],
+                                      body_html='<pre>' + html.escape(result['text']) + '</pre>')
+                    else:
+                        result, meta, body, offset = studio._read_document(self.kb_root, relative)
+                        result['outline'] = studio._outline(body, offset)
+                        result['body'] = body
+                        result['body_html'] = mail_media.render_body(self.kb_root, result['path'], meta, body, md_to_html)
                 elif route == '/api/studio/workflow':
                     from .studio_workflow import workflow
                     result = workflow(self.kb_root, query.get('path', [''])[0])
+                elif route == '/api/studio/discussion-workflow':
+                    from .studio_workflow import discussion_workflow
+                    result = discussion_workflow(self.kb_root, query.get('path', [''])[0])
                 elif route == '/api/studio/contexts':
                     result = studio.context_catalog(self.kb_root)
+                elif route == '/api/studio/discussion-review':
+                    from . import discussion_review
+                    result = self.review_projection(discussion_review.read(self.kb_root, query.get('path', [''])[0]))
+                elif route in {'/api/studio/discussion-document', '/api/studio/discussion-comments'}:
+                    from . import discussion_comments
+                    path = query.get('path', [''])[0]
+                    result = (discussion_comments.document(self.kb_root, path) if route.endswith('/discussion-document')
+                              else discussion_comments.read(self.kb_root, path))
+                    result = self.discussion_projection(result)
+                elif route == '/api/studio/discussion-comments/image':
+                    from . import discussion_comments
+                    data, mime = discussion_comments.read_image(self.kb_root,
+                        query.get('message_id', [''])[0], int(query.get('index', ['0'])[0]))
+                    self.send_response(200)
+                    self.send_header('Content-Type', mime)
+                    self.send_header('Content-Length', str(len(data)))
+                    self.send_header('Cache-Control', 'no-store')
+                    self.send_header('X-Content-Type-Options', 'nosniff')
+                    self.end_headers()
+                    self.wfile.write(data)
+                    return
                 elif route == '/api/studio/fs':
                     from .vfs_observation import execute
                     result = execute(self.kb_root, query.get('operation',['ls'])[0], query.get('uri',['oks://'])[0],
@@ -1066,6 +1076,7 @@ class Handler(BaseHTTPRequestHandler):
                     result['body_html'] = md_to_html(result['text']) if result['format'] == 'markdown' else '<pre>' + html.escape(result['text']) + '</pre>'
                 elif route == '/api/learning/draft':
                     result = workspace.draft(self.kb_root, query.get('path', [''])[0], query.get('revision', [None])[0])
+                    result['knowledge_base'] = str(self.kb_root)
                     raw = result['text'].lstrip('\ufeff')
                     front = re.match(r'^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)', raw)
                     body = raw[front.end():] if front else raw
@@ -1107,6 +1118,7 @@ class Handler(BaseHTTPRequestHandler):
                 "read_only": self.server.mode == "reader",
                 "local_review": bool(getattr(self.server, 'local_review', False)),
                 "local_edit": bool(getattr(self.server, 'local_edit', False)),
+                "discussion_agent": self.discussion_projection({})['agent'],
                 "viewer": "@human",
                 "knowledge_base": str(self.kb_root),
                 "knowledge_base_name": self.kb_root.name,
@@ -1154,6 +1166,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(200, activity_data(self.kb_root, UI_AGENT))
             return
         if route == "/api/mail/thread":
+            from . import discussion_review
             thread_id = parse_qs(urlsplit(self.path).query).get("id", [""])[0]
             rows = mail.thread_messages(self.kb_root, thread_id, UI_AGENT)
             if not rows:
@@ -1164,9 +1177,18 @@ class Handler(BaseHTTPRequestHandler):
             for row in rows:
                 meta = row["meta"]
                 state = row.get("state") or {}
-                messages.append({**meta, "title": row.get("title", ""), "body": row["body"],
-                                 "body_html": md_to_html(row["body"]), "read_at": state.get("read_at"),
-                                 "deliveries": deliveries.get(str(meta.get("message_id")), [])})
+                message = {**meta, "title": row.get("title", ""), "body": row["body"],
+                           "body_html": md_to_html(row["body"]), "read_at": state.get("read_at"),
+                           "deliveries": deliveries.get(str(meta.get("message_id")), [])}
+                display_body = discussion_review.message_text(row, rows)
+                from . import discussion_comments
+                comment_projection = discussion_comments.message_projection(self.kb_root, row)
+                if comment_projection is not None:
+                    display_body = comment_projection['text']
+                    message['images'] = comment_projection['images']
+                if display_body is not None:
+                    message['display_body'] = display_body
+                messages.append(message)
             self.send_json(200, {"thread_id": thread_id, "messages": messages,
                                  "title": rows[0].get("title", "未命名对话"),
                                  "observation": mail_observation.thread_observation(self.kb_root, rows),
@@ -1245,9 +1267,25 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(data)))
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
-        self.send_header("Content-Security-Policy", "default-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'self'; form-action 'self'")
+        self.send_header("Content-Security-Policy", "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'self'; form-action 'self'")
         self.end_headers()
         self.wfile.write(data)
+
+    def discussion_projection(self, result):
+        for section in result.get('sections', []):
+            section['html'] = md_to_html(section['markdown'])
+        receiver = getattr(self.server, 'discussion_agent', None)
+        result['agent'] = receiver.status(self.kb_root) if receiver else {
+            'id': '', 'label': '', 'connected': False, 'state': 'stopped'}
+        for comment in result.get('comments', []):
+            comment['processing'] = bool(receiver and result['agent']['connected']
+                and receiver.current_message_id == comment['message_id'])
+        return result
+
+    def review_projection(self, result):
+        for item in result.get('items', []):
+            item['html'] = md_to_html(item['text'])
+        return result
 
     def send_json(self, status, value):
         data = json_bytes(value)
@@ -1361,7 +1399,7 @@ class Handler(BaseHTTPRequestHandler):
             except (OSError, ValueError, KeyError, TypeError, yaml.YAMLError) as exc:
                 self.send_json(400, {'error':str(exc)})
             return
-        if route in {'/api/studio/file', '/api/studio/settings', '/api/studio/onboarding'}:
+        if route in {'/api/studio/file', '/api/studio/settings', '/api/studio/discussion-review/request', '/api/studio/discussion-comments', '/api/studio/onboarding'}:
             if not getattr(self.server, 'local_edit', False):
                 self._reject_post(403, 'Local editing is disabled; use oks mail serve --local-edit')
                 return
@@ -1371,13 +1409,26 @@ class Handler(BaseHTTPRequestHandler):
             from . import studio
             import yaml
             try:
-                request = self.read_json()
+                request = self.read_json(max_bytes=12 * 1024 * 1024 if route.endswith('/discussion-comments') else 65536)
                 if request.get('expected_knowledge_base') != str(self.kb_root):
                     self.send_json(409, {'error': '知识库已切换，请重新读取。', 'code': 'instance_changed'})
                     return
-                from .studio_history import onboarding
-                operation = studio.save_file if route.endswith('/file') else onboarding if route.endswith('/onboarding') else studio.save_settings
-                self.send_json(200, operation(self.kb_root, request))
+                if route.endswith('/discussion-comments'):
+                    from . import discussion_comments
+                    result = discussion_comments.send(self.kb_root, request, requester=UI_AGENT,
+                        session_id=f'studio-comment-{self.server.server_port}')
+                    result = self.discussion_projection(result)
+                elif route.endswith('/discussion-review/request'):
+                    from . import discussion_review
+                    result = discussion_review.request_review(
+                        self.kb_root, request, requester=UI_AGENT,
+                        session_id=f'studio-review-{self.server.server_port}')
+                    result = self.review_projection(result)
+                else:
+                    from .studio_history import onboarding
+                    operation = studio.save_file if route.endswith('/file') else onboarding if route.endswith('/onboarding') else studio.save_settings
+                    result = operation(self.kb_root, request)
+                self.send_json(200, result)
             except (OSError, ValueError, KeyError, TypeError, UnicodeError, yaml.YAMLError) as exc:
                 self.send_json(409, {'error': str(exc) if isinstance(exc, ValueError) else '保存失败，原文件保留。'})
             return
@@ -1443,6 +1494,9 @@ class Handler(BaseHTTPRequestHandler):
             from . import feedback, workspace
             try:
                 request = self.read_json()
+                if route in {'/api/learning/promote', '/api/learning/reject'} and request.get('expected_knowledge_base') != str(self.kb_root):
+                    self.send_json(409, {'error': '知识库已切换，请重新读取。', 'code': 'instance_changed'})
+                    return
                 if route == '/api/learning/promote':
                     result = workspace.invoke(self.kb_root, 'promote', request)
                 elif route == '/api/learning/reject':
@@ -1468,6 +1522,10 @@ class Handler(BaseHTTPRequestHandler):
             return
         try:
             payload = self.read_json()
+            if ('expected_knowledge_base' in payload
+                    and payload['expected_knowledge_base'] != str(self.kb_root)):
+                self._reject_post(409, 'Knowledge base changed. Reconnect before writing')
+                return
             if route == "/api/mail/team/sync":
                 result = team_sync.sync(
                     self.kb_root,
@@ -1639,6 +1697,8 @@ class Handler(BaseHTTPRequestHandler):
 
 class _LoopbackHTTPServer(ThreadingHTTPServer):
     def server_close(self):
+        receiver = getattr(self, 'discussion_agent', None)
+        if receiver is not None: receiver.stop()
         history_service = getattr(self,'history_service',None)
         if history_service is not None:history_service.stop()
         service = getattr(self, 'daily_service', None)
@@ -1653,11 +1713,13 @@ class _LoopbackHTTPServer(ThreadingHTTPServer):
         self.server_name, self.server_port = self.server_address[:2]
 
 
-def create_server(root: Path, port: int = 3182, *, mode: str = "reader", knowledge_source=None, local_review: bool = False, local_edit: bool = False) -> ThreadingHTTPServer:
+def create_server(root: Path, port: int = 3182, *, mode: str = "reader", knowledge_source=None, local_review: bool = False, local_edit: bool = False, discussion_agent: str = '') -> ThreadingHTTPServer:
     if mode not in {"reader", "collaboration"}:
         raise ValueError("Mail mode must be reader or collaboration")
     if (local_review or local_edit) and mode != 'reader':
         raise ValueError('Use --local-review with reader mode; collaboration writes are a separate capability')
+    if discussion_agent and (not local_edit or mode != 'reader'):
+        raise ValueError('The discussion Agent requires --local-edit in reader mode')
     root = validate_root(root)
     server = _LoopbackHTTPServer(("127.0.0.1", port), Handler)
     server.kb_root = root
@@ -1668,12 +1730,20 @@ def create_server(root: Path, port: int = 3182, *, mode: str = "reader", knowled
     server.local_edit = bool(local_edit)
     server.knowledge_source = knowledge_source
     server.session_id = None
-    if local_edit:
-        from .studio_history import Watcher
-        server.history_service = Watcher(root).start()
-    if local_edit and (root / 'settings/daily-capture.json').is_file():
-        from .daily_learning import CaptureService
-        server.daily_service = CaptureService(root).start()
+    try:
+        if discussion_agent:
+            from .discussion_agent import DiscussionAgent
+            server.discussion_agent = DiscussionAgent(root, discussion_agent,
+                current_root=lambda: server.kb_root).start()
+        if local_edit:
+            from .studio_history import Watcher
+            server.history_service = Watcher(root).start()
+        if local_edit and (root / 'settings/daily-capture.json').is_file():
+            from .daily_learning import CaptureService
+            server.daily_service = CaptureService(root).start()
+    except (OSError, ValueError, subprocess.SubprocessError):
+        server.server_close()
+        raise
     if mode == "reader":
         return server
     machine_id = identity.normalise_machine_id()

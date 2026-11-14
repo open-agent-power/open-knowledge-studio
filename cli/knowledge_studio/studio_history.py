@@ -73,6 +73,8 @@ def onboarding(root, payload=None):
 
 
 def kind(path):
+    if path.startswith('drafts/'):
+        return 'drafts'
     return "discuss" if path.startswith(("discuss/", "profiles/discuss/")) else "goal"
 
 
@@ -215,7 +217,7 @@ class Watcher:
         from itertools import islice
 
         warnings = []
-        roots = ("profiles/goals", "profiles/discuss", "goal", "discuss")
+        roots = ("profiles/goals", "profiles/discuss", "goal", "discuss", "drafts")
         for bucket in roots:
             for path in islice((self.root / bucket).rglob("*.md"), studio.MAX_SCAN):
                 relative = path.relative_to(self.root).as_posix()

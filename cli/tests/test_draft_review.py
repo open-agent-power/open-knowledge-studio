@@ -36,6 +36,47 @@ def test_review_decision_is_bound_to_exact_sha_and_retains_original(monkeypatch,
     assert draft_review.disposition(tmp_path, current["relative"], current["sha256"]) is None
 
 
+def test_list_drafts_reuses_one_promotion_index(monkeypatch, tmp_path):
+    monkeypatch.setenv("OKS_ROOT", str(tmp_path))
+    for name in ("one", "two", "three"):
+        _draft(tmp_path, name, "Pending review")
+    scans = []
+    original = draft_review.promotions
+
+    def counted(root):
+        scans.append(root)
+        return original(root)
+
+    monkeypatch.setattr(draft_review, "promotions", counted)
+
+    assert len(store.list_drafts()) == 3
+    assert scans == [tmp_path]
+
+
+def test_promotion_recovery_reuses_supplied_index(monkeypatch, tmp_path):
+    monkeypatch.setenv("OKS_ROOT", str(tmp_path))
+    path, original = _draft(tmp_path, "recover-index", "Exact Wiki proof")
+    digest = hashlib.sha256(original).hexdigest()
+
+    def failed_receipt(*args, **kwargs):
+        raise OSError("receipt write interrupted")
+
+    monkeypatch.setattr(draft_review, "record_decision", failed_receipt)
+    with pytest.raises(OSError, match="receipt write interrupted"):
+        store.promote_draft(path.stem)
+    index = draft_review.promotions(tmp_path)
+
+    def no_rescan(root):
+        raise AssertionError("Recovery must reuse the supplied promotion index")
+
+    monkeypatch.setattr(draft_review, "promotions", no_rescan)
+    receipt = draft_review.disposition(tmp_path, "drafts/recover-index.md", digest, promotions=index)
+
+    assert receipt["decision"] == "promoted"
+    assert draft_review.read_original(tmp_path, receipt) == original
+    assert draft_review.read_receipt(tmp_path, path.stem, digest, promotions=index) == receipt
+
+
 def test_exact_review_rejects_stale_sha_without_writing_wiki(monkeypatch, tmp_path):
     monkeypatch.setenv("OKS_ROOT", str(tmp_path))
     path, original = _draft(tmp_path, "stale", "Version one")

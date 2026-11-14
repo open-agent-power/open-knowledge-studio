@@ -1,10 +1,9 @@
 'use strict';
 const {test}=require('node:test'),assert=require('node:assert/strict');
 const model=require('../../assets/mail-web/studio-model.js');
-const fs=require('node:fs'),path=require('node:path');
+const path=require('node:path'),{pathToFileURL}=require('node:url');
 async function standaloneModule(name){
- const source=fs.readFileSync(path.join(__dirname,'../../assets/mail-web/studio',name),'utf8');
- return import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
+ return import(pathToFileURL(path.join(__dirname,'../../assets/mail-web/studio',name)).href);
 }
 test('graph filters keep ancestry, distinguish pending from used and never mutate source',async()=>{
  const {filterKnowledge,subtreeIds,nodeHue,nodeSize}=await standaloneModule('knowledge-model.js');
