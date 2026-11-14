@@ -20,7 +20,7 @@ import { createSettingsView } from "./studio/settings.js";
       return false;
     }
     if (state.dirty || state.settingsDirty) {
-      status("请先保存修改");
+      status("请先保存或取消修改");
       return false;
     }
     return true;
@@ -224,9 +224,12 @@ import { createSettingsView } from "./studio/settings.js";
       "aria-label",
       state.tab === "discuss" ? "新增讨论 Markdown" : "新增目标 Markdown",
     );
-    $("newGoal").hidden = state.tab !== "discuss";
+    $("newGoal").hidden = state.tab === "learning";
     $("newGoal").disabled = !writable();
-    $("newGoal").title = writable() ? "当天新增讨论文件（同一天可有多个主题）" : "只读模式";
+    $("newGoal").textContent = state.tab === "goals" ? "新增目标" : "新增讨论";
+    $("newGoal").title = writable()
+      ? (state.tab === "goals" ? "新增目标" : "当天新增讨论文件（同一天可有多个主题）")
+      : "当前只读，请使用启用本地编辑的连接";
     $("previousDay").hidden = $("nextDay").hidden = state.tab === "learning";
     document.title =
       "OKS · " +
@@ -269,24 +272,30 @@ import { createSettingsView } from "./studio/settings.js";
     }
   }
   async function saveDocument(file, text) {
-    if (state.saving) return;
+    if (state.saving) return false;
     status("保存中…");
     state.saving = true;
+    let committed = false;
     try {
-      await post("/api/studio/file", {
+      const saved = await post("/api/studio/file", {
         path: file.path,
         text,
         expected_sha256: file.sha256,
         actor: "studio-user",
       });
+      committed = true;
       state.dirty = false;
       state.saving = false;
+      if (saved?.path === file.path && state.view?.files)
+        state.view.files[file.path] = saved;
       await loadView(true);
       status("");
+      return true;
     } catch (e) {
       state.saving = false;
-      state.dirty = true;
-      status(e.message);
+      state.dirty = !committed;
+      status(committed ? "已保存，刷新失败：" + e.message : e.message);
+      return committed;
     }
   }
   function openNew() {
@@ -304,7 +313,9 @@ import { createSettingsView } from "./studio/settings.js";
     $("newDialog").showModal();
   }
   $("newGoal").onclick = () => {
-    if (canLeave()) openNew();
+    if (!canLeave()) return;
+    if (state.tab === "goals") goalsView.startCreate();
+    else openNew();
   };
   $("closeNew").onclick = () => $("newDialog").close();
   $("closeFile").onclick = () => $("fileDialog").close();
@@ -356,7 +367,7 @@ import { createSettingsView } from "./studio/settings.js";
     $(id).onclick = () => { void changeDate(shiftDate(state.date || localDate(), step)); };
   }
   window.addEventListener("beforeunload", (event) => {
-    if (state.dirty || state.settingsDirty) {
+    if (state.dirty || state.settingsDirty || state.saving) {
       event.preventDefault();
       event.returnValue = "";
     }

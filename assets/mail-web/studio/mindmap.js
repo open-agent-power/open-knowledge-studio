@@ -45,7 +45,7 @@ export function layoutTree(root, collapsed = new Set()) {
     const children = collapsed.has(node.id) ? [] : node.children;
     const shown = children.map((child) => visit(child, depth + 1, item));
     item.y = shown.length ? (shown[0].y + shown.at(-1).y) / 2 : (offset += 64);
-    if (node.draft) offset += 32;
+    if (node.draft) offset += 48;
     if (parent) edges.push({ from: parent, to: item });
     return item;
   }
@@ -121,7 +121,7 @@ export function drawMindmap({
         x: node.x - 92,
         y: node.y - 19,
         width: 206,
-        height: 84,
+        height: 100,
       });
       const form = document.createElement("form"),
         input = document.createElement("input"),
@@ -130,15 +130,19 @@ export function drawMindmap({
         cancel = document.createElement("button");
       form.className = "mindmap-inline-editor";
       input.value = pendingAdd.title;
-      input.placeholder = "子目标";
-      input.setAttribute("aria-label", "新子目标标题");
+      const isGoal = parent.id.startsWith("day:");
+      input.placeholder = isGoal ? "目标标题" : "子目标标题";
+      input.setAttribute("aria-label", isGoal ? "新目标标题" : "新子目标标题");
       input.required = true;
       input.maxLength = 300;
+      input.disabled = !!pendingAdd.saving;
       controls.className = "mindmap-inline-actions";
       save.type = "submit";
-      save.textContent = "保存";
+      save.textContent = pendingAdd.saving ? "保存中…" : "保存";
+      save.disabled = !!pendingAdd.saving;
       cancel.type = "button";
       cancel.textContent = "取消";
+      cancel.disabled = !!pendingAdd.saving;
       cancel.onclick = onCancel;
       controls.append(save, cancel);
       form.append(input, controls);
@@ -147,7 +151,7 @@ export function drawMindmap({
       form.onsubmit = (event) => {
         event.preventDefault();
         event.stopPropagation();
-        if (input.value.trim()) return onCommit(parent, input.value.trim());
+        if (!pendingAdd.saving && input.value.trim()) return onCommit(parent, input.value.trim());
       };
       input.oninput = () => onDraft(input.value);
       input.onkeydown = (event) => {
@@ -155,7 +159,7 @@ export function drawMindmap({
           event.preventDefault();
           return;
         }
-        if (event.key === "Escape") {
+        if (event.key === "Escape" && !event.isComposing && !pendingAdd.saving) {
           event.preventDefault();
           onCancel();
         }
@@ -196,12 +200,15 @@ export function drawMindmap({
     if (onAdd) {
       const add = make("g", {
         class: "mindmap-add",
-        transform: `translate(${node.x + 112},${node.y})`,
+        transform: `translate(${node.x + 120},${node.y})`,
         role: "button",
         tabindex: 0,
-        "aria-label": "新增子目标：" + node.title,
+        "aria-label": (node.id.startsWith("day:") ? "新增目标：" : "新增子目标：") + node.title,
       });
-      add.append(make("circle", { r: 10, fill: "white", stroke: "#ccd8ea" }));
+      add.append(
+        make("rect", { x: -22, y: -22, width: 44, height: 44, fill: "transparent" }),
+        make("circle", { r: 10, fill: "white", stroke: "#ccd8ea" }),
+      );
       const plus = make("text", { "text-anchor": "middle", y: 4 });
       plus.textContent = "+";
       add.append(plus);
@@ -222,5 +229,5 @@ export function drawMindmap({
   host.replaceChildren(svg);
   const draftInput = host.querySelector(".mindmap-inline-editor input");
   draftInput?.focus();
-  draftInput?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+  host.querySelector(".mindmap-inline-editor")?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
 }

@@ -40,11 +40,13 @@ function editorDom() {
       this.scrollOptions = options;
     }
     querySelector(selector) {
-      if (selector === ".mindmap-inline-editor input") {
+      if ([".mindmap-inline-editor input", ".mindmap-inline-editor"].includes(selector)) {
         const form = all(this).find(
           (node) => node.className === "mindmap-inline-editor",
         );
-        return form ? all(form).find((node) => node.tagName === "input") : null;
+        return selector === ".mindmap-inline-editor"
+          ? form
+          : form ? all(form).find((node) => node.tagName === "input") : null;
       }
       return null;
     }
@@ -114,7 +116,7 @@ test("the draft has explicit save and non-submit cancel, with one trimmed form s
   assert.equal(page.cancel.type, "button");
   assert.equal(page.input["aria-label"], "新子目标标题");
   assert.equal(globalThis.document.activeElement, page.input);
-  assert.deepEqual(page.input.scrollOptions, { block: "nearest", inline: "nearest" });
+  assert.deepEqual(page.form.scrollOptions, { block: "nearest", inline: "nearest" });
   page.input.value = "   ";
   await page.form.onsubmit(event());
   assert.deepEqual(page.commits, []);
@@ -230,12 +232,28 @@ function goalState() {
     },
   };
 }
-async function goals({ postHook } = {}) {
+async function goals({
+  postHook,
+  saveHook,
+  loadHook,
+  refreshAfterSave = true,
+  writable = true,
+  empty = false,
+  history = false,
+  mode = "list",
+} = {}) {
   const { dom } = editorDom(),
     posts = [],
     saves = [],
     loads = [],
     state = goalState();
+  state.mode = mode;
+  state.context.local_edit = writable;
+  if (empty) state.view = { entries: [], files: {}, timeline: [] };
+  if (history) state.view.timeline = [
+    { id: "old", at: "2026-11-08T10:00:00Z" },
+    { id: "current", at: "2026-11-08T11:00:00Z" },
+  ];
   let status = "",
     renders = 0,
     view;
@@ -271,24 +289,40 @@ async function goals({ postHook } = {}) {
     model,
     actions: {
       canLeave,
-      writable: () => true,
+      writable: () => writable,
       status: (text) => {
         status = text;
       },
       render,
       async loadView(...args) {
         loads.push(args);
+        await loadHook?.();
         status = "";
         render();
       },
       async saveDocument(at, text) {
         saves.push({ path: at.path, text });
+        state.saving = true;
+        try {
+          await saveHook?.(saves.length);
+        } catch (error) {
+          state.saving = false;
+          state.dirty = true;
+          status = error.message;
+          return false;
+        }
+        state.saving = false;
         state.dirty = false;
         status = "";
-        render();
+        state.view.files[at.path] = { ...at, text, sha256: "saved-sha" };
+        if (refreshAfterSave) render();
+        return true;
       },
     },
     api: {
+      async request() {
+        return { ...state.view, revision: { id: "old", at: "2026-11-08T10:00:00Z" } };
+      },
       async post(route, payload) {
         posts.push({ route, payload });
         return postHook?.(posts.length);
@@ -303,6 +337,7 @@ async function goals({ postHook } = {}) {
     posts,
     saves,
     loads,
+    view,
     canLeave,
     status: () => status,
     renders: () => renders,
@@ -312,7 +347,7 @@ async function goals({ postHook } = {}) {
       ),
     start(title) {
       all(dom.$("content"))
-        .find((node) => node["aria-label"] === "新增子目标：" + title)
+        .find((node) => ["新增子目标：" + title, "新增目标：" + title].includes(node["aria-label"]))
         .onclick(event());
       return editor(dom.$("content"));
     },
@@ -398,4 +433,168 @@ test("submitting a child draft uses the source-edit action for that goal", async
   assert.match(page.saves[0].text, /## \[ \] 111\n/);
   assert.equal(page.state.dirty, false);
   assert.equal(page.posts.length, 0);
+});
+
+test("an empty goal view exposes creation and describes zoom separately", async () => {
+  const page = await goals({ empty: true });
+  assert.equal(typeof page.view.startCreate, "function");
+  assert.ok(page.button("新建第一个目标"));
+  assert.equal(page.button("−").getAttribute?.("aria-label") || page.button("−")["aria-label"], "缩小目标图");
+  assert.equal(page.button("＋").title, "放大目标图");
+  page.button("新建第一个目标").onclick();
+  const draft = page.editor();
+  assert.equal(draft.input["aria-label"], "新目标标题");
+  assert.equal(page.state.dirty, true);
+  draft.cancel.onclick();
+  assert.equal(page.state.dirty, false);
+  assert.equal(page.posts.length, 0);
+});
+
+test("the shared create action opens the goal form and root selection does not show an empty inspector", async () => {
+  const page = await goals({ empty: true, mode: "source" });
+  page.view.startCreate();
+  assert.equal(page.state.mode, "list");
+  assert.equal(page.editor().input["aria-label"], "新目标标题");
+  page.editor().cancel.onclick();
+  all(page.dom.$("content"))
+    .find((node) => node.tagName === "g" && node["aria-label"] === page.state.date)
+    .onclick();
+  assert.ok(page.editor().save);
+});
+
+test("read-only goals explain why creation is unavailable without opening a draft", async () => {
+  const page = await goals({ empty: true, writable: false });
+  assert.equal(typeof page.view.startCreate, "function");
+  page.view.startCreate();
+  assert.match(page.status(), /只读/);
+  assert.equal(page.state.dirty, false);
+  assert.equal(all(page.dom.$("content")).some((n) => n.className === "mindmap-inline-editor"), false);
+  assert.match(all(page.dom.$("content")).map((n) => n.textContent || "").join(" "), /只读/);
+  assert.equal(page.posts.length, 0);
+});
+
+test("root creation blocks duplicate saves and cancellation until the request settles", async () => {
+  let release;
+  const waiting = new Promise((resolve) => { release = resolve; });
+  const page = await goals({ empty: true, postHook: () => waiting });
+  const draft = page.start(page.state.date);
+  draft.input.value = "First goal";
+  draft.input.oninput();
+  const pending = draft.form.onsubmit(event());
+  assert.equal(page.state.saving, true);
+  assert.equal(page.editor().input.disabled, true);
+  assert.ok(all(page.dom.$("content")).find((node) => node.textContent === "保存中…").disabled);
+  page.editor().cancel.onclick();
+  await page.editor().form.onsubmit(event());
+  assert.equal(page.posts.length, 1);
+  assert.equal(page.state.dirty, true);
+  release();
+  await pending;
+  assert.equal(page.state.saving, false);
+  assert.equal(page.state.dirty, false);
+  assert.equal(page.state.scope, "profiles/goals/2026/11/08/First goal.md");
+});
+
+test("source editing has an explicit cancellation and zoom cannot discard unsaved Markdown", async () => {
+  const page = await goals({ mode: "source" });
+  const original = page.dom.$("editor").value;
+  const cancel = page.button("取消");
+  assert.ok(cancel);
+  page.dom.$("editor").value = "# Draft edits";
+  page.dom.$("editor").oninput();
+  page.button("＋").onclick();
+  assert.equal(page.dom.$("editor").value, "# Draft edits");
+  assert.equal(page.state.dirty, true);
+  cancel.onclick();
+  assert.equal(page.dom.$("editor").value, original);
+  assert.equal(page.state.dirty, false);
+  assert.equal(page.saves.length, 0);
+});
+
+test("node title editing can be cancelled with Escape and preserves a failed save for retry", async () => {
+  const page = await goals({ saveHook: () => { throw Error("Title conflict"); } });
+  all(page.dom.$("content"))
+    .find((node) => node.tagName === "g" && node["aria-label"] === "Existing goal")
+    .onclick();
+  const input = all(page.dom.$("content")).find((node) => node["aria-label"] === "节点标题");
+  input.value = "Revised child";
+  input.oninput();
+  await page.button("保存").onclick();
+  assert.equal(page.state.dirty, true);
+  assert.equal(input.value, "Revised child");
+  assert.equal(page.status(), "Title conflict");
+  input.onkeydown(event("Escape"));
+  assert.equal(page.state.dirty, false);
+  assert.equal(page.saves.length, 1);
+  assert.equal(page.canLeave(), true);
+});
+
+test("a failed child save retains its draft and explicit cancellation", async () => {
+  const page = await goals({ saveHook: () => { throw Error("Changed on disk"); } });
+  const draft = page.start("Existing goal");
+  draft.input.value = "Keep this child";
+  draft.input.oninput();
+  await draft.form.onsubmit(event());
+  assert.equal(page.editor().input.value, "Keep this child");
+  assert.notEqual(page.editor().input.disabled, true);
+  assert.equal(page.state.dirty, true);
+  assert.equal(page.status(), "Changed on disk");
+  page.editor().cancel.onclick();
+  assert.equal(page.state.dirty, false);
+  assert.equal(page.posts.length, 0);
+  assert.equal(page.saves.length, 1);
+});
+
+test("a saved goal is not offered as an unsaved draft when refreshing the view fails", async () => {
+  const page = await goals({ empty: true, loadHook: () => { throw Error("Refresh unavailable"); } });
+  const draft = page.start(page.state.date);
+  draft.input.value = "Saved goal";
+  draft.input.oninput();
+  await draft.form.onsubmit(event());
+  assert.equal(page.posts.length, 1);
+  assert.equal(page.state.dirty, false);
+  assert.equal(page.state.saving, false);
+  assert.equal(all(page.dom.$("content")).some((n) => n.className === "mindmap-inline-editor"), false);
+  assert.match(page.status(), /目标已保存.*刷新失败/);
+});
+
+test("history remains read-only for create, node additions and Markdown editing", async () => {
+  const page = await goals({ history: true });
+  const range = all(page.dom.$("content")).find((node) => node.type === "range");
+  range.value = "0";
+  range.oninput();
+  await new Promise((resolve) => setImmediate(resolve));
+  page.view.startCreate();
+  assert.match(page.status(), /历史快照.*只读/);
+  assert.equal(all(page.dom.$("content")).some((n) => n.class === "mindmap-add"), false);
+  page.button("原文").onclick();
+  assert.equal(page.dom.$("editor").readOnly, true);
+  assert.equal(page.button("保存").disabled, true);
+  assert.equal(page.button("取消").disabled, true);
+  assert.equal(page.posts.length + page.saves.length, 0);
+});
+
+test("a successful source save stays editable when the server's later view refresh is unavailable", async () => {
+  const page = await goals({ mode: "source", refreshAfterSave: false });
+  const editor = page.dom.$("editor");
+  editor.value = "# Updated source\n";
+  editor.oninput();
+  await page.button("保存").onclick();
+  assert.equal(page.dom.$("editor").value, "# Updated source\n");
+  assert.equal(page.dom.$("editor").readOnly, false);
+  assert.equal(page.button("保存").disabled, false);
+  assert.equal(page.state.dirty, false);
+  assert.equal(page.state.view.files[page.state.selected].sha256, "saved-sha");
+});
+
+
+test("a saved child leaves no disabled draft in the mounted goal canvas", async () => {
+  const page = await goals();
+  const draft = page.start("Existing goal");
+  draft.input.value = "Saved child";
+  draft.input.oninput();
+  await draft.form.onsubmit(event());
+  assert.equal(page.saves.length, 1);
+  assert.equal(page.state.dirty, false);
+  assert.equal(all(page.dom.$("content")).some((node) => node.className === "mindmap-inline-editor"), false);
 });

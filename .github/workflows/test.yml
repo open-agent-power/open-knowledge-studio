@@ -28,7 +28,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
-      - run: node --test cli/tests/test_mindmap_editor.js
+      - run: node --test cli/tests/test_mindmap_editor.js cli/tests/test_studio_goals_lifecycle.js
 
   pytest:
     name: pytest (${{ matrix.os }}, py${{ matrix.python }})

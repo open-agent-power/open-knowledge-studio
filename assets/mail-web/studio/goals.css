@@ -125,6 +125,7 @@
   background-size: 19px 19px;
 }
 .mindmap-canvas {
+  position: relative;
   overflow: auto;
   max-height: calc(100vh - 275px);
   min-height: 360px;
@@ -211,7 +212,7 @@
   margin-top: 6px;
 }
 .mindmap-inline-actions button {
-  min-height: 32px;
+  min-height: 44px;
   min-width: 60px;
   padding: 5px 12px;
   border: 1px solid var(--line);
@@ -236,5 +237,55 @@
   font: 12px system-ui;
   outline: none;
   background: white;
-  color: #617ba5;
+  color: var(--ink);
+}
+.mindmap-inline-editor input::placeholder {
+  color: #66758d;
+  opacity: 1;
+}
+.goal-single > .toolbar {
+  flex-wrap: wrap;
+}
+.goal-single > .toolbar .tiny {
+  max-width: 48ch;
+  color: var(--ink);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.goal-empty {
+  position: absolute;
+  top: 112px;
+  left: 28px;
+  max-width: calc(100% - 56px);
+  color: var(--ink);
+}
+.goal-empty p,
+.goal-readonly {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.goal-editor-actions {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+  background: var(--white);
+}
+.goal-editor-actions button,
+.mindmap-editor > button {
+  min-height: 40px;
+}
+@media (max-width: 650px) {
+  .mindmap-editor {
+    position: relative;
+    inset: auto;
+    width: calc(100% - 24px);
+    margin: 12px;
+  }
+  .goal-editor-actions button {
+    min-height: 44px;
+  }
 }
