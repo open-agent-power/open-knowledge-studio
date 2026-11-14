@@ -24,8 +24,12 @@ import tarfile
 import zipfile
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from knowledge_studio.schemas import BUNDLED_SCHEMA_NAMES
+
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _ASSETS = _REPO_ROOT / "assets"
+_SCHEMAS = _REPO_ROOT / "cli" / "knowledge_studio" / "schemas"
 _MAINTAINER_SKILLS = _REPO_ROOT / ".claude" / "skills"
 
 # Entry point declared in pyproject: its module must be in the wheel.
@@ -36,6 +40,12 @@ _REQUIRED_MODULES = (
     "knowledge_studio/evaluation.py",
     "knowledge_studio/evaluation_dataset.py",
 )
+
+
+def _schema_paths() -> list[str]:
+    return ["knowledge_studio/schemas/" + path.name for path in sorted(_SCHEMAS.glob("*.json"))] + [
+        "knowledge_studio/_assets/_meta/schemas/" + name for name in BUNDLED_SCHEMA_NAMES
+    ]
 
 
 def _fail(problems: list[str]) -> None:
@@ -69,7 +79,7 @@ def check_wheel(names: list[str]) -> list[str]:
     problems: list[str] = []
     prefix = "knowledge_studio/_assets/"
 
-    for module in _REQUIRED_MODULES:
+    for module in (*_REQUIRED_MODULES, *_schema_paths()):
         if module not in names:
             problems.append(f"wheel is missing required module {module}")
 
@@ -104,7 +114,7 @@ def check_sdist(names: list[str]) -> list[str]:
     # sdist — a source install pulls it via pip from pyproject dependencies.
     if not any(n.startswith("knowledge_studio/_assets/") for n in names):
         problems.append("sdist carries no knowledge_studio/_assets/ — `oks init` would be empty")
-    for module in _REQUIRED_MODULES:
+    for module in (*_REQUIRED_MODULES, *_schema_paths()):
         if module not in names:
             problems.append(f"sdist is missing required module {module}")
     for path in sorted(_ASSETS.rglob("*")):

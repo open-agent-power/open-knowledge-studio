@@ -35,16 +35,55 @@ def test_maintainer_skills_live_outside_assets():
     assert {"ingest", "query", "promote"} <= shipped
 
 
-def test_both_build_paths_vendor_assets_verbatim():
-    """bundle_assets.py (workflow) and setup.py (pip) must produce one tree."""
+def test_both_build_paths_use_shared_asset_assembly():
+    """The workflow and setuptools must use the same assembly implementation."""
     cli_dir = Path(__file__).parents[1]
     sources = {
         "bundle_assets.py": (cli_dir / "scripts" / "bundle_assets.py").read_text(encoding="utf-8"),
         "setup.py": (cli_dir / "setup.py").read_text(encoding="utf-8"),
     }
     for name, source in sources.items():
-        assert 'repo_root / "assets"' in source, f"{name} must copy from assets/"
-        assert "_MAP = [" not in source, f"{name} still uses the retired per-dir map"
+        assert "from _build_assets import bundle_assets" in source
+        assert "shutil.copytree" not in source
+
+
+@pytest.mark.parametrize("bundled", [False, True])
+def test_installed_assets_ignore_an_unrelated_parent_checkout(tmp_path, monkeypatch, bundled):
+    checkout = tmp_path / "project"
+    (checkout / ".git").mkdir(parents=True)
+    (checkout / "assets").mkdir()
+    package = checkout / ".venv" / "Lib" / "site-packages" / "knowledge_studio"
+    package.mkdir(parents=True)
+    module = package / "cli.py"
+    module.write_text("# installed module", encoding="utf-8")
+    if bundled:
+        assets = package / "_assets"
+        assets.mkdir()
+        (assets / "marker.txt").write_text("wheel asset", encoding="utf-8")
+    monkeypatch.setattr(cli_module, "__file__", str(module))
+
+    assert cli_module._asset_source() == (package / "_assets" if bundled else None)
+
+
+@pytest.mark.parametrize("git_metadata", ["directory", "file", "archive"])
+def test_source_assets_take_precedence_over_generated_copies(tmp_path, monkeypatch, git_metadata):
+    source = tmp_path / "source"
+    assets = source / "assets"
+    assets.mkdir(parents=True)
+    package = source / "cli" / "knowledge_studio"
+    package.mkdir(parents=True)
+    module = package / "cli.py"
+    module.write_text("# source module", encoding="utf-8")
+    generated = package / "_assets"
+    generated.mkdir()
+    (generated / "stale.txt").write_text("stale build", encoding="utf-8")
+    if git_metadata == "directory":
+        (source / ".git").mkdir()
+    elif git_metadata == "file":
+        (source / ".git").write_text("gitdir: ../common.git", encoding="utf-8")
+    monkeypatch.setattr(cli_module, "__file__", str(module))
+
+    assert cli_module._asset_source() == assets
 
 
 def test_init_never_materializes_dev_only_skills(tmp_path):

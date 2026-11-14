@@ -171,13 +171,106 @@ def test_configure_utf8_stdio_on_windows(monkeypatch):
         ("notes.md", "document"),
         ("notes.txt", "document"),
         ("video.mp4", "watch"),
-        ("paper.pdf", "pdf-lite"),
+        ("paper.pdf", "pdf"),
+        ("scan.TIFF", "watch"),
+        ("https://www.youtube.com/watch?v=example", "watch"),
     ],
 )
-def test_recommended_capability_routes_supported_local_files(source, capability):
+def test_ingest_preflight_uses_connector_route(source, capability, monkeypatch):
+    from knowledge_studio import cli
+    from oks_connector import raw_bundle_adapter as adapter
+
+    checked = []
+    monkeypatch.setattr(cli, "_capability_already_installed", lambda name: checked.append(name) or True)
+    monkeypatch.setattr(adapter, "run_ingest", lambda args: 0)
+
+    result = CliRunner().invoke(cli.app, ["ingest", "run", source])
+
+    assert result.exit_code == 0, result.output
+    assert checked == [capability]
+
+
+@pytest.mark.parametrize(
+    ("source", "options", "connector_options"),
+    [
+        ("notes.md", [], ["--progress"]),
+        ("clip.mp4", ["--mode", "forensic", "--timeout-seconds", "37", "--no-progress"],
+         ["--mode", "forensic", "--timeout-seconds", "37"]),
+        ("paper.pdf", ["--formula-secondary", "--formula-max-regions", "7"],
+         ["--progress", "--formula-secondary", "--formula-max-regions", "7"]),
+        ("notes.md", ["--formula-secondary", "--formula-max-regions", "7"], ["--progress"]),
+    ],
+)
+def test_ingest_passes_execution_options_without_argument_reparsing(source, options, connector_options, monkeypatch):
+    from knowledge_studio import cli
+    from oks_connector import raw_bundle_adapter as adapter
+
+    expected = adapter.build_parser().parse_args(["ingest", source, *connector_options])
+    received = []
+    monkeypatch.setattr(cli, "_capability_already_installed", lambda name: True)
+    monkeypatch.setattr(adapter, "run_ingest", lambda args: received.append(vars(args)) or 0)
+
+    def parser_not_used():
+        raise AssertionError("oks ingest must pass structured execution options")
+
+    monkeypatch.setattr(adapter, "build_parser", parser_not_used)
+
+    result = CliRunner().invoke(cli.app, ["ingest", source, *options])
+
+    assert result.exit_code == 0, result.output
+    assert received == [vars(expected)]
+
+
+def test_ingest_unsupported_source_keeps_connector_diagnostic(monkeypatch):
     from knowledge_studio import cli
 
-    assert cli._recommended_capability(source) == capability
+    def no_capability_check(name):
+        raise AssertionError("Unsupported input must reach the connector route diagnostic")
+
+    monkeypatch.setattr(cli, "_capability_already_installed", no_capability_check)
+
+    result = CliRunner().invoke(cli.app, ["ingest", "unknown.zip"])
+
+    assert result.exit_code == 1
+    assert "unknown.zip" in result.output
+    assert "oks-connector route" in result.output
+
+
+def test_ingest_malformed_url_keeps_the_failure_diagnostic(monkeypatch):
+    from knowledge_studio import cli
+
+    monkeypatch.setattr(cli, "_capability_already_installed", lambda name: True)
+
+    result = CliRunner().invoke(cli.app, ["ingest", "https://[broken"])
+
+    assert result.exit_code == 1
+    assert cli.t("ingest_failed") in result.output
+    assert "Invalid IPv6 URL" in result.output
+
+
+def test_ingest_preserves_partial_exit_code(monkeypatch):
+    from knowledge_studio import cli
+    from oks_connector import raw_bundle_adapter as adapter
+
+    monkeypatch.setattr(cli, "_capability_already_installed", lambda name: True)
+    monkeypatch.setattr(adapter, "run_ingest", lambda args: 2)
+
+    result = CliRunner().invoke(cli.app, ["ingest", "run", "notes.md"])
+
+    assert result.exit_code == 2
+
+
+def test_ingest_pdf_requires_mineru_capability_even_with_pdf_lite(monkeypatch):
+    from knowledge_studio import cli
+
+    checked = []
+    monkeypatch.setattr(cli, "_capability_already_installed", lambda name: checked.append(name) or name == "pdf-lite")
+
+    result = CliRunner().invoke(cli.app, ["ingest", "paper.pdf"])
+
+    assert result.exit_code == 2
+    assert checked == ["pdf"]
+    assert "capability install pdf" in result.output
 
 
 def test_drafts_list_renders_yaml_date(monkeypatch):

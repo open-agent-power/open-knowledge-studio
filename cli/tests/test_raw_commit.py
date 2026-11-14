@@ -15,6 +15,7 @@ exact same code path a real Agent would hit.
 
 import json
 import hashlib
+import os
 import subprocess
 import tempfile
 from pathlib import Path
@@ -627,44 +628,19 @@ def test_primary_media_type_key_missing_is_safe():
     assert r.returncode == 0, f"missing media_type: {r.stdout[:300]}"
 
 
-def test_schema_mirrors_identical():
-    """Every schema in ``schemas/`` must have a SHA256-identical copy in
-    ``cli/knowledge_studio/schemas/`` — no double fact-source drift."""
-    import hashlib
-    repo_schemas = Path(__file__).parent.parent.parent / "schemas"
-    pkg_schemas = (
-        Path(__file__).parent.parent / "knowledge_studio" / "schemas"
-    )
+def test_protocol_schemas_are_packaged_normative_resources():
+    from importlib.resources import files
+    from jsonschema import Draft202012Validator
 
-    repo_files = sorted(
-        f.name for f in repo_schemas.iterdir() if f.suffix == ".json"
-    )
-    pkg_files = sorted(
-        f.name for f in pkg_schemas.iterdir() if f.suffix == ".json"
-    )
+    schemas = files("knowledge_studio.schemas")
+    names = sorted(item.name for item in schemas.iterdir() if item.name.endswith(".schema.json"))
+    assert names
+    for name in names:
+        schema = json.loads(schemas.joinpath(name).read_text(encoding="utf-8"))
+        Draft202012Validator.check_schema(schema)
+    capture = json.loads(schemas.joinpath("capture-envelope.schema.json").read_text(encoding="utf-8"))
+    assert "remote_api" in capture["properties"]["source_type"]["enum"]
 
-    # Same set of files
-    assert repo_files == pkg_files, (
-        f"Schema file sets differ:\n"
-        f"  repo only: {set(repo_files) - set(pkg_files)}\n"
-        f"  pkg only: {set(pkg_files) - set(repo_files)}"
-    )
-
-    mismatches = []
-    for name in repo_files:
-        repo_hash = hashlib.sha256(
-            (repo_schemas / name).read_bytes()
-        ).hexdigest()
-        pkg_hash = hashlib.sha256(
-            (pkg_schemas / name).read_bytes()
-        ).hexdigest()
-        if repo_hash != pkg_hash:
-            mismatches.append((name, repo_hash[:16], pkg_hash[:16]))
-
-    assert len(mismatches) == 0, (
-        f"Schema mirror mismatch — {len(mismatches)} file(s) differ:\n"
-        + "\n".join(f"  {n}: repo={r}... pkg={p}..." for n, r, p in mismatches)
-    )
 
 
 # ── A1: Fragment ↔ Manifest evidence consistency ────────────────────
@@ -1090,6 +1066,102 @@ def test_atomic_bundle_replacement_cleans_backup_after_success(tmp_path):
     assert (final / "bundle.json").read_text(encoding="utf-8") == '{"new": true}'
     assert not staging.exists()
     assert not list(tmp_path.glob(".bundle.backup-*"))
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows access-denial retry")
+@pytest.mark.parametrize("retry_phase", ["backup", "publish", "rollback"])
+def test_atomic_bundle_replacement_retries_transient_directory_access(monkeypatch, tmp_path, retry_phase):
+    from knowledge_studio import raw_commit as rc
+
+    final = tmp_path / "bundle"
+    staging = tmp_path / "staging"
+    final.mkdir()
+    staging.mkdir()
+    (final / "old.txt").write_text("previous bundle", encoding="utf-8")
+    (staging / "new.txt").write_text("new bundle", encoding="utf-8")
+    attempts = {"backup": 0, "publish": 0, "rollback": 0}
+    replace = os.replace
+
+    def interrupted(source, destination):
+        phase = "publish" if Path(source) == staging else "backup" if Path(source) == final else "rollback"
+        attempts[phase] += 1
+        if retry_phase == "rollback" and phase == "publish":
+            raise OSError("original publication failure")
+        if phase == retry_phase and attempts[phase] <= 2:
+            raise PermissionError(13, "directory is being read", None, 5)
+        return replace(source, destination)
+
+    monkeypatch.setattr(os, "replace", interrupted)
+    if retry_phase == "rollback":
+        with pytest.raises(OSError, match="original publication failure"):
+            rc._replace_bundle_directory(staging, final)
+        assert (final / "old.txt").read_text(encoding="utf-8") == "previous bundle"
+        assert staging.is_dir()
+    else:
+        rc._replace_bundle_directory(staging, final)
+        assert (final / "new.txt").read_text(encoding="utf-8") == "new bundle"
+        assert not staging.exists()
+    assert attempts[retry_phase] == 3
+    assert not list(tmp_path.glob(".bundle.backup-*"))
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows access-denial retry")
+@pytest.mark.parametrize("winerror", [5, 32])
+def test_permanent_bundle_publish_denial_rolls_back_and_propagates(monkeypatch, tmp_path, winerror):
+    from knowledge_studio import raw_commit as rc
+
+    final = tmp_path / "bundle"
+    staging = tmp_path / "staging"
+    final.mkdir()
+    staging.mkdir()
+    (final / "old.txt").write_text("previous bundle", encoding="utf-8")
+    (staging / "new.txt").write_text("new bundle", encoding="utf-8")
+    replace = os.replace
+    publish_attempts = []
+
+    def denied(source, destination):
+        if Path(source) == staging:
+            publish_attempts.append(True)
+            raise PermissionError(13, "publication remains blocked", None, winerror)
+        return replace(source, destination)
+
+    monkeypatch.setattr(os, "replace", denied)
+    with pytest.raises(PermissionError) as error:
+        rc._replace_bundle_directory(staging, final)
+
+    assert error.value.winerror == winerror
+    assert len(publish_attempts) > 1 if winerror == 5 else len(publish_attempts) == 1
+    assert (final / "old.txt").read_text(encoding="utf-8") == "previous bundle"
+    assert (staging / "new.txt").read_text(encoding="utf-8") == "new bundle"
+    assert not list(tmp_path.glob(".bundle.backup-*"))
+
+
+def test_failed_bundle_rollback_preserves_backup_and_original_error(monkeypatch, tmp_path):
+    from knowledge_studio import raw_commit as rc
+
+    final = tmp_path / "bundle"
+    staging = tmp_path / "staging"
+    final.mkdir()
+    staging.mkdir()
+    (final / "old.txt").write_text("previous bundle", encoding="utf-8")
+    (staging / "new.txt").write_text("new bundle", encoding="utf-8")
+    replace = os.replace
+
+    def interrupted(source, destination):
+        if Path(source) == staging:
+            raise OSError("original publication failure")
+        if Path(source).name.startswith(".bundle.backup-"):
+            raise OSError("rollback remains blocked")
+        return replace(source, destination)
+
+    monkeypatch.setattr(os, "replace", interrupted)
+    with pytest.raises(OSError, match="original publication failure"):
+        rc._replace_bundle_directory(staging, final)
+
+    backup, = tmp_path.glob(".bundle.backup-*")
+    assert (backup / "old.txt").read_text(encoding="utf-8") == "previous bundle"
+    assert not final.exists()
+    assert (staging / "new.txt").read_text(encoding="utf-8") == "new bundle"
 
 
 def test_partial_step_must_also_persist_its_output():

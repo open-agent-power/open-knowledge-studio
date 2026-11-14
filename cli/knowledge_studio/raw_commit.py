@@ -31,7 +31,7 @@ from importlib.resources import files
 from pathlib import Path
 from typing import Any
 
-from knowledge_studio.store import repo_root
+from knowledge_studio.store import _replace_snapshot, repo_root
 
 
 def _fsync_directory(path: Path) -> None:
@@ -64,13 +64,13 @@ def _replace_bundle_directory(staging: Path, final_output: Path) -> None:
             backup = final_output.with_name(
                 f".{final_output.name}.backup-{uuid.uuid4().hex}"
             )
-            _os.replace(str(final_output), str(backup))
-        _os.replace(str(staging), str(final_output))
+            _replace_snapshot(str(final_output), str(backup))
+        _replace_snapshot(str(staging), str(final_output))
         _fsync_directory(final_output.parent)
     except BaseException:
         if backup is not None and backup.exists() and not final_output.exists():
             try:
-                _os.replace(str(backup), str(final_output))
+                _replace_snapshot(str(backup), str(final_output))
             except OSError:
                 # Preserve the original failure; the backup remains available
                 # for manual recovery rather than being deleted silently.
@@ -665,7 +665,7 @@ def _assemble_bundle(
                 stream.write(payload)
                 stream.flush()
                 _os.fsync(stream.fileno())
-            _os.replace(tmp, str(path))
+            _replace_snapshot(tmp, str(path))
             try:
                 fd = _os.open(str(path.parent), _os.O_RDONLY)
                 _os.fsync(fd)

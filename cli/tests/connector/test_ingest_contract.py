@@ -91,3 +91,31 @@ def test_run_ingest_accepts_partial_child_bundle(tmp_path, monkeypatch):
     )
 
     assert adapter.run_ingest(args) == 0
+
+
+def test_run_ingest_timeout_preserves_partial_result(tmp_path, monkeypatch, capsys):
+    source = tmp_path / "notes.md"
+    source.write_text("Source text", encoding="utf-8")
+    args = _args(str(source), tmp_path / "bundle")
+    monkeypatch.setattr(adapter, "_extractor_python", lambda extractor: Path("python"))
+
+    def timeout(command, **kwargs):
+        assert kwargs["timeout"] == 30
+        raise adapter.subprocess.TimeoutExpired(command, kwargs["timeout"])
+
+    monkeypatch.setattr(adapter.subprocess, "run", timeout)
+
+    assert adapter.run_ingest(args) == 2
+    result = json.loads(capsys.readouterr().out)
+    assert result["status"] == "partial"
+    assert result["error"]["code"] == "EXTRACTION_TIMEOUT"
+
+
+def test_ingest_parser_preserves_connector_defaults_and_mode_aliases():
+    for mode in ("quick", "forensic", "fast", "full"):
+        args = adapter.build_parser().parse_args(["ingest", "paper.pdf", "--mode", mode])
+        assert args.progress is False
+        assert args.formula_secondary is False
+        assert args.formula_max_regions == 20
+        assert args.timeout_seconds is None
+        assert adapter.ingest_timeout_seconds(args, "mineru") == 900

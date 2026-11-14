@@ -27,6 +27,14 @@ def platform_for(source: str) -> str:
     return host or "web"
 
 
+def extractor_capability(extractor: str | None) -> str | None:
+    """Return the installed capability required by the selected extractor."""
+    return {
+        "watch": "watch", "rapidocr": "watch", "markitdown": "document",
+        "mineru": "pdf", "formula": "formula",
+    }.get(extractor)
+
+
 def route_plan(source: str) -> dict[str, Any]:
     parsed = urlparse(source)
     suffix = Path(parsed.path if is_url(source) else source).suffix.lower()

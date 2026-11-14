@@ -92,19 +92,23 @@ def test_connect_skill_documented_install_works_without_creating_knowledge(tmp_p
     assert "oks wiki create" not in text
 
 
-def test_ingest_missing_connector_shows_explicit_action(monkeypatch):
-    monkeypatch.setattr(cli, "_connector_command", lambda: None)
+def test_ingest_reports_bundled_connector_failures(monkeypatch):
+    from oks_connector import raw_bundle_adapter
+
+    def fail(parsed):
+        raise RuntimeError("Extractor failed")
+
+    monkeypatch.setattr(cli, "_capability_already_installed", lambda _name: True)
+    monkeypatch.setattr(raw_bundle_adapter, "run_ingest", fail)
 
     result = runner.invoke(cli.app, ["ingest", "https://example.com/video"])
 
-    assert result.exit_code == 2
-    assert "Connector" in result.output  # appears in both zh/en
-    assert result.exit_code == 2
+    assert result.exit_code == 1
+    assert "Extractor failed" in result.output
 
 
 def test_ingest_recommends_capability_install(monkeypatch):
     """Pre-flight check suggests capability install when extractor is missing."""
-    monkeypatch.setattr(cli, "_connector_command", lambda: "built-in")
     monkeypatch.setattr(cli, "_capability_already_installed", lambda _name: False)
 
     result = runner.invoke(cli.app, ["ingest", "paper.pdf"])
@@ -113,11 +117,19 @@ def test_ingest_recommends_capability_install(monkeypatch):
     assert "capability install" in result.output  # appears in both zh/en
 
 
-def test_connector_command_reports_builtin_when_module_available(monkeypatch):
-    """After repo merge, _connector_command returns 'built-in' when the module is importable."""
-    monkeypatch.setattr(cli, "_connector_available", True)
+def test_ingest_unknown_source_reaches_the_builtin_route_without_optional_extractors(monkeypatch):
+    from oks_connector import raw_bundle_adapter
 
-    assert cli._connector_command() == "built-in"
+    checked = []
+    received = []
+    monkeypatch.setattr(cli, "_capability_already_installed", lambda name: checked.append(name) or False)
+    monkeypatch.setattr(raw_bundle_adapter, "run_ingest", lambda parsed: received.append(parsed.source) or 2)
+
+    result = runner.invoke(cli.app, ["ingest", "notes.unknown"])
+
+    assert result.exit_code == 2, result.output
+    assert received == ["notes.unknown"]
+    assert checked == []
 
 
 def test_ingest_forwards_mode_timeout_and_progress(monkeypatch):
@@ -130,9 +142,9 @@ def test_ingest_forwards_mode_timeout_and_progress(monkeypatch):
         received["source"] = parsed.source
         return 0
 
-    monkeypatch.setattr(cli, "_connector_command", lambda: "built-in")
     monkeypatch.setattr(cli, "_capability_already_installed", lambda _name: True)
-    monkeypatch.setattr(cli, "_connector_run_ingest", fake_run_ingest)
+    from oks_connector import raw_bundle_adapter
+    monkeypatch.setattr(raw_bundle_adapter, "run_ingest", fake_run_ingest)
 
     result = runner.invoke(
         cli.app,
@@ -153,9 +165,9 @@ def test_ingest_forwards_formula_secondary_for_pdf(monkeypatch):
         received["formula_max_regions"] = parsed.formula_max_regions
         return 0
 
-    monkeypatch.setattr(cli, "_connector_command", lambda: "built-in")
     monkeypatch.setattr(cli, "_capability_already_installed", lambda _name: True)
-    monkeypatch.setattr(cli, "_connector_run_ingest", fake_run_ingest)
+    from oks_connector import raw_bundle_adapter
+    monkeypatch.setattr(raw_bundle_adapter, "run_ingest", fake_run_ingest)
 
     result = runner.invoke(
         cli.app,
