@@ -224,3 +224,298 @@ def test_fts5_creates_missing_state_directory_before_connecting(tmp_path):
 
     assert db_path.is_file()
     assert any(hit.slug == "git-branching" for hit in hits)
+
+
+def test_fts5_reopens_current_index_without_reparsing_wiki(tmp_path, monkeypatch):
+    from knowledge_studio import store
+    from knowledge_studio.search.fts5 import FTS5Backend
+
+    wiki = tmp_path / "wiki"
+    wiki.mkdir()
+    path = wiki / "policy.md"
+    path.write_text("---\ntitle: Quasar\n---\nquasar policy", encoding="utf-8")
+    original = FTS5Backend(root=str(tmp_path))
+    try:
+        expected = original.search("quasar")
+        assert expected
+    finally:
+        original.close()
+
+    parsed = []
+    parse = store.parse_wiki_file
+
+    def track_parse(path, **kwargs):
+        parsed.append(path)
+        return parse(path, **kwargs)
+
+    monkeypatch.setattr(store, "parse_wiki_file", track_parse)
+    reopened = FTS5Backend(root=str(tmp_path))
+    try:
+        assert reopened.search("quasar") == expected
+        assert parsed == []
+    finally:
+        reopened.close()
+
+    path.write_text("---\ntitle: Pulsar\n---\npulsar revised policy", encoding="utf-8")
+    changed = FTS5Backend(root=str(tmp_path))
+    try:
+        assert changed.search("quasar") == []
+        assert [hit.slug for hit in changed.search("pulsar")] == ["policy"]
+        assert parsed == [path]
+    finally:
+        changed.close()
+
+
+@pytest.mark.parametrize("invalidator", ["schema", "engine", "pages", "wiki_fts", "skill_fts"])
+def test_fts5_reopens_invalidated_index_from_source(tmp_path, monkeypatch, invalidator):
+    from knowledge_studio import store
+    from knowledge_studio.search.fts5 import FTS5Backend
+
+    wiki = tmp_path / "wiki"
+    wiki.mkdir()
+    path = wiki / "policy.md"
+    path.write_text("---\ntitle: Quasar\n---\nquasar policy", encoding="utf-8")
+    original = FTS5Backend(root=str(tmp_path))
+    if not original._use_fts5:
+        original.close()
+        pytest.skip("SQLite has no FTS5 support")
+    try:
+        assert original.search("quasar")
+        if invalidator == "schema":
+            original._conn.execute("UPDATE meta SET value='node-v3' WHERE key='schema_version'")
+        elif invalidator == "engine":
+            original._conn.execute("UPDATE meta SET value='like' WHERE key='index_engine'")
+        else:
+            original._conn.execute(f"DROP TABLE {invalidator}")
+        original._conn.commit()
+    finally:
+        original.close()
+
+    parsed = []
+    parse = store.parse_wiki_file
+
+    def track_parse(path, **kwargs):
+        parsed.append(path)
+        return parse(path, **kwargs)
+
+    monkeypatch.setattr(store, "parse_wiki_file", track_parse)
+    reopened = FTS5Backend(root=str(tmp_path))
+    try:
+        assert [hit.slug for hit in reopened.search("quasar")] == ["policy"]
+        assert reopened.search("quasar")
+        assert parsed == [path]
+    finally:
+        reopened.close()
+
+
+@pytest.mark.parametrize("remove_source", [False, True])
+def test_fts5_explicit_override_is_local_to_its_instance(tmp_path, remove_source):
+    from knowledge_studio.search.fts5 import FTS5Backend
+
+    wiki = tmp_path / "wiki"
+    wiki.mkdir()
+    path = wiki / "policy.md"
+    path.write_text("---\ntitle: Quasar\n---\nquasar policy", encoding="utf-8")
+    original = FTS5Backend(root=str(tmp_path))
+    try:
+        assert original.search("quasar")
+        original.index([_page("policy", title="Pulsar", body="pulsar policy")])
+        assert original.search("quasar") == []
+        assert [hit.slug for hit in original.search("pulsar")] == ["policy"]
+    finally:
+        original.close()
+
+    if remove_source:
+        path.unlink()
+        wiki.rmdir()
+    reopened = FTS5Backend(root=str(tmp_path))
+    try:
+        assert reopened.search("pulsar") == []
+        assert [hit.slug for hit in reopened.search("quasar")] == ([] if remove_source else ["policy"])
+    finally:
+        reopened.close()
+
+
+@pytest.mark.parametrize("reopen", [False, True])
+def test_fts5_retries_incomplete_source_reads(tmp_path, monkeypatch, reopen):
+    from knowledge_studio import store
+    from knowledge_studio.search.fts5 import FTS5Backend
+
+    wiki = tmp_path / "wiki"
+    wiki.mkdir()
+    path = wiki / "policy.md"
+    path.write_text("---\ntitle: Quasar\n---\nquasar policy", encoding="utf-8")
+    read = type(path).read_text
+    unavailable = True
+
+    def read_text(file, *args, **kwargs):
+        if file == path and unavailable:
+            raise PermissionError("temporarily unreadable")
+        return read(file, *args, **kwargs)
+
+    monkeypatch.setattr(type(path), "read_text", read_text)
+    assert store.parse_wiki_file(path) is None
+    with pytest.raises(PermissionError):
+        store.parse_wiki_file(path, strict=True)
+    instance = FTS5Backend(root=str(tmp_path))
+    try:
+        assert instance.search("quasar") == []
+        unavailable = False
+        if reopen:
+            instance.close()
+            instance = FTS5Backend(root=str(tmp_path))
+        assert [hit.slug for hit in instance.search("quasar")] == ["policy"]
+    finally:
+        instance.close()
+
+
+def test_fts5_readable_invalid_markdown_does_not_prevent_reuse(tmp_path, monkeypatch):
+    from knowledge_studio import store
+    from knowledge_studio.search.fts5 import FTS5Backend
+
+    wiki = tmp_path / "wiki"
+    wiki.mkdir()
+    (wiki / "policy.md").write_text("---\ntitle: Quasar\n---\nquasar policy", encoding="utf-8")
+    (wiki / "no-frontmatter.md").write_text("# Unstructured", encoding="utf-8")
+    (wiki / "bad-yaml.md").write_text("---\ntitle: [\n---\n# Invalid", encoding="utf-8")
+    original = FTS5Backend(root=str(tmp_path))
+    try:
+        assert original.search("quasar")
+    finally:
+        original.close()
+
+    def unexpected_parse(*args, **kwargs):
+        pytest.fail("Unchanged readable files should reuse the persisted index")
+
+    monkeypatch.setattr(store, "parse_wiki_file", unexpected_parse)
+    reopened = FTS5Backend(root=str(tmp_path))
+    try:
+        assert [hit.slug for hit in reopened.search("quasar")] == ["policy"]
+    finally:
+        reopened.close()
+
+
+def test_fts5_concurrent_refresh_keeps_rows_and_freshness_together(tmp_path, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    from queue import Queue
+    from threading import Event, local
+
+    from knowledge_studio import store
+    from knowledge_studio.search.fts5 import FTS5Backend
+
+    wiki = tmp_path / "wiki"
+    wiki.mkdir()
+    path = wiki / "policy.md"
+    path.write_text("---\ntitle: Quasar\n---\nquasar policy", encoding="utf-8")
+    seed = FTS5Backend(root=str(tmp_path))
+    seed.close()
+    ready = {name: Event() for name in ("old", "new")}
+    start = {name: Event() for name in ("old", "new")}
+    old_read, release_old = Event(), Event()
+    new_committed, release_new_commit = Event(), Event()
+    new_stages, role = Queue(), local()
+    parse = store.parse_wiki_file
+
+    def coordinated_parse(file, **kwargs):
+        page = parse(file, **kwargs)
+        if getattr(role, "name", None) == "old":
+            old_read.set()
+            assert release_old.wait(5)
+        elif getattr(role, "name", None) == "new":
+            new_stages.put("read")
+        return page
+
+    class ObservedCommit:
+        def __init__(self, connection):
+            self.connection = connection
+
+        def __getattr__(self, name):
+            return getattr(self.connection, name)
+
+        def after_commit(self):
+            new_committed.set()
+            assert release_new_commit.wait(5)
+
+        def commit(self):
+            self.connection.commit()
+            self.after_commit()
+
+        def __enter__(self):
+            self.connection.__enter__()
+            return self
+
+        def __exit__(self, *error):
+            result = self.connection.__exit__(*error)
+            if error[0] is None:
+                self.after_commit()
+            return result
+
+    def refresh(name):
+        role.name = name
+        backend = FTS5Backend(root=str(tmp_path))
+        try:
+            if name == "new":
+                backend._conn.set_trace_callback(
+                    lambda sql: new_stages.put("writer") if sql == "BEGIN IMMEDIATE" else None
+                )
+                backend._conn = ObservedCommit(backend._conn)
+            ready[name].set()
+            assert start[name].wait(5)
+            backend.search("pulsar")
+        finally:
+            backend.close()
+
+    monkeypatch.setattr(store, "parse_wiki_file", coordinated_parse)
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        old = executor.submit(refresh, "old")
+        new = executor.submit(refresh, "new")
+        try:
+            assert ready["old"].wait(5) and ready["new"].wait(5)
+            start["old"].set()
+            assert old_read.wait(5)
+            path.write_text("---\ntitle: Pulsar revised\n---\npulsar revised policy", encoding="utf-8")
+            start["new"].set()
+            stage = new_stages.get(timeout=5)
+            if stage == "read":
+                assert new_committed.wait(5)
+            release_old.set()
+            old.result(timeout=5)
+            assert new_committed.wait(5)
+            release_new_commit.set()
+            new.result(timeout=5)
+        finally:
+            for event in (*start.values(), release_old, release_new_commit):
+                event.set()
+
+    reopened = FTS5Backend(root=str(tmp_path))
+    try:
+        assert [hit.slug for hit in reopened.search("pulsar")] == ["policy"]
+        assert reopened.search("quasar") == []
+    finally:
+        reopened.close()
+
+
+def test_fts5_failed_index_rolls_back_rows_and_freshness(tmp_path):
+    import sqlite3
+
+    from knowledge_studio.search.fts5 import FTS5Backend
+
+    wiki = tmp_path / "wiki"
+    wiki.mkdir()
+    (wiki / "policy.md").write_text("---\ntitle: Quasar\n---\nquasar policy", encoding="utf-8")
+    backend = FTS5Backend(root=str(tmp_path))
+    try:
+        assert backend.search("quasar")
+        marker = backend._conn.execute("SELECT value FROM meta WHERE key='wiki_fingerprint'").fetchone()
+        backend._conn.execute(
+            "CREATE TRIGGER reject_pulsar BEFORE UPDATE OF title ON pages "
+            "WHEN NEW.title='Pulsar' BEGIN SELECT RAISE(ABORT, 'write rejected'); END"
+        )
+        backend._conn.commit()
+        with pytest.raises(sqlite3.IntegrityError, match="write rejected"):
+            backend.index([_page("policy", title="Pulsar", body="pulsar policy")])
+        assert not backend._conn.in_transaction
+        assert backend._conn.execute("SELECT title FROM pages").fetchall() == [("Quasar",)]
+        assert backend._conn.execute("SELECT value FROM meta WHERE key='wiki_fingerprint'").fetchone() == marker
+    finally:
+        backend.close()
