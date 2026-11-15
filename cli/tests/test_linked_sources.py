@@ -192,6 +192,29 @@ def test_standard_buckets_are_federated_without_copying_or_executing(unified):
     assert sources.read(root,'team','wiki/one.md')['source_sha256']==before
 
 
+def test_team_mail_is_readable_but_not_approved_knowledge_or_runtime_state(unified):
+    from knowledge_studio import mail
+    from knowledge_studio.vfs import VfsResolver, VfsService
+
+    root, repo = unified
+    sent = mail.write_message(repo, sender='owner', sender_kind='human',
+        recipients=['member'], title='Team handoff', body='Team handoff checklist')
+    runtime = repo / 'mail/sessions/private.md'
+    runtime.parent.mkdir(parents=True, exist_ok=True)
+    runtime.write_text('# Machine-local session', encoding='utf-8')
+    commit(repo)
+    relative = sent['path'].relative_to(repo).as_posix()
+    snapshot = sources.catalog(root)
+    assert not snapshot['warnings']
+    messages = [e for e in snapshot['sources'][0]['entries'] if e['asset_kind'] == 'mail']
+    assert len(messages) == 1 and messages[0]['title'] == 'Team handoff'
+    assert messages[0]['status'] == 'reference' and not messages[0]['pending']
+    fs = VfsService(VfsResolver(root))
+    assert fs.read('oks://team/team/' + relative)['content'] == sent['path'].read_text()
+    assert [e['name'] for e in fs.ls('oks://team/team/mail/')['entries']] == ['messages']
+    assert sources.search(root, 'Team handoff')[0] == []
+
+
 def test_team_timestamp_metadata_is_json_safe_in_contexts_and_document_reader(unified):
     from threading import Thread
     from urllib.request import urlopen

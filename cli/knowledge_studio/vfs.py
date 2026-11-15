@@ -105,6 +105,7 @@ class ResolvedNode:
     path: Path | None
     mount: Mount | None
     synthetic_root: bool = False
+    synthetic_directory: bool = False
 
 
 class VfsResolver:
@@ -146,7 +147,8 @@ class VfsResolver:
         resolved_candidate = candidate.resolve(strict=False)
         if not resolved_candidate.is_relative_to(resolved_root):
             raise VfsError("INVALID_URI", "URI escapes its public scope")
-        if must_exist and not candidate.exists():
+        empty_mount = not uri.parts and not candidate.exists()
+        if must_exist and not candidate.exists() and not empty_mount:
             # Allow canonical URIs to omit the ``.md`` suffix so they do not
             # expose the on-disk file format: when the bare candidate is missing
             # and a ``.md`` sibling exists, transparently resolve to it.
@@ -155,7 +157,7 @@ class VfsResolver:
                 candidate = md_candidate
             else:
                 raise VfsError("PATH_NOT_FOUND", f"Path not found: {uri.render()}")
-        return ResolvedNode(uri=uri, path=candidate, mount=mount)
+        return ResolvedNode(uri=uri, path=candidate, mount=mount, synthetic_directory=empty_mount)
 
     def uri_for_path(self, path: Path) -> str:
         candidate = path.expanduser()
@@ -249,6 +251,8 @@ class VfsService:
 
     def _visible_children(self, path: Path, mount: Mount) -> list[Path]:
         mount_root = self.resolver.root.joinpath(*mount.relative_root)
+        if path == mount_root and not path.exists():
+            return []
         children: list[Path] = []
         for child in path.iterdir():
             relative = child.relative_to(mount_root).parts
@@ -284,7 +288,7 @@ class VfsService:
                 ],
             }
         assert node.path is not None and node.mount is not None
-        if not node.path.is_dir():
+        if not node.path.is_dir() and not node.synthetic_directory:
             raise VfsError("NOT_DIRECTORY", f"Not a directory: {node.uri.render()}")
 
         entries: list[dict[str, str]] = []
@@ -306,6 +310,9 @@ class VfsService:
                 "mount": None,
             }
         assert node.path is not None and node.mount is not None
+        if node.synthetic_directory:
+            return {"uri": node.uri.render(), "type": "directory", "size": None,
+                    "modified_at": None, "mount": node.mount.scope}
         node_type = _node_type(node.path)
         metadata = node.path.stat()
         canonical_uri = self.resolver.uri_for_path(node.path)
@@ -441,7 +448,7 @@ class VfsService:
                         yield from request(self.resolver.root, "oks://team/", "tree", depth=depth-1, max_entries=max_entries)["entries"]
                 return
             assert node.path is not None and node.mount is not None
-            if not node.path.is_dir():
+            if not node.path.is_dir() and not node.synthetic_directory:
                 raise VfsError(
                     "NOT_DIRECTORY", f"Not a directory: {node.uri.render()}"
                 )
@@ -470,7 +477,7 @@ class VfsService:
             children = self.ls(uri)["entries"]
         else:
             assert node.path is not None and node.mount is not None
-            if not node.path.is_dir():
+            if not node.path.is_dir() and not node.synthetic_directory:
                 raise VfsError(
                     "NOT_DIRECTORY", f"Not a directory: {node.uri.render()}"
                 )
@@ -510,7 +517,7 @@ class VfsService:
             from .library_vfs import request
             return request(self.resolver.root, under, "find", query=query, max_results=max_results)
         node = self.resolver.resolve(under)
-        if not node.synthetic_root and (node.path is None or not node.path.is_dir()):
+        if not node.synthetic_root and not node.synthetic_directory and (node.path is None or not node.path.is_dir()):
             raise VfsError("NOT_DIRECTORY", f"Not a directory: {node.uri.render()}")
 
         def files_in(path: Path, mount: Mount):

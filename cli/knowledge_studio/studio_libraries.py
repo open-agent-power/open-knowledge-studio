@@ -20,10 +20,18 @@ def _version(root):
 
 
 def libraries(root):
+    # Keep the user-selected alias visible while all reads stay canonical.
+    personal_path = str(root)
+    try:
+        selected = config.load_config().get('knowledge_base_path')
+        if isinstance(selected, str) and selected and Path(selected).expanduser().resolve() == root.resolve():
+            personal_path = str(Path(selected).expanduser().absolute())
+    except (OSError, ValueError):
+        pass
     return {
         'knowledge_base': str(root),
-        'personal_path': str(root),
-        'personal_name': root.name,
+        'personal_path': personal_path,
+        'personal_name': Path(personal_path).name,
         'sources': linked_sources.configuration(root),
         'sources_version': _version(root),
     }
@@ -91,6 +99,9 @@ def switch_personal(server, request):
         if request.get('expected_knowledge_base') != str(server.kb_root):
             raise ValueError('知识库已切换，请重新打开')
         if new_root == server.kb_root:
+            current_config = config.load_config()
+            current_config['knowledge_base_path'] = str(Path(value.strip()).expanduser().absolute())
+            config.save_config(current_config)
             return libraries(new_root)
         # Check configuration before moving the session to another repository.
         libraries(new_root)
@@ -101,7 +112,7 @@ def switch_personal(server, request):
             from .daily_learning import CaptureService
             daily = CaptureService(new_root)
         current_config = config.load_config()
-        current_config['knowledge_base_path'] = str(new_root)
+        current_config['knowledge_base_path'] = str(Path(value.strip()).expanduser().absolute())
         try:
             history.start()
             if daily is not None:

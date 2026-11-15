@@ -18,6 +18,29 @@ def personal(path):
     return path.resolve()
 
 
+def test_switch_to_alias_of_current_library_persists_chosen_display_path(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, 'config_dir', lambda: tmp_path / 'global-config')
+    root = personal(tmp_path / 'actual')
+    alias = tmp_path / 'chosen-library'
+    try:
+        alias.symlink_to(root, target_is_directory=True)
+    except OSError:
+        pytest.skip('Directory symlinks unavailable')
+    server = create_server(root, 0, local_edit=True)
+    previous = server.history_service
+    try:
+        result = libraries.switch_personal(server, {
+            'expected_knowledge_base': str(root), 'personal_path': str(alias)})
+        assert result['knowledge_base'] == str(root)
+        assert result['personal_path'] == str(alias)
+        assert result['personal_name'] == alias.name
+        assert server.history_service is previous
+        assert config.load_config()['knowledge_base_path'] == str(alias)
+        assert config.get_kb_root() == root
+    finally:
+        server.server_close()
+
+
 def team(path):
     path.mkdir()
     subprocess.run(['git', 'init', '-q', str(path)], check=True)

@@ -5,6 +5,20 @@ from pathlib import Path
 import pytest
 
 
+def test_uncreated_trace_mount_is_empty_without_creating_files(tmp_path):
+    from knowledge_studio.vfs import VfsResolver, VfsService, VfsError
+
+    service = VfsService(VfsResolver(tmp_path))
+    assert service.stat('oks://traces/')['type'] == 'directory'
+    assert service.ls('oks://traces/')['entries'] == []
+    assert service.tree('oks://traces/')['entries'] == []
+    assert service.overview('oks://traces/')['counts']['file'] == 0
+    assert service.find('anything', under='oks://traces/')['matches'] == []
+    with pytest.raises(VfsError, match='Path not found'):
+        service.read('oks://traces/missing/events.jsonl')
+    assert list(tmp_path.iterdir()) == []
+
+
 @pytest.fixture
 def vfs_root(tmp_path: Path) -> Path:
     for relative in (

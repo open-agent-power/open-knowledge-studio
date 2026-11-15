@@ -13,7 +13,7 @@ from urllib.parse import quote
 
 import yaml
 
-BUCKETS = ("raw", "drafts", "wiki", "skills", "profiles", "records")
+BUCKETS = ("raw", "drafts", "wiki", "skills", "profiles", "records", "mail")
 TYPES = {"concept", "strategy", "anti-pattern"}
 
 
@@ -62,6 +62,8 @@ def unified_snapshot(path, revision, repository, name, *, approved_only=False):
         parts = PurePosixPath(relative).parts
         if not parts or (parts[0] not in BUCKETS and relative not in {"README.md", "readme.md"}) or not relative.endswith(".md"):
             continue
+        if parts[0] == 'mail' and (len(parts) != 3 or parts[1] != 'messages'):
+            continue  # Only shared canonical messages, never inbox/session state.
         if any(part.startswith(".") for part in parts):
             continue
         if mode not in {b"100644", b"100755"} or kind != b"blob":
@@ -80,7 +82,13 @@ def unified_snapshot(path, revision, repository, name, *, approved_only=False):
         if approved_only and bucket != "wiki":
             continue
         text = _blob(path, revision, relative).decode("utf-8")
-        meta = _metadata(text)
+        message = None
+        if bucket == 'mail':
+            from .mail import parse_message_text
+            message = parse_message_text(Path(relative), text)
+            meta = message['meta']
+        else:
+            meta = _metadata(text)
         # Executable packages never enter knowledge recall as instructions.
         kind = "skills" if bucket == "wiki" and meta.get("skill_id") else bucket
         status = "candidate" if bucket == "drafts" else "reference"
@@ -102,7 +110,7 @@ def unified_snapshot(path, revision, repository, name, *, approved_only=False):
         if identifier in used_ids:
             raise ValueError("Duplicate library document identity")
         used_ids.add(identifier)
-        title = meta.get("title")
+        title = message['title'] if message else meta.get("title")
         if not isinstance(title, str) or not title.strip():
             heading = re.search(r"^#\s+(.+)$", text, re.M)
             title = heading[1] if heading else PurePosixPath(relative).stem

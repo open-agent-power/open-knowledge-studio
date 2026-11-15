@@ -113,6 +113,11 @@ test("read-only discussion create action remains visible with a concrete disable
   assert.match(page.dom.$("newGoal").title, /本地编辑/);
 });
 
+test("Studio no longer exposes the optional question-mark guide launcher", () => {
+  assert.doesNotMatch(source("studio.html"), /id="showGuide"/);
+  assert.doesNotMatch(source("studio.js"), /\$\("showGuide"\)/);
+});
+
 test("pending comments block primary navigation and browser unload", async () => {
   const page = await controller();
   page.state.commentDraft = Symbol("pending");

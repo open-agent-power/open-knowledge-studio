@@ -467,16 +467,6 @@ import { createSettingsView } from "./studio/settings.js";
     }
     await loadView(true);
   });
-  $("showGuide").onclick = async () => {
-    if (!canLeave()) return;
-    state.onboarding = writable()
-      ? await post("/api/studio/onboarding", { action: "reset" })
-      : {
-          status: "not_started",
-          steps: { discuss: false, goals: false, learning: false },
-        };
-    render();
-  };
   restore();
   void (async () => {
     state.context = await window.OksWorkspace.ready;
