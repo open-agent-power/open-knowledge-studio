@@ -17,9 +17,19 @@ BUCKETS = ("raw", "drafts", "wiki", "skills", "profiles", "records")
 TYPES = {"concept", "strategy", "anti-pattern"}
 
 
+class _MetadataLoader(yaml.SafeLoader):
+    """Keep YAML timestamps as source strings for JSON-facing library metadata."""
+
+
+_MetadataLoader.add_constructor(
+    'tag:yaml.org,2002:timestamp',
+    lambda loader, node: loader.construct_scalar(node),
+)
+
+
 def _metadata(text):
     match = re.match(r"\A\ufeff?---\r?\n(.*?)\r?\n---(?:\r?\n|$)", text, re.S)
-    meta = yaml.safe_load(match[1]) if match else {}
+    meta = yaml.load(match[1], Loader=_MetadataLoader) if match else {}
     if not isinstance(meta or {}, dict):
         raise ValueError("Library frontmatter must be a mapping")
     return meta or {}

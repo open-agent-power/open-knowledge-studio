@@ -192,6 +192,43 @@ def test_standard_buckets_are_federated_without_copying_or_executing(unified):
     assert sources.read(root,'team','wiki/one.md')['source_sha256']==before
 
 
+def test_team_timestamp_metadata_is_json_safe_in_contexts_and_document_reader(unified):
+    from threading import Thread
+    from urllib.request import urlopen
+    from knowledge_studio.mail_web import create_server
+
+    root, repo = unified
+    relative = 'profiles/users/member.md'
+    path = repo / relative
+    path.parent.mkdir(parents=True)
+    text = ('---\nname: Member\nupdated: 2026-11-12\n'
+            'history:\n  - at: 2026-11-12T03:54:29Z\n'
+            '    active: true\n    count: 2\n---\n# Member\n')
+    path.write_text(text, encoding='utf-8')
+    commit(repo)
+    original = path.read_bytes()
+    (root / 'mail').mkdir(exist_ok=True)
+    (root / 'wiki').mkdir(exist_ok=True)
+    server = create_server(root, 0)
+    worker = Thread(target=server.serve_forever, daemon=True)
+    worker.start()
+    try:
+        with urlopen(f'http://127.0.0.1:{server.server_port}/api/studio/contexts', timeout=10) as response:
+            assert response.status == 200
+            catalog = json.load(response)
+        member = next(entry for entry in catalog['entries']
+                      if entry.get('source_path') == relative)
+        assert member['metadata']['updated'] == '2026-11-12'
+        assert member['metadata']['history'] == [{'at': '2026-11-12T03:54:29Z', 'active': True, 'count': 2}]
+        snapshot = sources.read(root, 'team', relative)
+        assert json.loads(json.dumps(snapshot))['metadata'] == member['metadata']
+        assert path.read_bytes() == original
+    finally:
+        server.shutdown()
+        server.server_close()
+        worker.join(timeout=5)
+
+
 def test_team_virtual_files_keep_commit_and_reject_traversal(unified):
     from knowledge_studio.vfs import VfsService,VfsResolver,VfsError
     root,repo=unified

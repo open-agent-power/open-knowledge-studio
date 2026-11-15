@@ -87,7 +87,7 @@ import { createSettingsView } from "./studio/settings.js";
   }
   function updateRoute() {
     const p = new URLSearchParams({ tab: state.tab });
-    if (state.date) p.set("date", state.date);
+    if (state.date && state.tab !== "learning") p.set("date", state.date);
     if (state.selected && state.tab === "goals") p.set("file", state.selected);
     if (state.tab === "discuss") {
       if (state.discuss === "history") p.set("view", "history");
@@ -133,8 +133,8 @@ import { createSettingsView } from "./studio/settings.js";
     if (!["discuss", "goals", "learning"].includes(state.tab))
       state.tab = "discuss";
     state.scope = params.get("scope") || "";
-    state.discuss = params.get("view") === "graph" ||
-      (!params.has("view") && state.scope.startsWith("drafts/"))
+    state.discuss = state.tab === "discuss" && (params.get("view") === "graph" ||
+      (!params.has("view") && state.scope.startsWith("drafts/")))
       ? "graph" : "history";
     state.date =
       params.get("date") ||
@@ -232,6 +232,7 @@ import { createSettingsView } from "./studio/settings.js";
   async function navigate(tab) {
     if (!canLeave()) return;
     state.tab = tab;
+    if (tab === "discuss") state.discuss = "history";
     state.scope = "";
     state.selected = "";
     await selectDate();

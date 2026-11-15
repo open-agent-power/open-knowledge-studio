@@ -84,6 +84,28 @@ test("default discussion keeps date navigation and does not load Draft review", 
   assert.equal(page.dom.$("content").children.some(node => node.className === "discussion-view-tabs"), false);
 });
 
+test("Learning graph route never hides discussion dates after switching tabs", async () => {
+  const page = await controller({ hash: "#tab=learning&date=2026-11-14&view=graph" });
+  assert.equal(page.dom.$("scope").hidden, true);
+  assert.equal(new URLSearchParams(page.location.hash.slice(1)).has("date"), false);
+  await page.actions.navigate("discuss");
+  assert.equal(page.state.discuss, "history");
+  assert.equal(page.dom.$("scope").hidden, false);
+  assert.equal(page.dom.$("previousDay").hidden, false);
+  assert.equal(page.dom.$("nextDay").hidden, false);
+  assert.ok(page.calls.at(-1).includes("kind=discuss") && page.calls.at(-1).includes("date=2026-11-14"));
+  page.dom.$("previousDay").onclick();
+  await settle(); await settle();
+  assert.equal(page.state.date, "2026-11-13");
+  await page.actions.navigate("goals");
+  assert.equal(page.dom.$("scope").hidden, false);
+  await page.actions.navigate("learning");
+  assert.equal(page.dom.$("scope").hidden, true);
+  await page.actions.navigate("discuss");
+  assert.equal(page.dom.$("scope").hidden, false);
+  assert.equal(page.state.date, "2026-11-13");
+});
+
 test("read-only discussion create action remains visible with a concrete disabled reason", async () => {
   const page = await controller({ hash: "#tab=discuss", context: { local_edit: false } });
   assert.equal(page.dom.$("newGoal").hidden, false);
