@@ -35,7 +35,7 @@ B 站来源没有可直接使用的平台字幕，实际路径为本地媒体 �
 
 <figure class="oks-evidence oks-evidence-panel">
   <div class="oks-evidence-viewport">
-    <img src="../assets/hosted-learning/02-evidence-raw.png" alt="宿主 DSH 的 OKS 面板展示两个来源形成的 Raw Bundle 列表">
+    <img src="../assets/hosted-learning/02-evidence-raw.png" alt="宿主 DSH 的 OKS Studio 展示两个来源形成的 Raw Bundle 列表">
   </div>
   <figcaption>来源与提取结果已保存。Raw Bundle 记录材料，不证明材料中的主张为真。<a href="../assets/hosted-learning/02-evidence-raw.png">查看原图</a></figcaption>
 </figure>
@@ -46,22 +46,22 @@ Agent 将视频作者主张、提取证据和自己的推断分开，列出还�
 
 <figure class="oks-evidence oks-evidence-panel">
   <div class="oks-evidence-viewport">
-    <img src="../assets/hosted-learning/03-candidate-review.png" alt="宿主 DSH 的 OKS 面板显示待审核候选、证据范围和待核验主张">
+    <img src="../assets/hosted-learning/03-candidate-review.png" alt="宿主 DSH 的 OKS Studio 显示待审核候选、证据范围和待核验主张">
   </div>
   <figcaption>候选保留来源与不确定项，等待人工审核。<a href="../assets/hosted-learning/03-candidate-review.png">查看原图</a></figcaption>
 </figure>
 
 审核者需要对照原视频修正转写，将产品参数与官方资料核对，并用固定数据集检验能力判断。只有明确接受的内容才能进入 Wiki；与旧知识的关系由审核结果决定。
 
-## 检查召回边界
+## 检查查询边界
 
 隔离验收副本曾测试 Promote 与 Recall 的界面流转，不能替代正式实例的人审。下图中已有 Kimi 页面仅覆盖视频中的模型介绍，不足以支持“智能文档分析系统”的设计结论，其余无关命中也被排除。
 
 <figure class="oks-evidence">
   <div class="oks-evidence-viewport">
-    <img src="../assets/hosted-learning/04-recall-boundary.png" alt="召回结果指出已审核知识不足以支持系统设计结论，并排除无关命中">
+    <img src="../assets/hosted-learning/04-recall-boundary.png" alt="查询结果指出已审核知识不足以支持系统设计结论，并排除无关命中">
   </div>
-  <figcaption>召回结果需要核对适用范围。证据不足时，Agent 应说明缺口。<a href="../assets/hosted-learning/04-recall-boundary.png">查看原图</a></figcaption>
+  <figcaption>查询结果需要核对适用范围。证据不足时，Agent 应说明缺口。<a href="../assets/hosted-learning/04-recall-boundary.png">查看原图</a></figcaption>
 </figure>
 
 ## 结果与限制
@@ -80,4 +80,4 @@ Agent 将视频作者主张、提取证据和自己的推断分开，列出还�
 
 下一步补充官方技术报告或 benchmark，围绕同一问题提出新候选，说明它如何补充、印证或质疑已有内容，再由人审核。
 
-用自己的问题尝试时，从一份短材料开始，按[第一次知识循环](../first-knowledge-loop.html)完成收录、审核和后续引用。
+用自己的问题尝试时，从一份短材料开始，按[第一次实践](../first-knowledge-loop.html)完成收录、审核和后续引用。

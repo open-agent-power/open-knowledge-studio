@@ -3,296 +3,219 @@ title: Mail 协议
 nav_order: 5
 parent: 参考手册
 ---
+
 # Mail 协议
 
+OKS Mail 是一套基于文件的协作记录。它解决的问题很具体：一项工作跨越多个 Session、Agent、宿主或机器后，仍能查到谁发送了什么、消息属于哪个 Thread、哪些 Session 接收过，以及后续有没有回复。
+
+Mail 没有中心消息服务，也不负责启动 Agent。它适合保存交接、结果、阻塞、审核请求、批注和对 OKS 产物的引用。任务状态、知识审核和执行过程分别由任务、Candidate、Wiki 与 Trace 管理。
 
 <figure>
-  <img src="../assets/diagrams/mail-model.svg" alt="Mail 对象模型：Thread 承载有主题边界的通信，Message 携带意图与证据，Session Receipt 记录每次独立投递，各 Host Adapter 共享同一 Mail Core。">
+  <img src="../assets/diagrams/mail-model.svg" alt="Mail 数据模型：Message 按 thread_id 组成 Thread；每个收件人有独立的已读和归档状态；每个 Session 有独立的注入、呈现和确认记录；本机通知只记录待提示状态。">
 </figure>
 
-OKS Mail 是 OKS 知识主线的 Git-backed 持久协作事实侧车。Human 和 Agent 可用耐久的 Thread 在
-Session、Agent、Host 和机器之间继续消息、回复、Receipt 事实和 Evidence Ref；它
-保存可重建的状态投影，但不负责启动进程、报告在线状态、调用模型或保证任务已经执行。
+## 数据怎样保存
 
-Thread 是有主题边界的持久通信上下文：它不是任务、工作流状态，也不只是“一封邮件”。Agent 是
-稳定的协议身份，Session 是一次具体执行实例；Session 边界不应把用户所见的对话
-切成多个 Thread。Machine 与 Session 是按需查看的 provenance，不是在线、完成或
-认证声明。
+| 对象 | 表示什么 | 保存位置 |
+|---|---|---|
+| Message | 一次已经写入的消息，保存发送方、收件人、正文、时间、分类和引用 | `mail/messages/<message-id>.md` |
+| Thread | 具有相同 `thread_id` 的一组 Message | 读取时动态组成，没有单独的 Thread 正文文件 |
+| 收件人状态 | 某个 Agent 对一条 Message 的已读、归档和 Thread 状态 | `mail/inbox/<agent>/<message-id>.json` |
+| Session Receipt | 某条 Message 是否进入、呈现给或被某个 Session 确认 | `mail/receipts/<session>/<message-id>.json` |
+| Receipt Event | Receipt 每次向前变化的追加记录 | `mail/receipt-events/<session>/<message-id>/` |
+| Session Registry | 已登记的 Agent Session、机器、工作目录和范围 | `mail/sessions/<session-id>.json` |
+| Notification | 本机对某个 Agent 的提示意图 | `mail/notifications/<agent>/<message-id>.json` |
 
-## 三类执行边界
+Message 正文写入后不再修改。已读和归档属于收件人，Receipt 属于具体 Session。一个 Message 因而可以让不同 Agent、不同 Session 保留各自状态，同时保持原消息不变。
 
-Mail 的统一问题是：工作上下文如何跨执行边界继续存在。边界不同，接入方式可以不
-同，但持久对象仍是同一套 Thread、Message、Receipt 和 Evidence Ref。
+Receipt Event 是状态变化的事实记录，Receipt 文件是便于读取的当前快照。快照丢失时，当前实现可以根据 Event 重建 Receipt。
 
-| 边界 | 典型接力 | 在线承载 | OKS Mail 留下的事实 |
-| --- | --- | --- | --- |
-| Session / Subagent | 同一 Agent 换会话、交接子 Agent | Host 内部消息或当前进程 | 可恢复的 handoff、决定、阻塞和证据引用 |
-| Agent / Host | Claude、Codex、Pi 之间交接 | 各自 Host Adapter | 统一路由、来源 provenance、Receipt 和原 Thread 回复 |
-| Machine / Team | 电脑 A 到电脑 B，离线后继续 | Git fetch/merge/push | 可迁移、可审计、可合并的 canonical Mail 事实 |
+## 一条消息怎样流转
 
-宿主自带的 SendMessage、MCP Mail 或 Agent Teams 适合高频、临时、在线消息；需要跨
-Session、跨运行或跨机器保留的协作事实才进入 OKS Mail。Mail 不把实时消息总线、
-presence、daemon 或模型调度复制进 Core。
+1. 发送方用 `send`、`delegate` 或 `reply` 写入 Message。系统同时为每个收件人创建独立的收件人状态。
+2. 接收方的宿主 Hook 或 `oks mail wait` 找到尚未归档、且当前 Session 没有 Receipt 的 Message。
+3. 宿主自动协作记录可以先写入 `injected`；Hook 或 `mail wait` 实际把消息交给 Session 时写入 `presented`。
+4. 接收方运行 `oks mail ack` 后，Receipt 进入 `acknowledged`。
+5. Agent 核对文件和运行结果，执行任务，再在原 Thread 中回复结果、阻塞或待确认事项。
+6. 收件人可以标记已读或归档。归档后，这些 Message 不再自动投递给该收件人，但文件仍然保留，其他收件人也不受影响。
 
-## Host-agnostic 定位
+`delegate` 只是把任务、上下文和验收条件整理为一条 `handoff` Message。它不会建立另一套任务存储，也不会启动接收方 Agent。
 
-**OKS Mail 是跨 Host 的持久通信协议，DSH 只是其中一个适配器。** Mail
-Core 拥有 canonical Message、Thread、Agent Recipient State、Session
-Receipt，以及用于表达通知意图的 Notification Request；它不拥有任何
-特定宿主的 UI、进程生命周期或模型会话。
+## 状态不能混用
 
-```text
-                         OKS Mail Protocol
-                 ┌──────────────┼──────────────┐
-                 ▼              ▼              ▼
-          Claude Adapter   Codex Adapter   DSH Adapter
-            Hook / CLI       Hook / CLI      RPC / UI
-                 │              │              │
-                 └──────────────┴──────────────┘
-                                │
-                        Future Host Adapters
-                         Pi / Desktop / Web / TUI
-```
+| 观察到的状态 | 能说明什么 | 不能说明什么 |
+|---|---|---|
+| Message 已保存 | 发送方已经写入消息文件 | 接收方已经看到或执行 |
+| `read_at` | 该收件人把消息标为已读 | 某个 Session 已接收、确认或开始任务 |
+| Receipt 为 `injected` | 宿主记录内容已进入该 Session 的上下文 | 内容已经显示给 Agent，或 Agent 已理解 |
+| Receipt 为 `presented` | Hook 或 `mail wait` 已把消息提供给该 Session | Agent 已接受任务或开始执行 |
+| Receipt 为 `acknowledged` | 该 Session 明确确认收到 | 任务已经完成或结果已经通过验收 |
+| Thread 中有回复 | 对方写入了后续 Message | 回复正确，或任务已经完成 |
+| `archived_at` | 该收件人归档了这条 Message；按 Thread 归档时，命令会更新当时可见的每条 Message | 原 Message 被删除，其他收件人也已归档，或该 Thread 的未来回复会自动归档 |
+| Notification 为 `pending` | 本机记录了提示意图 | Agent 已被唤醒 |
+| Notification 为 `presented` | 某个 Session 呈现消息后关闭了提示意图 | 该 Session 已确认或完成任务 |
 
-Host Adapter 只负责把协议接入自己的运行时：接收、呈现、ack、reply，或
-提供相应的人工/终端控制面。DSH 是当前第一个完整的 Human/Work UI
-Adapter（也可称 DSH Coordination UI），不是 Mail 的宿主、唯一前端或
-所有者。DSH 调用 `oks mail`；OKS Mail Core 不依赖 DSH。没有 DSH，Claude
-和 Codex 仍可通过 Hook/CLI 使用 Mail，未来 Pi 或其他 Host 也只需实现
-自己的 Adapter。
-
-### 协议层与用户层
-
-`oks` CLI/Core 是 Agent-native 协作的第一等接口。`@agent-id` 是其中稳定的
-协议路由键，不是要求普通用户学习的操作语言。
-例如协议内部可以使用 `@claude`、`@codex`，用户层应显示友好的 Agent 名称和可核实的
-provenance。只有独立证据才能显示 Mail 已验证或 Host capability；Host 或当前 Agent 可把用户的通信意图解析为收件人、Thread 和
-Session，并在后台调用 CLI；用户通常不需要手写 `@`、复制
-`thread_id`，也不需要自己调用 `ack`。
-
-因此 Mail 有两种入口，但只有一套 Core：
+Receipt 的完整顺序是：
 
 ```text
-普通用户：上下文 Skill 动作 → Host/Agent 解析接收方 → Mail Core
-Agent/维护者：
-oks mail send --to @agent-id
-或 oks mail reply <thread-id>
-→ Mail Core
+injected -> presented -> acknowledged
 ```
 
-Agent 进行任务交接时优先使用意图级命令：
+有些消息会直接从 `presented` 开始。Receipt 只向前变化，重复 `ack` 不会重写首次确认时间。
+
+当前 Hook 和 `mail wait` 用 Receipt 是否存在来避免同一 Session 重复接收。只要该 Session 已有 `injected`、`presented` 或 `acknowledged` Receipt，就不会再次自动投递。新的 Session 仍可接收同一条未归档 Message。
+
+`read_at` 不会阻止新的具名 Session 接收消息，`archived_at` 才会。取消归档不会清除已有 Receipt，也不会重置 `read_at`，所以原 Session 不会因此自动收到第二次。
+
+## Message 的内容分类
+
+`record_kind` 说明这条 Message 记录的是什么。它不是任务状态。
+
+| 值 | 含义 |
+|---|---|
+| `message` | 普通消息 |
+| `goal` | 目标或范围说明 |
+| `handoff` | 工作交接 |
+| `result` | 返回的结果，仍需按任务要求核对 |
+| `blocked` | 阻塞和所需条件 |
+| `note` | 补充说明或批注 |
+| `knowledge_ref` | 主要用于引用知识或其他 OKS 产物 |
+| `review_request` | 请求审核 |
+| `acknowledgement` | 通过 Message 表达的确认，不等于 Session Receipt 的 `acknowledged` |
+
+`delivery_reason` 说明消息为什么被投递：
+
+| 值 | 含义 |
+|---|---|
+| `direct` | 直接发送 |
+| `mention` | 因提及接收方而投递 |
+| `conflict` | 报告冲突 |
+| `review_request` | 发起审核请求 |
+| `thread_reply` | 回复原 Thread |
+| `system` | 系统记录 |
+| `handoff` | 工作交接 |
+
+同一条 Message 可以是 `record_kind: knowledge_ref`，同时因 `delivery_reason: review_request` 被发送。前者说明内容，后者说明投递原因。
+
+底层 Message 还保存 `type` 字段，`delegate` 会将它设为 `handoff`。新接入应使用 `record_kind` 表达消息含义，不要把 `type` 或任一 Message 字段当作任务完成状态。
+
+## 身份和 Session
+
+| 字段 | 用途 | 不能据此判断什么 |
+|---|---|---|
+| `agent_id` | Mail 路由身份，例如 `@claude` 或 `@codex` | 不能证明发送者的真实身份或权限 |
+| `session_id` | 一次具体的 Agent 运行 | 不能证明 Session 仍在线 |
+| `machine_id` | 标识写入或呈现记录的本机 OKS 安装 | 不是登录凭据，也不表示机器在线 |
+| `sender_kind` | 接入层声明的来源类型：`human`、`agent` 或 `unknown` | 不授予消息额外权限 |
+
+Agent ID 会统一为带 `@` 的形式。明确发送给 `@agent-id` 时，该 Agent 不必预先登记；`@all` 才依赖 Registry 和 Session Registry。
+
+Agent 发送和回复时应提供当前 Session ID。Claude 或 Codex 等宿主可以从自己的 Session 环境传入；手工调用时可以使用 `--session-id`。缺少 Session ID 不一定会阻止发送，但会丢失来源 Session，后续也更难核对。
+
+未显式设置 `OKS_MACHINE_ID` 时，OKS 会在用户级 `~/.oks/machine.json` 中生成并保存一个随机本机标识。这个文件位于知识库之外，不参与知识库 Git 同步。
+
+Session Registry 中的 `active`、`idle` 和 `last_seen_at` 只表示最后一次被记录的状态，不是实时在线证明。
+
+## 接收方式和 `session_policy`
+
+`session_policy` 保存发送方希望怎样交付消息：
+
+| 值 | 当前含义 |
+|---|---|
+| `next_prompt` | 希望支持 Mail Hook 的宿主在后续提示词事件中提供消息 |
+| `wait` | 希望接收方通过 `oks mail wait` 主动轮询 |
+| `notify` | 额外写入本机 Notification |
+
+这个字段不会启动 Hook、轮询器或 Agent，也不是互斥的路由规则。当前 Hook 和 `mail wait` 都按收件人、归档状态和 Session Receipt 选择消息，并不会因为另一个 `session_policy` 就拒绝一条本来可见的 Message。
+
+Hook 只会在宿主触发相应事件时运行，通常是提交下一条提示时。`mail wait` 是当前进程主动轮询，最长等待时间由命令参数控制。`notify` 只创建本机文件，返回结果中的 `wake_supported` 仍为 `false`。
+
+Notification 不参与团队 Git 同步。另一台机器既看不到这份本机提示，也无法据此唤醒 Agent。
+
+## `@all` 怎样展开
+
+`@all` 在发送时读取 Agent Registry，以及状态为 `active` 或 `idle` 的 Session Registry，并展开为当时已知的 Agent。发送方会被排除，显式列出的其他收件人仍会保留。
+
+展开只发生一次。后来才登记的 Agent 不会收到旧消息。找不到任何可投递 Agent 时，发送会失败；此时应先登记 Session，或改为明确的 `@agent-id`。
+
+## 引用证据和产物
+
+发送或回复时可以重复传入 `--evidence-ref`。引用只保存定位信息，不复制正文：
 
 ```bash
-OKS_AGENT_ID=claude OKS_SESSION_ID=claude-s1 \
-  oks mail delegate --to codex --task "检查登录模块" \
-  --context "重点看 src/auth" --acceptance "输出问题清单和修改建议" \
-  --format json
-```
-
-`delegate` 只是 CLI 对现有 handoff Message/Thread/Receipt 合同的封装，不会
-创建第二份存储或新的 Host 私有状态机。`send/reply` 仍保留给低层、兼容和
-排障场景；DSH、Claude、Codex、Pi 等适配器应复用这些 CLI 合同。
-
-DSH 面板默认是人类协作事实工作面：它先显示记录、Evidence 和 Receipt，再把连续
-Thread、Session、机器、ID 和底层命令放入详情；它不应把 Mail 做成任务看板或要求用户
-手工维护的邮箱。
-独立 Mail 用户界面与 Agent-native 接入仍在重设计阶段；既有 DSH 面板是 Host
-适配器的实现基础，不能代表独立产品的体验验收已经完成。
-
-## 协议层 Agent 的身份
-
-- `OKS_AGENT_ID` 是本地路由身份，例如 `claude`、`codex` 或 `dsh`。
-- `OKS_SESSION_ID` 标识一次具体的 Agent Session；同一 Agent 可以有多个
-  Session。
-- `OKS_MACHINE_ID`（可选）覆盖当前本机的持久化 Machine 身份，适用于受管
-  Host 和隔离测试；未设置时 OKS 在用户级 `~/.oks/machine.json` 中生成并
-  复用一个随机 opaque ID。它不从主机名、用户名、仓库路径或 MAC 地址推导。
-- 协议审计 tuple 是 `(agent_id, machine_id, session_id)`：同一个 Agent 在
-  两台机器上保持相同 `agent_id`，由不同 `machine_id` 区分；通常每次新的
-  Host 运行使用新的 `session_id`。为避免同一台机器重启本地 Mail Web 时累积
-  Session，Mail Web 适配器可按 `machine_id` 指纹与监听端口稳定复用其 UI Session；
-  这不改变 Agent Session 的一次运行语义。Mail Core 将这些 opaque 身份字段分别写入
-  canonical Message、Session Registry 和 Receipt 路径，保证跨机器同步时
-  不依赖主机名或本地路径推导唯一性。
-- `sender_kind` (`human`、`agent`、`unknown`) 是适配器提供的来源标记，
-  不是认证，也不授予权限。
-
-这些身份字段主要服务于路由、审计和 Host Adapter。普通用户入口可以由
-Adapter 自动提供，不应把它们变成必填的用户操作步骤。
-
-Agent 发送时应提供 Session ID；回复时使用原 Thread ID，并在完成决定、
-阻塞或需要澄清时通过 Thread 回复表达。不要把“Hook 已注入”解释为任务
-已执行。
-
-新写入的 canonical Message 会附带 `origin_machine_id`；Session registry 和
-Session Receipt 会附带 `machine_id`。旧消息、旧 Session、旧 Receipt 缺少该字段
-时仍可读取，并显示为 machine provenance unavailable；OKS 不回写历史文件。
-
-## 协作事实分类
-
-`record_kind` 描述记录本身已经发生的事实，和 `delivery_reason` 的投递原因分开。
-第一版枚举只有 `message`、`handoff`、`result`、`blocked`、`note`、
-`knowledge_ref`。它不定义 `ingest_started`、`draft_created`、`review_passed` 或
-`wiki_promoted` 等知识流程状态；这些状态由 Candidate、Wiki 或 Trace 自己拥有。
-
-旧消息没有 `record_kind` 时按 `message` 兼容读取。Mail 可以引用 Candidate、Wiki
-或 Trace，但不复制知识正文，也不因一次使用自动生成 Candidate；新的 Candidate 必须
-来自人或 Agent 的明确反馈并经过原有审核门。
-
-## 状态维度
-
-这些状态属于不同投影，不合并为一个万能 `status`：
-
-```text
-Message
-  ├─ record_kind: fact classification (message | handoff | result | blocked | note | knowledge_ref)
-  ├─ Session Receipt: none → presented → acknowledged
-  ├─ Agent Recipient State: active → archived
-  └─ Thread State: open（P2；resolved 只作为未来 Host/Agent 语义预留）
-```
-
-`presented` 只证明某个 Session 看到了消息；`acknowledged` 证明该 Session
-显式确认收到；`archived` 是收件人级隐藏状态。它们都不等价于任务完成。
-收件人归档时的 `thread_state: closed` 只是该收件人 projection 的实现值；
-取消归档会恢复为 `open`，不会隐式改变 `read_at`。
-
-## 三层文件模型
-
-```text
-mail/messages/<message-id>.md
-  canonical Mail：正文只写一次，包含 thread_id、from、to、session、record_kind、reason
-
-mail/inbox/<agent>/<message-id>.json
-  recipient projection：该 Agent 的 read/archive/thread 状态
-
-mail/receipts/<session>/<message-id>.json
-  Session 的兼容性 latest snapshot；不是 Receipt 事实的唯一来源
-
-mail/receipt-events/<session>/<message-id>/evt_<timestamp>_<random>.json
-  Receipt append-only transition facts；Thread 和 snapshot 都可以由事实重建
-
-用户级 `~/.oks/machine.json`
-  本机安装身份；不属于 KB，不参与 Git 同步
-```
-
-`mail/notifications/<agent>/` 是 Runtime 的通知意图投影，不是消息事实，
-也不是 Agent 状态。没有 Host wake adapter 时，它不会启动或唤醒 Agent，
-发送结果仍是 `queued` 且 `wake_supported: false`。投影有最小生命周期：
-`pending` 在 `mail wait` 或 Hook 实际呈现该消息后转为 `presented`；
-它是机器本地运行态，不参与团队 Git 同步。未来支持 Git/跨机同步
-时，通知投影可以迁移到 `mail/runtime/notifications/`；适配器不应直接
-依赖物理路径。
-
-## 命令序列
-
-```bash
-# Claude/Codex 作为 Agent 发送
-OKS_AGENT_ID=claude OKS_SESSION_ID=claude-s1 \
-  oks mail send --to @codex --type handoff --title "Review" \
-  --body "请检查这个交接" --session-id claude-s1 --format json
-
-# Codex 在 Hook 或显式轮询中接收
-OKS_AGENT_ID=codex oks mail wait --agent codex \
-  --session-id codex-s1 --timeout 30 --format json
-
-# 呈现后确认“收到”，不是确认“完成”
-OKS_AGENT_ID=codex oks mail ack msg_... \
-  --session-id codex-s1 --format json
-
-# 结果必须回到原 Thread；完成后可对该收件人归档
-OKS_AGENT_ID=codex oks mail reply thr_... --session-id codex-s1 \
-  --body "已检查，结果如下" --format json
-OKS_AGENT_ID=codex oks mail archive thr_...
-```
-
-`ack` 只改变该 Session 的 Delivery Receipt，不改变收件人的 `read_at`、
-`archived_at` 或 canonical Markdown。它要求显式 Session，并且对同一
-receipt 重复调用保持幂等。
-
-## Receipt 语义
-
-```text
-presented  ->  acknowledged
-```
-
-`presented` 表示 Hook 注入或 `mail wait` 返回了消息；
-`acknowledged` 表示该 Session 显式确认收到。两者都不表示 Agent 已执行
-请求。现有历史值 `injected`、`delivered` 按“已呈现”兼容读取。
-
-同一 Session 对同一消息只呈现一次；新的 Session 仍可看到未归档消息。
-对收件人归档后，Hook 和 `wait` 都不再呈现该消息。此设计是
-per-Session at-most-once presentation，不承诺 at-least-once 投递或
-exactly-once 执行。
-
-`machine_id` 只表示哪个本地安装写入或呈现了该记录。它不是认证凭据，也不表示
-机器在线；Session Registry 的最近时间也只能提供 observed provenance。Mail 已验证
-只表示至少存在一次真实 Mail 生命周期证据（呈现并 ack，或同一 Thread 中产生回复），
-不表示 Host 可执行任务。
-
-## Evidence Ref
-
-Mail 可以引用 OKS 产物，但不复制产物内容。发送、交接或回复时可重复传入一个
-JSON ref：
-
-```bash
-oks mail reply thr_... --session-id codex-s1 \
+oks mail reply <thread-id> \
+  --session-id <session-id> \
+  --record-kind result \
   --evidence-ref '{"type":"trace","id":"trace_xxx"}' \
-  --evidence-ref '{"type":"candidate","path":"drafts/foo.md"}' \
-  --body "结果已完成" --format json
+  --evidence-ref '{"type":"candidate","path":"drafts/example.md"}' \
+  --body "检查结果和未完成项"
 ```
 
-允许的类型是 `trace`、`run`、`capability`、`bundle`、`commit`（使用 `id`）以及
-`candidate`、`wiki`（使用相对 KB 的 `path`）。绝对路径、`..` 穿越、未知字段、未知类型
-和证据正文都会被拒绝。Ref 出现在 canonical Message 和 snapshot 元数据中，正文
-仍只保存协作事实。
+`trace`、`run`、`capability`、`bundle` 和 `commit` 使用 `id`；`candidate` 和 `wiki` 使用知识库相对路径。绝对路径、包含 `..` 的路径、未知类型、额外字段和夹带的证据正文会被拒绝。
 
-## Git-backed boundary
+引用只说明 Message 指向某个产物。接收方仍要打开产物，检查它是否存在、是否发生变化，以及是否适用于当前任务。
 
-Canonical Message 是不可变单文件；Receipt transition 是 append-only 事件；Thread
-是按时间戳和 Message ID 排序得到的 derived view。两台隔离 Git clone 可以各自
-创建消息并合并，而不共同编辑 `thread.json`。Gate 4 的本地 bare-remote 双 clone
-试验是 Git transport 的真实验证，但不声称完成物理多机器部署、实时 wake 或 daemon。
-当前没有 mail sync 这个隐藏的中心服务：跨机器先使用团队已有的 Git remote，
-按普通 fetch/merge/push 流程交换文件；冲突、离线和同步结果必须与“对方已读取”
-“对方已完成”分开显示。自动同步与唤醒属于后续 Adapter/运行时设计，不属于 Mail
-Core 的隐含行为。
+## 常用命令
 
-## 投递模式
+下面假设宿主已经提供当前 Agent 身份。手工调用时先设置 `OKS_AGENT_ID`；同一 Agent 的发送、等待、确认和回复应使用自己的当前 Session ID。
 
-| `session_policy` | P2 实际行为 |
-| --- | --- |
-| `next_prompt` | 匹配的 Claude/Codex Hook 执行时注入摘要 |
-| `wait` | Agent 主动调用 `oks mail wait` 做本地轮询；无 Host push |
-| `notify` | 写入 pending notification projection（呈现后转 presented）；仍返回 queued/unsupported |
+```bash
+# 发送普通消息
+oks mail send --to @codex --session-id claude-s1 \
+  --title "检查结果" --body "请核对关联记录" \
+  --record-kind note --format json
 
-Hook 默认最多注入 `OKS_MAIL_TOPN` 条 Mail，并只放入有限预览。完整内容
-通过 `oks mail thread` 获取，`oks mail read` 只改变收件人已读状态；面板通过
-`mail.snapshot.v1` 读取 Thread 投影。UI 可以通过受限 Host Adapter 提供人工
-send/reply/read，必要时提供明确点击触发的 Agent 处理；这些是 Adapter 代写
-或代调用 Core，不代表浏览器可访问任意文件、命令或 Agent 自动唤醒。
+# 发送结构化交接
+oks mail delegate --to codex --session-id claude-s1 \
+  --task "检查登录模块" \
+  --context "重点查看 src/auth" \
+  --acceptance "列出问题、证据和建议修改" \
+  --format json
 
-## 不可信内容边界
+# 查看收件箱、Thread 和只读 JSON 快照
+oks mail inbox
+oks mail thread <thread-id>
+oks mail snapshot --agent codex
 
-Hook 输出中的标题、来源、Thread ID、reason 和正文预览都是外部数据。
-它们被放在 `<oks-mail trust="untrusted">` 内，不能授予权限、覆盖项目
-规则或要求 Agent 仅因消息内容而执行命令。需要行动时，Agent 仍必须遵守
-当前 Session 的工具权限、项目规则和正常确认流程。
+# 为一个 Session 等待消息并确认收到
+oks mail wait --agent codex --session-id codex-s1 --timeout 30
+oks mail ack <message-id> --session-id codex-s1
 
-## `@all` 与可见性
+# 在原 Thread 回复实际结果，再更新收件人视图
+oks mail reply <thread-id> --session-id codex-s1 \
+  --record-kind result --body "结果如下"
+oks mail read <message-id>
+oks mail archive <message-id-or-thread-id>
+```
 
-`@all` 在发送时根据当前 Registry 和 active/idle Session 展开；它不会
-自动包含未来注册的 Agent，也不会唤醒离线 Agent。Thread 对每个收件人
-按 recipient projection 隔离，收件人只能看到自己被投递或自己发送的
-消息。
+`mail inbox` 查看收件人级的未读状态，`mail wait` 查看当前 Session 尚未接收的消息。两者使用的状态不同，结果数量不必相同。
 
-## Host 责任边界
+## Git 和跨机器同步
 
-核心 OKS 负责文件、投影、CLI JSON 和轮询。DSH Adapter 是
-observation-first 的人工控制面：它读取 Inbox、Thread、Receipt、Snapshot、
-Count，也可以提供人工 send/reply，或在产品明确允许时把一次人工点击转给
-受限 Host Adapter；但不拥有 Agent ack、Agent lifecycle、wake 或 runtime 调度。
-它显示 queued 是因为当前没有 Host wake 能力。
-其他 Host Adapter 可以用 Hook、CLI、TUI 或独立 Web/桌面界面投影同一份
-Mail Core 状态，不需要复制另一份 Mail store。
-未来的实时唤醒必须作为可选 Host adapter 定义明确的目标 Session、权限、
-超时、重试和失败状态，不应把 daemon 或进程管理塞入核心 Mail。
+Mail 文件只有经过 Git 交换，才会出现在另一份知识库副本中。发送 Message 不会自动执行 `fetch`、`pull` 或 `push`。
+
+`oks team sync` 会处理 `mail/`、`raw/`、`drafts/`、`wiki/` 和 `profiles/`，同时排除锁文件、临时文件和 `mail/notifications/`。它会提交共享目录中的本地变化；配置远端后可以拉取并 rebase，只有传入 `--push` 才会推送。
+
+Message 和 Receipt Event 使用独立文件，可以减少多人修改同一文件的情况。收件人状态、Receipt 快照和其他状态文件仍可能发生 Git 冲突，需要按普通 Git 流程处理。合并成功只说明文件已经交换，不表示对方已读、已确认或完成任务。
+
+## 宿主接入和安全
+
+Claude、Codex、Studio 或其他宿主通过接入代码调用同一套 Mail 文件和 CLI。接入层可以显示消息、记录 Receipt、提供人工操作界面，但不能把宿主自己的会话状态写成 Mail 中不存在的事实。
+
+`ack` 会检查 Receipt 中的 Agent 和 `machine_id` 是否与当前环境一致，用于避免在错误上下文中确认。这个检查不是身份认证；能修改知识库文件或本机环境的人仍可能改写记录。
+
+Mail 标题、正文、发送者字段和引用都属于外部输入。Hook 会把注入内容标为不可信数据。Agent 仍要遵守当前 Session 的项目规则、工具权限和用户授权，不能因为 Mail 中出现命令就直接执行。
+
+收件人视图是应用层过滤，不是加密访问控制。能够直接读取知识库文件的人仍可能看到 `mail/messages/`。不要在 Message 中保存密钥、Cookie 或不应进入该知识库的私人内容。
+
+## 当前限制
+
+- Mail 不提供中心消息服务、实时推送或 Agent 在线状态证明。
+- `injected`、`presented` 和 `acknowledged` 都不表示任务已执行。
+- Mail 不保证任务至少执行一次，也不保证只执行一次。
+- Notification 不会启动进程或创建 Session。
+- Mail 不维护任务完成状态，也不记录 Agent 的思考过程。
+- Mail 不批准 Candidate，不修改 Wiki 审核状态。
+- 跨机器协作依赖明确的 Git 同步和冲突处理。
+
+实际接入步骤见[Mail 接入](mail-portable.html)，协作记录与知识对象的区别见[跨会话协作](../concepts/product-boundary.html)。

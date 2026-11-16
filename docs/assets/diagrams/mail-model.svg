@@ -1,51 +1,71 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="330" viewBox="0 0 1080 330" font-family="-apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif"><defs>
-  <filter id="sh" x="-20%" y="-20%" width="140%" height="140%">
-    <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#0f172a" flood-opacity="0.08"/>
-  </filter>
-  <linearGradient id="gblue" x1="0" y1="0" x2="0" y2="1">
-    <stop offset="0" stop-color="#3b82f6"/><stop offset="1" stop-color="#1d4ed8"/>
-  </linearGradient>
-  <linearGradient id="gviolet" x1="0" y1="0" x2="0" y2="1">
-    <stop offset="0" stop-color="#8b5cf6"/><stop offset="1" stop-color="#6d28d9"/>
-  </linearGradient>
-  <linearGradient id="gamber" x1="0" y1="0" x2="0" y2="1">
-    <stop offset="0" stop-color="#f59e0b"/><stop offset="1" stop-color="#d97706"/>
-  </linearGradient>
-  <marker id="ar" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
-    <path d="M0,0 L9,4.5 L0,9 z" fill="#2563eb"/>
-  </marker>
-</defs>
-<rect width="100%" height="100%" rx="14" fill="#f8fafc"/>
-<g filter="url(#sh)"><rect x="425.0" y="112" width="230" height="104" rx="14" fill="#0f172a"/><rect x="425.0" y="112" width="230" height="46" rx="14" fill="#1e293b"/><rect x="425.0" y="142" width="230" height="16" fill="#1e293b"/></g>
-<text x="540.0" y="142" text-anchor="middle" fill="#ffffff" font-size="18" font-weight="700" font-family="-apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif">Thread</text>
-<text x="540.0" y="172" text-anchor="middle" fill="#94a3b8" font-size="12" font-weight="normal" font-family="-apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif">有主题边界的持久通信上下文</text>
-<text x="540.0" y="196" text-anchor="middle" fill="#94a3b8" font-size="12" font-weight="normal" font-family="-apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif">跨 Session / Agent / 机器继续</text>
-<g filter="url(#sh)">
-<rect x="70" y="36" width="300" height="104" rx="12" fill="#ffffff" stroke="#e2e8f0"/>
-<rect x="70" y="36" width="300" height="42" rx="12" fill="url(#gblue)"/>
-<rect x="70" y="66" width="300" height="12" fill="url(#gblue)"/>
-<text x="220.0" y="63" text-anchor="middle" fill="#ffffff" font-size="15" font-weight="700" font-family="-apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif">Message</text>
-<text x="220.0" y="100" text-anchor="middle" fill="#64748b" font-size="12.3" font-weight="normal" font-family="-apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif">意图 + 证据 + 验收标准</text>
-<text x="220.0" y="117" text-anchor="middle" fill="#64748b" font-size="12.3" font-weight="normal" font-family="-apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif">delegate 自动装配 handoff 字段</text>
-</g>
-<g filter="url(#sh)">
-<rect x="70" y="206" width="300" height="104" rx="12" fill="#ffffff" stroke="#e2e8f0"/>
-<rect x="70" y="206" width="300" height="42" rx="12" fill="url(#gviolet)"/>
-<rect x="70" y="236" width="300" height="12" fill="url(#gviolet)"/>
-<text x="220.0" y="233" text-anchor="middle" fill="#ffffff" font-size="15" font-weight="700" font-family="-apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif">Session Receipt</text>
-<text x="220.0" y="270" text-anchor="middle" fill="#64748b" font-size="12.3" font-weight="normal" font-family="-apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif">每 Session 独立投递记录</text>
-<text x="220.0" y="287" text-anchor="middle" fill="#64748b" font-size="12.3" font-weight="normal" font-family="-apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif">可重建投影，不是已读回执</text>
-</g>
-<g filter="url(#sh)">
-<rect x="710" y="121" width="300" height="104" rx="12" fill="#ffffff" stroke="#e2e8f0"/>
-<rect x="710" y="121" width="300" height="42" rx="12" fill="url(#gamber)"/>
-<rect x="710" y="151" width="300" height="12" fill="url(#gamber)"/>
-<text x="860.0" y="148" text-anchor="middle" fill="#ffffff" font-size="15" font-weight="700" font-family="-apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif">Host Adapter</text>
-<text x="860.0" y="185" text-anchor="middle" fill="#64748b" font-size="12.3" font-weight="normal" font-family="-apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif">Claude / Codex / DSH / Pi</text>
-<text x="860.0" y="202" text-anchor="middle" fill="#64748b" font-size="12.3" font-weight="normal" font-family="-apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif">同一 Mail Core，CLI 是核心入口</text>
-</g>
-<line x1="374" y1="88" x2="418.0" y2="88" stroke="#2563eb" stroke-width="2.5" marker-end="url(#ar)"/>
-<line x1="374" y1="258" x2="418.0" y2="258" stroke="#2563eb" stroke-width="2.5" marker-end="url(#ar)"/>
-<line x1="660.0" y1="164" x2="744" y2="164" stroke="#2563eb" stroke-width="2.5" marker-end="url(#ar)"/>
-<text x="540.0" y="310" text-anchor="middle" fill="#94a3b8" font-size="12.5" font-weight="normal" font-family="-apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif">Mail 是协调与评审证据，不是可召回知识 —— 不参与 Recall，不衰减（宪法 A1）</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="420" viewBox="0 0 1120 420" font-family="-apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif">
+  <defs>
+    <marker id="arrow" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+      <path d="M0,0 L9,4.5 L0,9 z" fill="#475569"/>
+    </marker>
+  </defs>
+
+  <rect width="1120" height="420" fill="#f8fafc"/>
+  <text x="560" y="34" text-anchor="middle" fill="#0f172a" font-size="18" font-weight="700">同一条 Mail 记录包含彼此独立的消息、收件人状态和 Session Receipt</text>
+
+  <rect x="55" y="70" width="285" height="118" rx="8" fill="#ffffff" stroke="#2563eb" stroke-width="2"/>
+  <rect x="55" y="70" width="285" height="38" rx="8" fill="#dbeafe"/>
+  <rect x="55" y="98" width="285" height="10" fill="#dbeafe"/>
+  <text x="197.5" y="96" text-anchor="middle" fill="#1e3a8a" font-size="16" font-weight="700">Message</text>
+  <text x="75" y="132" fill="#334155" font-size="13">每条消息一个 Markdown 文件</text>
+  <text x="75" y="154" fill="#334155" font-size="13">正文、发送方、收件人、分类、引用</text>
+  <text x="75" y="176" fill="#64748b" font-size="12">写入后不再修改正文</text>
+
+  <rect x="417.5" y="70" width="285" height="118" rx="8" fill="#ffffff" stroke="#0f766e" stroke-width="2"/>
+  <rect x="417.5" y="70" width="285" height="38" rx="8" fill="#ccfbf1"/>
+  <rect x="417.5" y="98" width="285" height="10" fill="#ccfbf1"/>
+  <text x="560" y="96" text-anchor="middle" fill="#115e59" font-size="16" font-weight="700">Thread</text>
+  <text x="437.5" y="132" fill="#334155" font-size="13">按相同 thread_id 动态组成</text>
+  <text x="437.5" y="154" fill="#334155" font-size="13">保存交接、回复和后续结果的上下文</text>
+  <text x="437.5" y="176" fill="#64748b" font-size="12">没有单独的 Thread 正文文件</text>
+
+  <line x1="348" y1="129" x2="409" y2="129" stroke="#475569" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="378" y="119" text-anchor="middle" fill="#64748b" font-size="11">thread_id</text>
+
+  <rect x="780" y="70" width="285" height="118" rx="8" fill="#ffffff" stroke="#9333ea" stroke-width="2"/>
+  <rect x="780" y="70" width="285" height="38" rx="8" fill="#f3e8ff"/>
+  <rect x="780" y="98" width="285" height="10" fill="#f3e8ff"/>
+  <text x="922.5" y="96" text-anchor="middle" fill="#6b21a8" font-size="16" font-weight="700">收件人状态</text>
+  <text x="800" y="132" fill="#334155" font-size="13">每个 Agent 各有一份</text>
+  <text x="800" y="154" fill="#334155" font-size="13">read_at / archived_at / thread_state</text>
+  <text x="800" y="176" fill="#64748b" font-size="12">归档会停止该收件人的自动投递</text>
+
+  <line x1="197.5" y1="196" x2="197.5" y2="238" stroke="#475569" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="207" y="222" fill="#64748b" font-size="11">按 Session</text>
+  <line x1="922.5" y1="196" x2="922.5" y2="238" stroke="#475569" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="932" y="222" fill="#64748b" font-size="11">可选提示</text>
+
+  <rect x="55" y="246" width="285" height="118" rx="8" fill="#ffffff" stroke="#d97706" stroke-width="2"/>
+  <rect x="55" y="246" width="285" height="38" rx="8" fill="#fef3c7"/>
+  <rect x="55" y="274" width="285" height="10" fill="#fef3c7"/>
+  <text x="197.5" y="272" text-anchor="middle" fill="#92400e" font-size="16" font-weight="700">Session Receipt</text>
+  <text x="75" y="308" fill="#334155" font-size="13">每个 Session 各自记录</text>
+  <text x="75" y="330" fill="#334155" font-size="13">injected → presented → acknowledged</text>
+  <text x="75" y="352" fill="#64748b" font-size="12">确认收到不等于任务完成</text>
+
+  <rect x="417.5" y="246" width="285" height="118" rx="8" fill="#ffffff" stroke="#475569" stroke-width="2"/>
+  <rect x="417.5" y="246" width="285" height="38" rx="8" fill="#e2e8f0"/>
+  <rect x="417.5" y="274" width="285" height="10" fill="#e2e8f0"/>
+  <text x="560" y="272" text-anchor="middle" fill="#1e293b" font-size="16" font-weight="700">Receipt Event</text>
+  <text x="437.5" y="308" fill="#334155" font-size="13">追加保存每次状态变化</text>
+  <text x="437.5" y="330" fill="#334155" font-size="13">用于恢复 Receipt 当前快照</text>
+  <text x="437.5" y="352" fill="#64748b" font-size="12">状态只向前变化</text>
+
+  <rect x="780" y="246" width="285" height="118" rx="8" fill="#ffffff" stroke="#be123c" stroke-width="2"/>
+  <rect x="780" y="246" width="285" height="38" rx="8" fill="#ffe4e6"/>
+  <rect x="780" y="274" width="285" height="10" fill="#ffe4e6"/>
+  <text x="922.5" y="272" text-anchor="middle" fill="#9f1239" font-size="16" font-weight="700">本机 Notification</text>
+  <text x="800" y="308" fill="#334155" font-size="13">pending → presented</text>
+  <text x="800" y="330" fill="#334155" font-size="13">只记录提示意图，不会唤醒 Agent</text>
+  <text x="800" y="352" fill="#64748b" font-size="12">不参与团队 Git 同步</text>
+
+  <line x1="348" y1="305" x2="409" y2="305" stroke="#475569" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="378" y="295" text-anchor="middle" fill="#64748b" font-size="11">追加事件</text>
+
+  <text x="560" y="400" text-anchor="middle" fill="#475569" font-size="13">已读、Receipt、回复、归档和任务完成是不同事实，不能合并成一个状态。</text>
 </svg>

@@ -1,53 +1,129 @@
-# 关联知识库与可观测调用
+---
+title: 查询、使用与评测记录
+nav_order: 7
+parent: 工作原理
+---
 
-个人库保持一个 OKS 根目录；团队库保持独立 Git 仓库。OKS 关联读取两者，不将团队内容复制到个人 Wiki，不在团队库初始化 OKS。
+# 查询、使用与评测记录
 
-## 关联团队库
+本页说明怎样检查 Recall、VFS 和人工反馈留下的记录。内容面向需要排查查询结果或制作评测集的维护者。第一次使用 OKS 不需要配置这些记录。
+
+团队知识库的格式、Git 提交读取规则和审核边界见[个人库、团队库与工具仓库](knowledge-repositories.html)。本页不重复这些规则，只说明一次查询及其后续操作分别留下什么记录，以及这些记录能证明什么。
+
+## Recall 返回了什么
+
+先查看命令本身的结果：
 
 ```bash
-oks sources link /path/to/team-knowledge --name team --repository owner/repo
-oks sources list
-oks sources unlink team
+oks recall "任务问题" --format json --explain
 ```
 
-关联配置保存在个人库 `settings/sources.yaml`。个人与团队采用相同核心桶，支持普通OKS实例；仍兼容 `catalog/knowledge.yaml`、`knowledge/`、`sources/index.json` 旧格式。迁移目录和审核索引可保留于records/catalog/，来源位于raw/。读取本地 HEAD 的已提交 Git blob；可加 `--revision <40位SHA>` 固定版本。默认 HEAD 随本地提交更新，OKS 不执行 fetch、checkout 或上游脚本。
+JSON 中有三条结果通道：
 
-图谱显示来源仓库、完整提交、内容 SHA、原始证据链接与审核状态。标准Wiki依照审核元数据、Catalog条目依照绑定完整正文SHA的批准记录进入独立的 `team_knowledge` 召回通道；candidate 可浏览，但不会被自动批准。两个通道的词法分数不混合排序。当前离线 Wiki 评测仍只评个人 Wiki，不据此宣称已经验证团队联合召回质量。
+| 通道 | 内容 |
+|---|---|
+| `episodic` | `raw/` 中的材料，以及符合当前身份范围的 Profile |
+| `knowledge` | 当前个人库中的 Wiki |
+| `team_knowledge` | 已关联团队库中符合读取条件的知识 |
 
-团队更新由 Agent 在团队仓库分支修改、验证、发 PR；PR 合并不自动等于知识审核通过。
+`--knowledge-only` 只关闭 `episodic`，不会关闭 `team_knowledge`。默认 Prompt Hook 会执行 Recall，但当前只把个人 `knowledge` 注入提示词；命令返回团队结果，不表示 Hook 已把这些结果交给 Agent。
 
-## 从使用记录形成数据集
+每次 Recall 还会把一条调用记录写入 `records/observability/recall.json`。记录包含查询哈希、命中来源、阶段耗时和输出大小，不保存问题原文，也不记录 Host 或模型之后做了什么。该文件最多保留最近 200 条记录。
+
+## 这些事件分别说明什么
+
+| 事件 | 能说明什么 |
+|---|---|
+| Recall 命中 | 检索器认为条目与问题相关 |
+| Hook 注入 | Host 收到了 Hook 选中的个人知识 |
+| Agent 采用 | Agent 实际把某条内容用于当前任务 |
+| `oks wiki use` | 系统保存了一次明确的使用声明 |
+| 人工审核 Candidate | 用户接受了当时展示的 Candidate 版本 |
+| 评测标签 | 用户针对一次查询确认了相关或不相关条目 |
+
+前一个事件不能自动推出后一个事件。检索分数高也不能证明答案正确或任务已经完成。
+
+## 记录实际使用
+
+```bash
+oks wiki use <slug> --observation <observation_id>
+```
+
+`oks use` 是同一命令的别名。提供 `observation_id` 时，使用记录会关联到那次查询；不提供时只保存一条独立使用记录，不会猜测它属于最近哪次 Recall。
+
+自动注入记录保存在 `records/inject.jsonl`。旧记录中的整组 `used` 只能说明有人报告使用了该组中的内容，不能证明每个命中都被采用。`oks wiki use` 也不会提升 `confidence`、修改 Wiki 状态或生成审核证据。
+
+## 收集人工反馈
+
+评测采集默认关闭。需要制作数据集时先开启：
 
 ```bash
 oks eval capture --enabled --hash-query
 oks recall "任务问题" --format json
-oks use <slug> --observation <observation_id>
 oks eval candidates
-oks eval review <id> --query "任务问题" --accept good-slug --reject bad-slug --reason "不适用原因" --confirm
+```
+
+`--hash-query` 只保存问题哈希。只有明确使用 `--retain-query` 时，评测观察记录才保留问题原文。
+
+检查某次观察后，逐条提交判断：
+
+```bash
+oks eval review <id> \
+  --query "任务问题" \
+  --accept useful-slug \
+  --reject irrelevant-slug \
+  --reason "与当前任务范围不符" \
+  --confirm
+```
+
+没有标签的命中保持未知。明确的 Use 记录只是参考信号，不会自动变成相关性标签。`--clear <slug>` 可以撤回已有标签；如果审核时改写了原问题，还要使用 `--derived-query` 明确表示这是派生问题。
+
+反馈与来源版本绑定。Wiki 正文变化后，旧标签不能直接导出，必须重新查询并审核。
+
+## 导出评测数据
+
+```bash
 oks eval export --name personal-recall --kind recall
 oks eval export --name personal-preferences --kind preference
 ```
 
-- 基础调用观测始终保留查询哈希和命中来源，可作为未确认候选；扩展查询采集默认关闭，开启后默认仍只保存查询哈希，保留明文需显式 `--retain-query`。
-- `oks use` / `oks wiki use` 记录显式使用。没有 observation 时记录独立使用事件，不猜测属于最近哪次查询。
-- 采纳信号不直接变成人工 Gold。缺少反馈为未确认；拒绝必须明确提交并注明原因。
-- `--clear slug` 撤回标签。补充或改写原问题需 `--derived-query`，不得冒充原始真实查询。
-- 只有人工确认、来源版本未变化的标签才能导出。偏好对在同一查询内组合 accepted/rejected，保留来源 SHA 和审核事件。
-- preference 导出是知识选择偏好对，不能直接声称为完整对话 DPO 训练集。
-- 记录在 `records/evaluation/{observations,use-events,feedback,feedback-events,exports}`。原注入和 retrieval-debug 记录作为候选来源保留，旧的组级 used 不归因给所有命中。
+`recall` 数据集需要至少一条已确认的相关 Wiki。`preference` 数据集还要求同一次查询同时有接受和拒绝的条目，然后按版本生成知识选择偏好对。它只记录检索结果之间的选择，不是完整对话训练数据。
 
-## 虚拟文件与调用链
+评测数据位于 `records/evaluation/`，其中包括：
 
-学习 → 文件展示现有 `oks://` 文件映射。`oks://skills/` 指向统一后的知识库 `skills/`；宿主安装入口只保留 `oks://host-skills/` 的显式兼容读取，不列入知识库浏览。旧 `oks://skill/`、`oks://goal/`、`oks://discuss/` 保留兼容解析，不在根目录重复展示。
+- `observations/`：开启评测采集后保存的查询观察。
+- `use-events/`：显式 Use 记录。
+- `feedback/` 与 `feedback-events/`：当前标签和追加式审核事件。
+- `exports/`：导出的评测集或偏好对。
+
+检索调试记录、Recall 调用记录和旧注入记录也可以出现在候选列表中，但只有明确确认且来源版本未变化的标签能进入导出结果。
+
+## 观察 VFS 读取
+
+Studio 的“学习 > 文件”和 `oks fs` 使用同一套只读 VFS 路径。常用命令：
 
 ```bash
 oks fs ls oks:// --format json
 oks fs read oks://wiki/example.md --format json
+oks fs read-many oks://wiki/a.md oks://wiki/b.md --format json
 oks fs inspect oks://wiki/example.md --operation compare --limit 20000
 ```
 
-普通 fs 命令保持原输出协议，额外保存观测；inspect 返回结果与 trace。界面/CLI 共用 VFS 的路径与 symlink 边界。记录真实解析、读取、裁剪、序列化 span 和父子关系；失败也保留。历史最多 200 条，写在 `records/observability/vfs.json`，不保存文件正文。
+`oks://skills/` 指向知识库管理的 Skill。Host 的 Skill 安装目录不会显示在根目录；旧的 `oks://host-skills/`、`oks://skill/`、`oks://goal/` 和 `oks://discuss/` 只保留兼容读取。关联团队库后，根目录还会出现动态的 `oks://team/` scope。
 
-同文件对比固定同一文件、offset 和字符 limit，检查输出一致性。顺序固定 VFS 后直接读取，操作系统缓存未控制；单次结果不构成普遍加速结论。耗时不含观测落盘、HTTP、宿主和模型执行，字节数不伪装成模型 Token。
+普通 `oks fs` 命令保持原有输出，同时保存调用记录。`oks fs inspect` 支持 `ls`、`stat`、`read`、`overview`、`find` 和 `compare`，并把结果与步骤时间线一起返回。记录包含解析、读取、裁剪和序列化等实际步骤，也会保留失败状态，但不保存读取到的正文。
 
-图谱 Query 详情复用同一调用时间线组件，显示任务配置、个人召回、团队来源等真实阶段；交互召回的阶段观测写到 `records/observability/recall.json`，只含查询哈希和命中来源元数据。它不代表宿主执行或模型生成的完整链路。
+VFS 历史位于 `records/observability/vfs.json`，最多保留 200 条。VFS 与 Recall 记录都不是 Agent 的思考过程。
+
+## 怎样理解耗时数据
+
+`compare` 固定读取同一文件、同一 `offset` 和 `limit`，先走 VFS，再直接读取文件或 Git blob。它检查两次读取的内容是否一致，并展示这一对操作的耗时。
+
+这个数字不能用来证明某种读取方式普遍更快，原因包括：
+
+- 操作系统缓存没有被控制，执行顺序也固定。
+- 计时不包含记录持久化、HTTP 请求、Host 执行和模型执行。
+- `output_bytes` 是序列化结果的字节数，不是模型 Token 数。
+- 单次读取只代表该文件、该提交和该切片。
+
+要比较 Recall 配置，应固定知识库快照和同一评测集，再运行离线评测。方法见[召回评估](algorithms/recall-evaluation.html)。

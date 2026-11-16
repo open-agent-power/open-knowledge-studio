@@ -1,304 +1,171 @@
 ---
-title: 摄入操作手册
+title: 收录操作手册
 nav_order: 1
-parent: 摄入协议
+parent: 材料收录协议
 grand_parent: 参考手册
 ---
 
-# 摄入操作手册
+# 收录操作手册
 
-从一条 URL 或本地文件出发，走完 Recall → Source → Evidence → Commit → Grade → Review 的
-完整链路。本手册按你实际会遇到的顺序写，每个步骤标出常见错误和解决方法。
+本页说明 Agent 或维护者怎样把一个 URL 或本地文件保存为 Raw Bundle。日常使用不需要手工编辑这些 JSON 文件，可以直接按[收录材料](../../usage/ingest.html)向 Agent 说明任务。
 
-## Step 0：先 Recall，避免平行知识
+## 开始前先确认范围
 
-收录前先查一次主题：
+1. 确认当前知识库路径，避免把材料写入另一个 Instance。
+2. 用 `oks recall` 查询同主题内容，检查是否已有相同来源、相关 Wiki 或待审核 Candidate。
+3. 说明材料所属的项目、版本、日期和用途。
+4. 检查是否允许把内容发送给远程 Provider。
+
+`oks ingest prepare` 对公开 URL 默认写入 `remote_processing: ask`，对本地文件和手工来源默认写入 `deny`。URL 可以访问，不等于已经允许把内容转交第三方服务。
+
+## 选择执行路径
+
+内置 Connector 能处理来源时，可以运行：
 
 ```bash
-oks recall "<这份资料的主题>"
+oks ingest run <source>
 ```
 
-如果已有 Wiki 页面，在 Candidate 中记录 `relates_to` 和 `relationship`，关系只能是
-`enriches`、`supersedes`、`confirms` 或 `challenges`。这不会跳过人工审核；它只是让
-审核者看到新旧知识之间的关系。
+这个命令负责获取和转换材料，不会生成带审核记录的 Wiki。需要由 Agent 选择 Provider、组合多个处理结果，或检查每一步证据时，使用下面的协议路径。
 
-## 两条路径
-
-OKS 根据源类型自动选择路径：
-
-| 源类型 | 路径 | 特点 |
-|--------|------|------|
-| 本地 `.md` / `.txt` | **快速路径** (`text_ready=true`) | 证据预填充，跳过 Provider 执行，直接 raw-commit |
-| URL / PDF / 图片 / Office / 音视频 | **Protocol 路径** (`text_ready=false`) | 需要 Provider 执行，Agent 填协议文件后 raw-commit |
-
-快速路径一步到位；Protocol 路径是本文重点。
-
-## 完整流程（Protocol 路径）
-
-### Step 1: `oks ingest prepare`
+## 1. 准备运行目录
 
 ```bash
 oks ingest prepare <source>
 ```
 
-**输出**（JSON）：
+命令会在 `.oks/runs/<run_id>/` 下创建运行目录，并返回：
 
-```json
-{
-  "run_id": "run-abc123",
-  "workspace": ".oks/runs/run-abc123/",
-  "manifest_dir": ".oks/runs/run-abc123/manifest/",
-  "modality": "web",
-  "text_ready": false,
-  "recipe": "# Recipe: Web\n\n...",
-  "candidate_providers": [
-    {"id": "firecrawl", "label": "Firecrawl", "status": "not_configured"},
-    {"id": "trafilatura", "label": "Trafilatura", "status": "ready"}
-  ],
-  "next_step": "..."
-}
+- `manifest_dir`：协议文件所在目录；
+- `text_ready`：本地文本是否已经预填内容；
+- `recipe`：当前材料类型需要哪些能力，什么条件算完成；
+- `candidate_providers`：可能满足这些能力的 Provider；
+- `missing_assets`、`sensitive_content_redacted` 等准备结果。
+
+生成的目录主要包含：
+
+```text
+.oks/runs/<run_id>/
+├── manifest/
+│   ├── source-envelope.json
+│   ├── evidence-manifest.json
+│   ├── fragments/
+│   └── artifacts/
+└── work/
 ```
 
-**关键字段**：
+本地 Markdown、纯文本、CSV、JSON 和 YAML 通常会得到 `text_ready: true`。CLI 会预填文本证据，并把脱敏后的副本写入运行目录，不修改原文件。Markdown 引用的本地图片缺失时，Manifest 会标为 `partial` 并列出缺失资源。
 
-- `recipe`：这个 modality 的完整 Recipe（required_capabilities、optional_capabilities、degradation chain、complete_when 条件）
-- `candidate_providers`：覆盖 required capabilities 的 Provider 短名单。Agent 从这里选，不需要扫描全部注册项
-- `text_ready`：`false` 表示走 Protocol 路径
+其他材料只会得到处理计划。此时 `evidence_records`、`steps` 和 `modalities` 留空是正常情况，Agent 必须根据实际运行结果填写，不能把计划写成已经执行。
 
-**此时 workspace 里已经有**：
+## 2. 运行实际需要的 Provider
 
-```
-.oks/runs/<run_id>/manifest/
-  source-envelope.json       ← 预填充（source_id, content_hash, modality 等）
-  evidence-manifest.json     ← 骨架（evidence_records 有预填充槽位）
-  fragments/frag-xxx.json    ← 骨架
-  artifacts/                 ← 空（等 Provider 输出）
-```
+先根据 Recipe 和 `candidate_providers` 选择能够处理当前材料的 Provider。选择时应检查：
 
-### Step 2: 读取 Recipe + 选 Provider
+- Provider 当前是否可用；
+- 是否覆盖 Recipe 要求的能力；
+- 是否需要远程传输、登录凭据或付费服务；
+- 失败后是否有本地或降级路径。
 
-读 `recipe` 字段，理解需要哪些 evidence。
-
-**不要**再单独跑 `oks capability status --json` 去扫描全部 Provider——`candidate_providers` 已经帮你过滤了。
-
-从 `candidate_providers` 里选中一个 Provider。选择依据：
-
-1. availability（ready > not_configured > unavailable）
-2. 是否能满足 required capabilities
-3. 是否需要远程上传（敏感内容优先本地 Provider）
-
-需要 Provider 的详细执行说明时，才跑：
+需要具体调用说明时运行：
 
 ```bash
-oks capability guide <provider>
+oks capability guide <provider-id>
 ```
 
-### Step 3: 执行 Provider + 保存原始输出
+每次调用都要记录实际 Provider、工具和结果。不能使用 `curl` 获取内容，却把记录写成另一个 Provider 的输出。
 
-调用 Provider 工具（MCP / API / CLI）。
+## 3. 保存 Provider 原始输出
 
-**关键**：拿到 Provider 原始输出后，立即保存到 workspace：
+工具返回后，把未改写的原始输出保存到：
 
-```
-.oks/runs/<run_id>/work/<provider>/output.<ext>
-```
-
-例如 Firecrawl：
-
-```bash
-# 保存原始 JSON 到 work 目录
-mkdir -p .oks/runs/<run_id>/work/firecrawl/
-# 将 Provider 返回的原始响应写入 output.json
+```text
+.oks/runs/<run_id>/work/<provider-id>/output.<ext>
 ```
 
-**为什么必须做**：`raw-commit` 在 `status=complete` 时会**机械验证**这个文件存在且 >0 bytes。不存在 → `PROVENANCE_UNVERIFIABLE` 错误。
+Manifest 中步骤状态为 `succeeded`、`degraded` 或 `partial` 时，`raw-commit` 会检查对应目录中是否存在非空的 `output.*`。这项检查也适用于 `runtime-tool` 和 `text-read`。只有 `agent-runtime` 和 `human` 不要求外部工具输出文件。
 
-**常见错误**：
-- 忘了建 `work/<provider>/` 目录
-- 把 Agent 改写后的内容当"原始输出"保存——必须保存 Provider 的**原始响应**
-- Agent 自己总结了一段文字然后标 `producer=firecrawl` → provenance 非法
+`work/` 保存的是工具实际返回内容。Agent 生成的摘要、翻译或重排文本应另作证据记录，不能覆盖原始输出。
 
-### Step 4: 填写 evidence-manifest.json
+## 4. 按实际结果完成协议对象
 
-打开 `manifest/evidence-manifest.json`。`evidence_records` 里已经有预填充的槽位：
+非文本来源的骨架仍需补全：
 
-```json
-{
-  "evidence_id": "ev-abc123",
-  "artifact_id": "art-abc123",
-  "kind": "text_content",
-  "method": "html_extract",
-  "locator": {"kind": "document"},
-  "text": null,
-  "confidence": null,
-  "agent_judgment": "mechanical"
-}
-```
+1. 每个实际处理尝试写入对应 Evidence Fragment。
+2. 把采用的证据汇总到 Evidence Manifest。
+3. 将产物放入 `manifest/artifacts/`，填写文件哈希和证据位置。
+4. 在 `steps` 中记录成功、部分完成、降级、失败或跳过的步骤。
+5. 根据 Recipe 的 `complete_when` 条件判断 Manifest 是 `complete` 还是 `partial`。
 
-你只需要填三个字段：
+Fragment 的 `status` 只能是 `succeeded`、`partial` 或 `failed`。`oks ingest prepare` 为非文本来源生成的骨架可能仍是 `pending`，提交前必须改成实际结果。
 
-| 字段 | 含义 | 示例值 |
-|------|------|--------|
-| `text` | 从 Provider 原始输出中提取的证据内容 | Firecrawl 返回的页面正文 Markdown |
-| `confidence` | 你对这条证据质量的信心 | `0.9`（清晰提取）、`0.5`（部分截断） |
-| `agent_judgment` | 内容是机械提取还是你加工过 | `mechanical`（原文）、`agent_observed`（你改写过） |
+Manifest 的 `status` 只有 `complete` 和 `partial`。选择 `partial` 时，应在 `warnings` 中写清缺少的证据，并且必须把 `failure_disposition` 设为非 `none` 值，说明下一步需要授权、用户操作、重试，还是已经达到当前条件下的最终结果。
 
-**`agent_judgment` 的严格规则**：
+详细字段见[协议对象与状态](protocol-objects.html)。
 
-- **`mechanical`**：仅当 text 是 Provider 原始输出的确定性转换（截取字段、编码转换、newline 规范化）。**不含任何 Agent 改写、总结、重排、注释。**
-- **`agent_observed`**：你做了任何语义操作——总结、翻译、加标题、合并段落。此时 `producer.provider` 必须改为 `"agent-runtime"`，不能继续标 `"firecrawl"`。
-
-`steps[]` 也是预填充的，你填 `provider` 和 `status`：
-
-```json
-{
-  "capability": "web.extract",
-  "provider": "firecrawl",
-  "status": "succeeded",
-  "reason": null
-}
-```
-
-### Step 5: `oks raw-commit`
+## 5. 校验并保存 Raw Bundle
 
 ```bash
 oks raw-commit .oks/runs/<run_id>/manifest/
 ```
 
-**常见错误**：
+`raw-commit` 会检查：
 
-| 错误码 | 原因 | 解决方法 |
-|--------|------|----------|
-| `PROVENANCE_UNVERIFIABLE` | `status=complete` 但 `work/<provider>/output.*` 不存在或为空 | 检查是否真的保存了 Provider 原始输出 |
-| `MISSING_ARTIFACT` | 证据引用了不存在的 artifact 文件 | 检查 `artifact_id` 是否对应 `artifacts/` 中的实际文件 |
-| `ARTIFACT_HASH_MISMATCH` | 文件内容和声明的 sha256 不一致 | 重新计算 hash 或确认文件内容未被意外修改 |
-| `EVIDENCE_COUNT_MISMATCH` | `modalities` 里的 evidence_count 加起来 ≠ 实际 evidence 条数 | 更新 `modalities` 中的计数 |
+- Source Envelope、Evidence Manifest 和 Fragment 是否符合 Schema；
+- `source_id`、`fragment_id`、`artifact_id` 和 `evidence_id` 的引用是否对应；
+- Artifact 是否存在，SHA-256 是否匹配；
+- Evidence Locator 是否符合格式；
+- 步骤声明的 Provider 输出是否保存在 `work/` 中；
+- Manifest 中的证据数量是否与各 modality 的计数一致。
 
-**PROVENANCE_UNVERIFIABLE 排障细节**：
+通过后，CLI 先在临时目录组装完整 Raw Bundle，全部文件可用后再替换目标目录。校验失败时不会留下半个新 Bundle。
 
-- 这个检查只适用于 `steps[]` 中 `provider` 为注册 Provider（firecrawl/pdf-lite/rapidocr 等）且 `status` 为 `succeeded`/`degraded` 的步骤
-- `runtime-tool`、`agent-runtime`、`text-read`、`human` 豁免此检查
-- 同一个 Provider 的多个步骤只检查一次
-- 文件必须有内容——空文件不通过
+常见错误：
 
-成功输出：
+| 错误码 | 原因 | 处理方法 |
+|---|---|---|
+| `PROVENANCE_STEPS_MISSING` | Manifest 没有记录实际步骤 | 补全 `steps`，不要只写证据正文 |
+| `PROVENANCE_UNVERIFIABLE` | 某个步骤缺少非空 `work/<provider>/output.*` | 保存该工具的原始输出，并核对 Provider ID |
+| `MISSING_ARTIFACT` | 声明的 Artifact 文件不存在 | 检查 `artifacts/` 和相对路径 |
+| `ARTIFACT_HASH_MISMATCH` | 文件内容与声明哈希不同 | 确认最终文件后重新计算哈希 |
+| `ORPHAN_EVIDENCE` | Evidence 引用了不存在的 Artifact | 修正 `artifact_id` |
+| `EVIDENCE_COUNT_MISMATCH` | modality 计数与证据条数不同 | 按实际证据更新计数 |
+| `INVALID_LOCATOR` | 证据位置缺少类型或字段不合法 | 按 Locator Schema 修正位置 |
 
-```json
-{
-  "status": "committed",
-  "bundle_id": "bundle:2789f4ff",
-  "bundle_path": "raw/2026/08/07/agent-capture/bundle-2789f4ff",
-  "evidence_count": 2
-}
-```
+## 6. 检查保存结果
 
-### Step 6: A/B/C 分级
+Raw Bundle 通常位于按日期组织的 `raw/` 目录。至少检查：
 
-Agent 在 Raw Bundle 提交后分级：
+- `content.md` 是否能读取主要内容；
+- `source/` 是否保存主要来源文件；
+- `evidence.jsonl` 是否能回到具体 Artifact 和位置；
+- `quality-report.json` 与 `bundle.json` 是否保留 `complete` 或 `partial`；
+- `derived/` 是否保存 OCR、转写、截图或其他派生产物；
+- 警告和失败没有被后续摘要覆盖。
 
-| 等级 | 处理 |
+Raw Bundle 保存成功只证明文件和协议引用通过检查。来源可信度、提取准确性和结论是否可复用仍要另行判断。
+
+## 7. 决定是否提出 Candidate
+
+Agent 在 Raw 保存后评估材料：
+
+| 等级 | 处理方式 |
 |---|---|
-| A | 证据支持可复用判断，生成 Candidate |
-| B | 有价值但证据薄弱或过于情境化；保留 Raw 和原因，不生成 Candidate |
-| C | 噪声、重复或只有事实列表；保留 Raw 和原因，不生成 Candidate |
+| A | 证据支持可复用内容，生成 Candidate |
+| B | 材料有价值，但证据不足或只适用于当前情境，保留 Raw 和原因 |
+| C | 重复、噪声或没有形成可复用内容，保留 Raw 和原因 |
 
-只有 A 级继续下面的 Candidate 步骤。分级不是晋升，任何 Candidate 仍须人工审核。
+只有 A 级生成 Candidate。Candidate 是 `drafts/` 中的 Markdown 文件，不是收录协议对象，也没有对应的 `oks schema show candidate`。
 
-### Step 7: 生成 Candidate
+Candidate 使用 `draft_type` 和 `draft_area` 指定目标类型与领域。进入人工审核前，应写清 `source_bundle_id`、证据、适用范围和与已有 Wiki 的关系。具体审核步骤见[审核 Candidate](../../usage/review.html)。
 
-读 Raw Bundle 的 `evidence.jsonl`，基于证据写一个 Markdown 草稿到 `drafts/<slug>.md`：
+## 8. 工作流校验不代替执行
 
-```yaml
----
-title: "页面标题"
-draft_type: concept            # concept | strategy | anti-pattern
-draft_area: computing          # 目标知识域
-importance: 0.7
-confidence: 0.5
-created: "2026-08-07"
-tags: "web, example"
-status: pending
-source_type: agent-ingest
-relates_to: ""                 # 可选：已有 Wiki slug
-relationship: ""              # enriches | supersedes | confirms | challenges
----
-```
-
-**字段名必须是 `draft_type` / `draft_area`**，不是 `type` / `area`。`oks drafts promote`
-只读前者；写成 `type: strategy, area: science` 会**静默**落到
-`wiki/computing/concepts/`（回退默认值），没有任何报错。
-
-**重要**：Candidate 是一个 Markdown 文件，不是 OKS 协议对象。不要跑 `oks schema show candidate`。
-
-### Step 8: Human Review
+Agent 可以为本次运行写入 `.oks/runs/<run_id>/result.json`，再执行：
 
 ```bash
-oks drafts list              # 查看所有草稿
-oks drafts promote <slug>    # 提升到 wiki/
-oks drafts reject <slug>     # 拒绝并保留 review receipt
+oks ingest validate <run_id>
+oks ingest finalize <run_id>
 ```
 
-使用 `/promote` 技能读取完整 Candidate 并交互式审查；不要只看列表摘要就做决定。
-
-### Step 9: 验证召回
-
-```bash
-oks recall "关键词"
-```
-
-确认新知识能被召回。
-
----
-
-## 快速路径（text_ready=true）
-
-本地 Markdown / 纯文本会跳过 Provider 执行，但不会跳过分级和人工审核：
-
-```bash
-oks ingest prepare my-note.md
-# text_ready: true → 所有协议文件已预填充完成
-
-oks raw-commit .oks/runs/<run_id>/manifest/
-# → 直接产出 Raw Bundle
-
-# 然后执行 A/B/C 分级；仅 A 级生成 Candidate 并进入人工审核
-```
-
-## 泳道图
-
-```mermaid
-sequenceDiagram
-    actor Human
-    participant Agent
-    participant CLI as oks CLI
-    participant Extractor as Agent tools / oks-connector
-
-    Human->>Agent: 提供真实资料
-    Agent->>CLI: oks recall <topic>
-    CLI-->>Agent: 已有 Raw / Wiki 与 locator
-    Agent->>CLI: oks ingest prepare <source>
-    CLI-->>Agent: workspace + recipe + provider shortlist
-    alt 已有文本证据
-        Agent->>CLI: oks raw-commit <manifest-dir>
-    else 需要获取或提取
-        Agent->>Extractor: 按 policy 执行
-        Extractor-->>Agent: 原始输出 + evidence
-        Agent->>CLI: oks raw-commit <manifest-dir>
-    end
-    CLI-->>Agent: Raw Bundle
-    Agent->>Agent: A/B/C 分级
-    alt A：生成 Candidate
-        Agent-->>Human: Candidate + provenance + A4 关系
-        Human->>CLI: promote / reject
-        CLI-->>Human: Wiki 或 Reject Receipt
-    else B/C：不生成 Candidate
-        Agent-->>Human: 保留 Raw 与分级原因
-    end
-```
-
-图中分支对应两条提取路径；两条路径都会汇合到 Raw，再由 A/B/C 决定是否生成
-Candidate。只有人工批准的 Candidate 才进入 Wiki。
-
----
-
-{% include comments.html %}
+这两个命令读取已经保存的 Bundle、Candidate、审核和可选 Mail 记录，检查它们能否互相对应。`finalize` 不会重新获取来源、发送缺失的消息、批准 Candidate 或 Promote Wiki。只做独立材料收录时，使用 `oks ingest finalize <run_id> --source-only`。
