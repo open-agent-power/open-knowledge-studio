@@ -8,6 +8,10 @@ import sys
 import pytest
 from typer.testing import CliRunner
 
+# `ingest` resolves the capability check through its own module globals, so the
+# patch target must be the module that calls it (B4-6 moved it out of cli.py).
+from knowledge_studio import ingest_cli
+
 
 def _make_vfs_instance(root: Path) -> None:
     (root / "wiki").mkdir()
@@ -181,7 +185,7 @@ def test_ingest_preflight_uses_connector_route(source, capability, monkeypatch):
     from oks_connector import raw_bundle_adapter as adapter
 
     checked = []
-    monkeypatch.setattr(cli, "_capability_already_installed", lambda name: checked.append(name) or True)
+    monkeypatch.setattr(ingest_cli, "_capability_already_installed", lambda name: checked.append(name) or True)
     monkeypatch.setattr(adapter, "run_ingest", lambda args: 0)
 
     result = CliRunner().invoke(cli.app, ["ingest", "run", source])
@@ -207,7 +211,7 @@ def test_ingest_passes_execution_options_without_argument_reparsing(source, opti
 
     expected = adapter.build_parser().parse_args(["ingest", source, *connector_options])
     received = []
-    monkeypatch.setattr(cli, "_capability_already_installed", lambda name: True)
+    monkeypatch.setattr(ingest_cli, "_capability_already_installed", lambda name: True)
     monkeypatch.setattr(adapter, "run_ingest", lambda args: received.append(vars(args)) or 0)
 
     def parser_not_used():
@@ -227,7 +231,7 @@ def test_ingest_unsupported_source_keeps_connector_diagnostic(monkeypatch):
     def no_capability_check(name):
         raise AssertionError("Unsupported input must reach the connector route diagnostic")
 
-    monkeypatch.setattr(cli, "_capability_already_installed", no_capability_check)
+    monkeypatch.setattr(ingest_cli, "_capability_already_installed", no_capability_check)
 
     result = CliRunner().invoke(cli.app, ["ingest", "unknown.zip"])
 
@@ -239,7 +243,7 @@ def test_ingest_unsupported_source_keeps_connector_diagnostic(monkeypatch):
 def test_ingest_malformed_url_keeps_the_failure_diagnostic(monkeypatch):
     from knowledge_studio import cli
 
-    monkeypatch.setattr(cli, "_capability_already_installed", lambda name: True)
+    monkeypatch.setattr(ingest_cli, "_capability_already_installed", lambda name: True)
 
     result = CliRunner().invoke(cli.app, ["ingest", "https://[broken"])
 
@@ -252,7 +256,7 @@ def test_ingest_preserves_partial_exit_code(monkeypatch):
     from knowledge_studio import cli
     from oks_connector import raw_bundle_adapter as adapter
 
-    monkeypatch.setattr(cli, "_capability_already_installed", lambda name: True)
+    monkeypatch.setattr(ingest_cli, "_capability_already_installed", lambda name: True)
     monkeypatch.setattr(adapter, "run_ingest", lambda args: 2)
 
     result = CliRunner().invoke(cli.app, ["ingest", "run", "notes.md"])
@@ -264,7 +268,7 @@ def test_ingest_pdf_requires_mineru_capability_even_with_pdf_lite(monkeypatch):
     from knowledge_studio import cli
 
     checked = []
-    monkeypatch.setattr(cli, "_capability_already_installed", lambda name: checked.append(name) or name == "pdf-lite")
+    monkeypatch.setattr(ingest_cli, "_capability_already_installed", lambda name: checked.append(name) or name == "pdf-lite")
 
     result = CliRunner().invoke(cli.app, ["ingest", "paper.pdf"])
 

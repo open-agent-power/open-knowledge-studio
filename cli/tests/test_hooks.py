@@ -14,6 +14,7 @@ from pathlib import Path
 from typer.testing import CliRunner
 
 from knowledge_studio import cli as cli_module
+from knowledge_studio import hooks as hooks_module
 from knowledge_studio.cli import app
 
 
@@ -67,7 +68,7 @@ def _collaboration_handlers(target, editor, event):
         handler
         for group in hooks.get("hooks", {}).get(event, [])
         for handler in group.get("hooks", [])
-        if cli_module._hook_handler_matches_script(
+        if hooks_module._hook_handler_matches_script(
             handler, "subagent-collaboration.py"
         )
     ]
@@ -282,7 +283,7 @@ def test_subagent_collaboration_install_is_opt_in_and_idempotent(tmp_path, edito
             "matcher" not in group
             for group in installed["hooks"][event]
             if any(
-                cli_module._hook_handler_matches_script(
+                hooks_module._hook_handler_matches_script(
                     handler, "subagent-collaboration.py"
                 )
                 for handler in group.get("hooks", [])
@@ -781,7 +782,7 @@ def test_hook_recall_cli_forces_utf8_for_chinese_bridge(tmp_path, monkeypatch):
         encoding="utf-8",
     )
 
-    result = cli_module._run_hook_recall(
+    result = hooks_module._run_hook_recall(
         target,
         "请基于晋升 Wiki 生成技术申报书",
         "dsh-oks",
@@ -811,8 +812,8 @@ def test_hook_recall_cli_forces_utf8_child_environment(tmp_path, monkeypatch):
         captured.update(kwargs["env"])
         return Completed()
 
-    monkeypatch.setattr(cli_module.subprocess, "run", fake_run)
-    result = cli_module._run_hook_recall(target, "中文提示", "session", "C:/host", "dsh-oks")
+    monkeypatch.setattr(hooks_module.subprocess, "run", fake_run)
+    result = hooks_module._run_hook_recall(target, "中文提示", "session", "C:/host", "dsh-oks")
 
     assert result["status"] == "skipped_minlen"
     assert captured["PYTHONIOENCODING"] == "utf-8"
@@ -831,8 +832,8 @@ def test_hook_recall_cli_rejects_malformed_success_envelope(tmp_path, monkeypatc
             "trace": None,
         })
 
-    monkeypatch.setattr(cli_module.subprocess, "run", lambda *args, **kwargs: Completed())
-    result = cli_module._run_hook_recall(target, "safe prompt", "session", "C:/host", "dsh-oks")
+    monkeypatch.setattr(hooks_module.subprocess, "run", lambda *args, **kwargs: Completed())
+    result = hooks_module._run_hook_recall(target, "safe prompt", "session", "C:/host", "dsh-oks")
 
     assert result == {
         "schema": "hook-recall-response/v1",
@@ -851,14 +852,14 @@ def test_hook_recall_diagnostics_are_opt_in(tmp_path, monkeypatch):
         stdout = ""
         stderr = "child hook failed: import error"
 
-    monkeypatch.setattr(cli_module.subprocess, "run", lambda *args, **kwargs: Completed())
-    without_diagnostics = cli_module._run_hook_recall(
+    monkeypatch.setattr(hooks_module.subprocess, "run", lambda *args, **kwargs: Completed())
+    without_diagnostics = hooks_module._run_hook_recall(
         target, "safe prompt", "session", "C:/host", "dsh-oks"
     )
     assert "diagnostic" not in without_diagnostics
 
     monkeypatch.setenv("OKS_HOOK_DIAGNOSTICS", "1")
-    with_diagnostics = cli_module._run_hook_recall(
+    with_diagnostics = hooks_module._run_hook_recall(
         target, "safe prompt", "session", "C:/host", "dsh-oks"
     )
     assert with_diagnostics["diagnostic"] == (

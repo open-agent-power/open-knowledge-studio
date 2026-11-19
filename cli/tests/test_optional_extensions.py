@@ -5,7 +5,9 @@ import tomllib
 
 from typer.testing import CliRunner
 
+from knowledge_studio import capability_cli
 from knowledge_studio import cli
+from knowledge_studio import ingest_cli
 
 
 runner = CliRunner()
@@ -32,7 +34,7 @@ def test_handler_install_hints_point_at_real_channels():
             f"{handler['name']}: L1 capabilities install via `oks capability install`, got {hint!r}"
         )
         capability = hint.split()[3]
-        assert capability in cli._CAPABILITIES, (
+        assert capability in capability_cli._CAPABILITIES, (
             f"{handler['name']}: hint names unknown capability {capability!r}"
         )
 
@@ -98,7 +100,7 @@ def test_ingest_reports_bundled_connector_failures(monkeypatch):
     def fail(parsed):
         raise RuntimeError("Extractor failed")
 
-    monkeypatch.setattr(cli, "_capability_already_installed", lambda _name: True)
+    monkeypatch.setattr(ingest_cli, "_capability_already_installed", lambda _name: True)
     monkeypatch.setattr(raw_bundle_adapter, "run_ingest", fail)
 
     result = runner.invoke(cli.app, ["ingest", "https://example.com/video"])
@@ -109,7 +111,7 @@ def test_ingest_reports_bundled_connector_failures(monkeypatch):
 
 def test_ingest_recommends_capability_install(monkeypatch):
     """Pre-flight check suggests capability install when extractor is missing."""
-    monkeypatch.setattr(cli, "_capability_already_installed", lambda _name: False)
+    monkeypatch.setattr(ingest_cli, "_capability_already_installed", lambda _name: False)
 
     result = runner.invoke(cli.app, ["ingest", "paper.pdf"])
 
@@ -122,7 +124,7 @@ def test_ingest_unknown_source_reaches_the_builtin_route_without_optional_extrac
 
     checked = []
     received = []
-    monkeypatch.setattr(cli, "_capability_already_installed", lambda name: checked.append(name) or False)
+    monkeypatch.setattr(ingest_cli, "_capability_already_installed", lambda name: checked.append(name) or False)
     monkeypatch.setattr(raw_bundle_adapter, "run_ingest", lambda parsed: received.append(parsed.source) or 2)
 
     result = runner.invoke(cli.app, ["ingest", "notes.unknown"])
@@ -142,7 +144,7 @@ def test_ingest_forwards_mode_timeout_and_progress(monkeypatch):
         received["source"] = parsed.source
         return 0
 
-    monkeypatch.setattr(cli, "_capability_already_installed", lambda _name: True)
+    monkeypatch.setattr(ingest_cli, "_capability_already_installed", lambda _name: True)
     from oks_connector import raw_bundle_adapter
     monkeypatch.setattr(raw_bundle_adapter, "run_ingest", fake_run_ingest)
 
@@ -165,7 +167,7 @@ def test_ingest_forwards_formula_secondary_for_pdf(monkeypatch):
         received["formula_max_regions"] = parsed.formula_max_regions
         return 0
 
-    monkeypatch.setattr(cli, "_capability_already_installed", lambda _name: True)
+    monkeypatch.setattr(ingest_cli, "_capability_already_installed", lambda _name: True)
     from oks_connector import raw_bundle_adapter
     monkeypatch.setattr(raw_bundle_adapter, "run_ingest", fake_run_ingest)
 
@@ -188,12 +190,12 @@ def test_capability_install_is_explicit_by_default():
 
 def test_formula_capability_pins_mineru_compatible_tokenizers():
     """Keep the optional formula install compatible with MinerU's worker."""
-    assert "tokenizers==0.22.1" in cli._CAPABILITIES["formula"]["deps"]
+    assert "tokenizers==0.22.1" in capability_cli._CAPABILITIES["formula"]["deps"]
 def test_no_direct_url_dependencies_block_pypi_upload():
     """PyPI rejects any Requires-Dist with a direct URL — that breaks releases.
 
     Runtime-only installs (git checkouts, private forks) belong in
-    cli._CAPABILITIES, which is passed to `pip install` and never becomes
+    capability_cli._CAPABILITIES, which is passed to `pip install` and never becomes
     package metadata.
     """
     pyproject = Path(__file__).parents[1] / "pyproject.toml"
