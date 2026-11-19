@@ -29,6 +29,7 @@ import json
 import hashlib
 import logging
 import math
+from functools import lru_cache
 from time import perf_counter
 from datetime import UTC, datetime
 from pathlib import Path, PurePath
@@ -196,12 +197,18 @@ RECALL_RESPONSE_SCHEMA = "recall-response/v1"
 _NON_RECALLABLE_RAW_SUBDIRS = ("executions", ".logs")
 
 
+@lru_cache(maxsize=8)
+def _resolver_for(root: Path) -> VfsResolver:
+    """One resolver per knowledge base: mount roots resolve once, not per hit."""
+    return VfsResolver(root)
+
+
 def _uri_for_hit_path(root: Path, path: str | Path) -> str:
     """Map a hit's physical path through the shared canonical VFS resolver."""
     candidate = Path(path)
     if not candidate.is_absolute():
         candidate = root / candidate
-    return VfsResolver(root).uri_for_path(candidate)
+    return _resolver_for(root).uri_for_path(candidate)
 
 
 def _portable_source_path(path: PurePath, root: PurePath) -> str:
@@ -765,6 +772,7 @@ def recall_knowledge(
     candidate_pages: list[dict] | None = None,
     params: dict | None = None,
     goal_context: dict | None = None,
+    backend: Any | None = None,
 ) -> list[dict[str, Any]]:
     """Find wiki pages relevant to the query via 6+1-factor scoring.
 
@@ -781,6 +789,11 @@ def recall_knowledge(
     type_filter: optional wiki type filter applied before ranking and limit.
     Internal callers may share candidate_pages, params and a resolved goal_context
     for one request. Omitting them reads the current knowledge base.
+
+    backend: an already-open search backend owned by the caller. A batch caller
+    (evaluation, replay) passes one to avoid paying connect + schema check +
+    WAL checkpoint per case; ownership and closing stay with the caller. When
+    omitted, this call creates and closes its own backend as before.
     """
     if goal_context is None:
         goal_context = _resolve_goal_context(goal, goal_boost=goal_boost)
@@ -795,6 +808,7 @@ def recall_knowledge(
         search_backend=search_backend,
         candidate_pages=candidate_pages,
         params=params,
+        backend=backend,
     )
 
 
@@ -813,6 +827,7 @@ def _recall_knowledge_via_backend(
     diagnostics: dict | None = None,
     candidate_pages: list[dict] | None = None,
     params: dict | None = None,
+    backend: Any | None = None,
 ) -> list[dict[str, Any]]:
     """Dispatch knowledge recall — Triple-Layer Recall 召回层 (CONSTITUTION A8).
 
@@ -856,7 +871,9 @@ def _recall_knowledge_via_backend(
     from .search import get_backend
     from .store import repo_root
 
-    backend = get_backend(search_backend, root=repo_root())
+    owns_backend = backend is None
+    if backend is None:
+        backend = get_backend(search_backend, root=repo_root())
     diagnostics.update(requested_backend=search_backend, experimental=search_backend == "fusion")
     backend_kwargs: dict[str, Any] = {}
     if strategy != "knowledge":
@@ -964,7 +981,7 @@ def _recall_knowledge_via_backend(
     diagnostics["filtered"] = {reason: len(slugs) for reason, slugs in diagnostics["filtered"].items()}
     if "like" in diagnostics["actual_backends"]:
         diagnostics["fallback_reason"] = "sqlite_fts5_unavailable"
-    if hasattr(backend, "close"):
+    if owns_backend and hasattr(backend, "close"):
         backend.close()
 
     # v0.6.0: goal boost 在注入层——fts5 召回 top-N 后，goal 命中的 slug
