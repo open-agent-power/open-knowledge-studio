@@ -6,13 +6,15 @@ shares ``_instance_root`` with the instance commands and nothing else.
 
 Deliberate constraints:
 
-* ``_emit_json`` delegates lazily to ``cli.py`` so JSON output stays
+* ``_emit_json`` comes from ``knowledge_studio.output`` so JSON output stays
   byte-identical with the rest of the CLI.
 * The two Typer instances keep their original ``help`` strings; ``cli.py``
   registers them under the same group names, which keeps ``oks --help`` and the
   160-entry command tree unchanged.
 """
 from __future__ import annotations
+
+from knowledge_studio.output import emit_json as _emit_json
 
 import json
 import os
@@ -30,13 +32,6 @@ console = Console()
 
 app = typer.Typer(help="Agent-to-agent mail (inbox/sent).")
 registry_app = typer.Typer(help="Terminal registry (agent+cwd -> profile/goal).")
-
-
-def _emit_json(data) -> None:
-    """Delegate to cli.py so JSON output stays byte-identical everywhere."""
-    from .cli import _emit_json as emit
-
-    return emit(data)
 
 
 # Characters that cannot appear in a single portable path component: the POSIX

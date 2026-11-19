@@ -6,6 +6,8 @@ Split out of `cli.py` as a verbatim move (B4-6b), including the custom
 """
 from __future__ import annotations
 
+from knowledge_studio.output import emit_json as _emit_json
+
 import json
 import os
 import subprocess
@@ -26,18 +28,9 @@ from knowledge_studio.instance_cli import _instance_root
 console = Console()
 
 
-def _emit_json(data) -> None:
-    """Delegate to cli.py so JSON output stays byte-identical everywhere."""
-    from .cli import _emit_json as emit
-
-    return emit(data)
-
-
 def _extractor_env_for(capability: str) -> str:
     return {"watch": "OKS_WATCH_PYTHON", "document": "OKS_DOCUMENT_PYTHON",
             "pdf": "OKS_MINERU_PYTHON", "formula": "OKS_FORMULA_PYTHON"}.get(capability, "")
-
-
 
 
 class _LegacyIngestGroup(typer.core.TyperGroup):

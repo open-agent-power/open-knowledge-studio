@@ -1,11 +1,16 @@
 """`oks fs` — read-only virtual context filesystem.
 
 Split out of `cli.py` as a verbatim move (B4-4). The four `_vfs_*` helpers moved
-with the commands because nothing else used them; `_validate_output_format` stays
-in `cli.py` (the `recall` command shares it) and is reached through a one-line
-delegation shim, which keeps the moved `_run_vfs` body byte-identical.
+with the commands because nothing else used them. Output helpers come from
+`knowledge_studio.output`, shared with `recall` and the other command modules;
+the moved `_run_vfs` body stays byte-identical.
 """
 from __future__ import annotations
+
+from knowledge_studio.output import (
+    emit_json as _emit_json,
+    validate_output_format as _validate_output_format,
+)
 
 from typing import Any, Callable
 
@@ -22,20 +27,6 @@ console = Console()
 fs_app = typer.Typer(
     help="Read-only virtual context filesystem.", no_args_is_help=True
 )
-
-
-def _emit_json(data) -> None:
-    """Delegate to cli.py so JSON output stays byte-identical everywhere."""
-    from .cli import _emit_json as emit
-
-    return emit(data)
-
-
-def _validate_output_format(value: str) -> str:
-    """Delegate to cli.py — `recall` shares the same validation rule."""
-    from .cli import _validate_output_format as validate
-
-    return validate(value)
 
 
 def _vfs_success(operation: str, uri: str, result: dict) -> dict:

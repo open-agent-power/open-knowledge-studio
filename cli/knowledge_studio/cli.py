@@ -4,6 +4,11 @@ Typer-based CLI for knowledge base search, wiki CRUD, drafts, and maintenance.
 """
 from __future__ import annotations
 
+from knowledge_studio.output import (
+    emit_json as _emit_json,
+    validate_output_format as _validate_output_format,
+)
+
 import importlib.util
 import json
 import os
@@ -81,19 +86,6 @@ app = typer.Typer(
     no_args_is_help=True,
 )
 console = Console()
-
-
-def _validate_output_format(value: str) -> str:
-    normalized = value.lower().strip()
-    if normalized not in {"table", "json"}:
-        console.print("[red]--format must be one of: table, json[/red]")
-        raise typer.Exit(2)
-    return normalized
-
-
-def _emit_json(data) -> None:
-    """Write machine-readable JSON without Rich markup or ANSI styling."""
-    typer.echo(json.dumps(data, ensure_ascii=False, indent=2))
 
 
 def _version_callback(value: bool):

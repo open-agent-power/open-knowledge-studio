@@ -6,6 +6,8 @@ split needed three separate splices; nothing else used them.
 """
 from __future__ import annotations
 
+from knowledge_studio.output import emit_json as _emit_json
+
 from pathlib import Path
 
 import typer
@@ -13,13 +15,6 @@ import typer
 from knowledge_studio.instance_cli import _instance_root
 
 sources_app = typer.Typer(help="Link independent read-only Git knowledge repositories.")
-
-
-def _emit_json(data) -> None:
-    """Delegate to cli.py so JSON output stays byte-identical everywhere."""
-    from .cli import _emit_json as emit
-
-    return emit(data)
 
 
 @sources_app.command('link')

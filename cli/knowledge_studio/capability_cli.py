@@ -5,6 +5,8 @@ programmatically, so bodies are byte-identical; `block_equivalence.py` confirms 
 """
 from __future__ import annotations
 
+from knowledge_studio.output import emit_json as _emit_json
+
 import json
 import os
 import re
@@ -23,13 +25,6 @@ from knowledge_studio.i18n import t
 from knowledge_studio.instance_cli import _instance_root
 
 console = Console()
-
-
-def _emit_json(data) -> None:
-    """Delegate to cli.py so JSON output stays byte-identical everywhere."""
-    from .cli import _emit_json as emit
-
-    return emit(data)
 
 
 capability_app = typer.Typer(help="Optional modality capabilities; core dependencies stay lightweight.")

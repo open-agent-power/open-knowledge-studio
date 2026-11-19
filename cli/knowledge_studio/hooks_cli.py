@@ -1,6 +1,8 @@
 """CLI entry points for editor-hook installation, recall, and history."""
 from __future__ import annotations
 
+from knowledge_studio.output import emit_json as _emit_json
+
 import json
 import os
 from pathlib import Path
@@ -50,13 +52,6 @@ app = typer.Typer(help="Optional editor hooks for recall, conflict detection, co
 # The resolver's owner is instance_cli; importing it directly avoids routing
 # through cli.py, which only re-exports it.
 from .instance_cli import _instance_root  # noqa: E402
-
-
-def _emit_json(data) -> None:
-    """Delegate to cli.py so JSON output stays byte-identical everywhere."""
-    from .cli import _emit_json as emit
-
-    return emit(data)
 
 
 @app.command("recall")
