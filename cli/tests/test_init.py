@@ -175,7 +175,7 @@ def test_workbuddy_skill_requires_read_only_cli_recall(tmp_path):
 
 def test_hook_install_refreshes_persistence_support_file_and_stale_engine(tmp_path):
     """Old instances receive support files and the current hook protocol."""
-    from knowledge_studio.cli import _ensure_recall_scripts
+    from knowledge_studio.hooks import _ensure_recall_scripts
 
     target = tmp_path / "kb"
     hooks = target / ".claude" / "hooks"

@@ -185,7 +185,39 @@ class FTS5Backend:
         # Explicit overrides apply to this instance while its source is unchanged.
         self._source_fingerprint: str | None = None
 
+    def _schema_ready(self) -> bool:
+        """True when the persisted schema already matches this build.
+
+        The full path below takes a write lock (``BEGIN IMMEDIATE``) plus DDL
+        parsing on every recall, which costs ~70 ms on Windows. A read-only
+        probe of the same invariants lets steady-state recalls skip it.
+        """
+        engine = "fts5" if self._use_fts5 else "like"
+        required = {"pages", "wiki_fts", "skill_fts"} if self._use_fts5 else {"pages"}
+        try:
+            version = self._conn.execute(
+                "SELECT value FROM meta WHERE key='schema_version'"
+            ).fetchone()
+            if not version or version[0] != "node-v4":
+                return False
+            prior_engine = self._conn.execute(
+                "SELECT value FROM meta WHERE key='index_engine'"
+            ).fetchone()
+            if not prior_engine or prior_engine[0] != engine:
+                return False
+            tables = {
+                row[0]
+                for row in self._conn.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table'"
+                )
+            }
+        except sqlite3.Error:
+            return False
+        return required.issubset(tables)
+
     def _init_db(self) -> None:
+        if self._schema_ready():
+            return
         # Serialize schema inspection and ALTERs across simultaneous Hook starts.
         # DDL must share the transaction so a failed upgrade rolls back cleanly.
         with self._conn:

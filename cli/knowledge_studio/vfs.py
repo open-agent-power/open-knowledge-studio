@@ -111,6 +111,28 @@ class ResolvedNode:
 class VfsResolver:
     def __init__(self, root: Path | None = None):
         self.root = (root or get_kb_root()).expanduser().resolve()
+        # Resolved mount roots, filled on first uri_for_path() call.
+        self._mount_roots: list[tuple[Mount, Path]] | None = None
+
+    def _mounted_roots(self) -> list[tuple[Mount, Path]]:
+        """Resolve every mount root once per resolver.
+
+        ``uri_for_path`` maps each hit through all mounts; resolving them per
+        call costs ~10 ``Path.resolve()`` syscalls per hit (~77 ms per recall
+        on Windows). Mount roots are fixed for a knowledge base, so one pass is
+        enough. Resolution stays lazy: a root created later still resolves.
+        """
+        if self._mount_roots is None:
+            ordered = [MOUNTS["traces"], MOUNTS["skills"], MOUNTS["profiles"]] + [
+                mount for scope, mount in MOUNTS.items()
+                if scope not in {"traces", "skills", "profiles"}
+            ]
+            ordered += [Mount("goal", ("goal",)), Mount("discuss", ("discuss",)), Mount("skill", ("skill",))]
+            self._mount_roots = [
+                (mount, self.root.joinpath(*mount.relative_root).resolve(strict=False))
+                for mount in ordered
+            ]
+        return self._mount_roots
 
     def parse(self, value: str) -> OksUri:
         return OksUri.parse(value)
@@ -174,12 +196,7 @@ class VfsResolver:
         self._reject_symlinks(self.root, raw_relative.parts)
 
         candidate = candidate.resolve(strict=False)
-        ordered = [MOUNTS["traces"], MOUNTS["skills"], MOUNTS["profiles"]] + [
-            mount for scope, mount in MOUNTS.items() if scope not in {"traces", "skills", "profiles"}
-        ]
-        ordered += [Mount("goal", ("goal",)), Mount("discuss", ("discuss",)), Mount("skill", ("skill",))]
-        for mount in ordered:
-            mount_root = self.root.joinpath(*mount.relative_root).resolve(strict=False)
+        for mount, mount_root in self._mounted_roots():
             try:
                 relative = candidate.relative_to(mount_root)
             except ValueError:

@@ -15,6 +15,7 @@ from typing import Any
 import yaml
 
 from knowledge_studio.recall import load_recall_params, recall_knowledge
+from knowledge_studio.search import get_backend
 from knowledge_studio.store import _atomic_write, repo_root
 from knowledge_studio.evaluation_dataset import (
     AUDIT_METRICS, AUDIT_MODE, COHORT_COUNTS, DATASET_V2, RANKING_METRICS,
@@ -186,6 +187,10 @@ def run_evaluation(dataset_path: str | Path, output_path: str | Path, *, limit: 
     cases: list[dict[str, Any]] = []
     latencies: list[float] = []
 
+    # One backend for the whole run. Connect, schema probe and the WAL
+    # checkpoint on close are per-backend costs; paying them per case is what
+    # made a 400 ms case on Windows.
+    shared_backend = get_backend(context["backend"], root=root)
     for case in evaluation_cases:
         started = time.perf_counter()
         hits = recall_knowledge(
@@ -193,6 +198,7 @@ def run_evaluation(dataset_path: str | Path, output_path: str | Path, *, limit: 
             scope=case.get("scope"), goal=str(case.get("goal", "none")),
             explain=True, type_filter=case.get("type_filter"),
             search_backend=context["backend"],
+            backend=shared_backend,
         )
         latency_ms = (time.perf_counter() - started) * 1000
         latencies.append(latency_ms)
@@ -215,6 +221,9 @@ def run_evaluation(dataset_path: str | Path, output_path: str | Path, *, limit: 
 
         if progress is not None:
             progress(len(cases), len(evaluation_cases))
+
+    if hasattr(shared_backend, "close"):
+        shared_backend.close()
 
     after = _kb_snapshot(root)
     if before != after:
