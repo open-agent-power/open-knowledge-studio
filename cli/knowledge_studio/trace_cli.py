@@ -6,6 +6,8 @@ to the pre-split version, which `block_equivalence.py` verifies via AST.
 """
 from __future__ import annotations
 
+from knowledge_studio.output import emit_json as _emit_json
+
 import json
 from pathlib import Path
 from typing import Optional
@@ -19,13 +21,6 @@ from knowledge_studio.instance_cli import _instance_root
 console = Console()
 
 trace_app = typer.Typer(help="Append-only execution traces and feedback.")
-
-
-def _emit_json(data) -> None:
-    """Delegate to cli.py so JSON output stays byte-identical everywhere."""
-    from .cli import _emit_json as emit
-
-    return emit(data)
 
 
 def _parse_json_object(value: str, option: str) -> dict:

@@ -1,10 +1,15 @@
 """`oks eval` — offline recall evaluation and run comparison.
 
-Split out of `cli.py` as a verbatim move (B4-6c). `_validate_output_format`
-stays in cli.py (shared with `recall`) and is reached through a delegation shim.
+Split out of `cli.py` as a verbatim move (B4-6c). Output helpers now come from
+`knowledge_studio.output`, shared with `recall` and the other command modules.
 Source text was extracted programmatically.
 """
 from __future__ import annotations
+
+from knowledge_studio.output import (
+    emit_json as _emit_json,
+    validate_output_format as _validate_output_format,
+)
 
 import json
 import os
@@ -24,22 +29,7 @@ from knowledge_studio.instance_cli import _instance_root
 console = Console()
 
 
-def _emit_json(data) -> None:
-    """Delegate to cli.py so JSON output stays byte-identical everywhere."""
-    from .cli import _emit_json as emit
-
-    return emit(data)
-
-
-
 eval_app = typer.Typer(help="Offline recall evaluation and run comparison.")
-
-
-def _validate_output_format(value: str) -> str:
-    """Delegate to cli.py — the recall command shares the same validation rule."""
-    from .cli import _validate_output_format as validate
-
-    return validate(value)
 
 
 @eval_app.command('candidates')

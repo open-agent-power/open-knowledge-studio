@@ -15,6 +15,8 @@ Deliberate constraints:
 """
 from __future__ import annotations
 
+from knowledge_studio.output import emit_json as _emit_json
+
 import json
 from pathlib import Path
 import re
@@ -45,13 +47,6 @@ def _asset_source() -> Path | None:
     from .cli import _asset_source as locate
 
     return locate()
-
-
-def _emit_json(data) -> None:
-    """Delegate to cli.py so JSON output stays byte-identical everywhere."""
-    from .cli import _emit_json as emit
-
-    return emit(data)
 
 
 _INSTANCE_DIRS = [
@@ -520,7 +515,6 @@ def team_init(
         "settings/sources.yaml; existing files are not copied into personal Wiki.\n"
         "Commit and share through the team's authorized Git workflow."
     )
-
 
 
 @team_app.command("sync")
