@@ -480,14 +480,37 @@ def _reinforce_on_reconfirmation(slug: str) -> None:
         _update_frontmatter_field(f, "confidence", round(new_conf, 4))
 
 
-def list_wiki_pages(config: dict | None = None) -> list[dict]:
-    wd = wiki_dir()
-    if not wd.exists():
-        return []
+_WIKI_PAGES_CACHE_LOCK = threading.Lock()
+_WIKI_PAGES_CACHE: dict[str, tuple[str, list[dict]]] = {}
 
-    access_counts = _load_access_counts()
+
+def _wiki_pages_cache_key(wd: Path, access_counts: dict, config: dict | None) -> str:
+    """Fingerprint every input that can change ``list_wiki_pages`` output.
+
+    Wiki file mtime/size, the access log (score bonus), the score config and
+    the UTC date (the decay curve reads ``datetime.now``) all participate, so
+    an edit, archive, delete, add or ``record_access()`` invalidates the cache.
+    """
+    h = hashlib.sha256()
+    h.update(str(wd).encode("utf-8"))
+    for f in sorted(wd.rglob("*.md")):
+        if f.name == "INDEX.md":
+            continue
+        try:
+            st = f.stat()
+            h.update(f"{f.relative_to(wd)}:{st.st_mtime_ns}:{st.st_size}\n".encode("utf-8"))
+        except OSError:
+            continue
+    h.update(json.dumps(access_counts, sort_keys=True, ensure_ascii=False).encode("utf-8"))
+    h.update(json.dumps(config or {}, sort_keys=True, ensure_ascii=False,
+                        default=str).encode("utf-8"))
+    h.update(datetime.now(UTC).date().isoformat().encode("utf-8"))
+    return h.hexdigest()
+
+
+def _parse_wiki_pages(wd: Path, access_counts: dict, config: dict | None) -> list[dict]:
+    """Original parse/compute path, kept verbatim for cache-miss equivalence."""
     pages: list[dict] = []
-
     for f in wd.rglob("*.md"):
         if f.name == "INDEX.md":
             continue
@@ -507,6 +530,30 @@ def list_wiki_pages(config: dict | None = None) -> list[dict]:
 
     pages.sort(key=lambda x: (-x["score"], x["slug"]))
     return pages
+
+
+def list_wiki_pages(config: dict | None = None) -> list[dict]:
+    """Return parsed wiki pages, reusing the parse while inputs are unchanged.
+
+    ``recall_knowledge`` calls this on every query; re-parsing the whole wiki
+    dominates steady-state latency. Results are cached per wiki root and
+    invalidated by the input fingerprint. Callers get shallow copies so an
+    in-place edit cannot poison the cached snapshot.
+    """
+    wd = wiki_dir()
+    if not wd.exists():
+        return []
+
+    access_counts = _load_access_counts()
+    key = _wiki_pages_cache_key(wd, access_counts, config)
+    root_key = str(wd)
+    with _WIKI_PAGES_CACHE_LOCK:
+        cached = _WIKI_PAGES_CACHE.get(root_key)
+        if cached is not None and cached[0] == key:
+            return [dict(p) for p in cached[1]]
+        pages = _parse_wiki_pages(wd, access_counts, config)
+        _WIKI_PAGES_CACHE[root_key] = (key, pages)
+        return [dict(p) for p in pages]
 
 
 def get_wiki_page(slug: str) -> dict | None:
