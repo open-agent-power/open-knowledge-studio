@@ -5,105 +5,125 @@ parent: 维护者
 nav_exclude: true
 search_exclude: true
 ---
-# 召回评估（OKS Triple-Layer Recall 消融实验）
 
-`oks eval recall <dataset.yaml>` 支持离线评测召回质量。这一页讲评估方法论——三层次能力框架 + 三个量化指标——以及 OKS 当前的位置和阻塞。
+# 召回评估
 
-> 下文的数值是绑定固定 50-case 数据集和当时运行记录的历史基准，不是所有知识库、机器或 backend 的通用 SLA。修改代码或评测环境后，请按文末命令重新运行。
+`oks eval recall <dataset.yaml>` 用一组已标注的问题检查知识检索结果。它评估的是“找到了哪些知识页，以及排在什么位置”，不评估 Agent 最终回答的正确性，也不评估任务是否完成。
 
-## 三层次能力框架
+下文保留了 50 题数据集的历史运行结果。数值只适用于记录中的数据集、知识库快照和运行条件；修改代码、语料或配置后，需要重新运行。检索实现见[召回引擎](recall-engine.html)。
 
-借鉴长期对话记忆研究（LoCoMo 等），用户记忆能力可分三层递进：
+## 本页评估什么
 
-| 层次 | 能力 | 例子 | OKS 当前 |
-|------|------|------|----------|
-| **第一层：基础回忆** | 存取用户直接给的、结构化、无歧义信息 | "我的会员号是 12345"→精确返回 | ✅ `oks recall` 单次召回 |
-| **第二层：多会话检索** | 跨对象 / 时间找全相关信息 + 推理判断 | 两辆车问"为我的车预约"→找全两辆 + 问哪辆 | ⚠️ 部分——`raw/` 按时间分区，双路召回能跨会话，但无多跳推理 |
-| **第三层：主动服务** | 跨会话深层关联，预见性主动帮助 | 订国际航班→关联数月前护照→预警将过期 | ❌ 不做——需 Agent 层主动推理，OKS 只提供召回原语 |
+当前命令逐题调用个人 Wiki 的知识检索接口，不包含 Raw 原始材料检索、团队库结果或 Agent 的多轮处理。
 
-OKS 定位在第一层 + 第二层基础：`oks recall` 是 Recall 原语，第三层"主动服务"要 host Agent 在宿主层做（调 recall + 推理 + 再调 recall）。这是"Agent 状态栏注入 + Recall 原语"的边界——OKS 不替 Agent 思考。
+| 问题 | 本评测能否回答 |
+| --- | --- |
+| 预期知识页是否出现在前几个结果中 | 可以，通过相关页标注和返回结果计算 |
+| 第一个相关结果排得是否靠前 | 可以，通过排名计算 |
+| Agent 是否正确理解并引用知识 | 不可以，需要检查回答或执行过程 |
+| Agent 能否主动发现问题并完成任务 | 不可以，需要另行设计任务评测 |
+
+检索结果是后续回答或执行工作的输入。检索分数提高，不等于整个任务的成功率提高。
 
 ## 三个量化指标
 
-召回质量在带标注答案的测试集上算（query + 期望命中页）：
+每个问题包含查询文本 `query` 和相关知识页列表 `relevant`。当前实现按知识页的 `slug` 精确匹配，计算方式如下：
 
-| 指标 | 回答什么 | 公式直觉 |
-|------|---------|---------|
-| **recall@k**（召回率@k） | 前 k 个结果含正确答案的查询比例——"该找的找到了吗" | 命中查询数 / 总查询数 |
-| **MRR**（平均倒数排名） | 第一个相关结果排名的倒数平均——"找到得够不够靠前" | Σ 1/rank ÷ 查询数；排第 1 得 1 分，第 10 得 0.1 分 |
-| **nDCG**（归一化折损累积增益） | 整个排序列表质量，排名越靠后折扣越大——"整个列表质量如何" | 考虑所有相关文档排名 + 相关程度 |
+| 指标 | 回答什么 | 当前计算方式 |
+| --- | --- | --- |
+| Recall@k | 应当找到的相关页中，前 k 个结果找到了多少 | 每题计算“前 k 项命中的不同相关页数 ÷ 标注的相关页总数”，再对题目取平均 |
+| MRR，平均倒数排名 | 第一个相关结果是否靠前 | 每题取首个相关结果排名的倒数；未命中取 0，再对题目取平均 |
+| nDCG@5，归一化折损累积增益 | 前 5 项的整体排序如何 | 相关页越靠前，贡献越大，再除以理想排序得分；当前使用相关或不相关的二值标注 |
 
-工业报告常见"检索失败率" = 1 − recall@k（如 top-20 未命中率）。跨来源比较先弄清 k 取多少、recall@k 是命中率还是相关文档比例。
+例如，某题标注了 4 个相关页，前 3 项命中其中 2 个，该题的 Recall@3 为 `2 / 4 = 0.5`。因此，本项目的 Recall@k 不是“至少命中一页的查询比例”；只有每题恰好标注一个相关页时，两者才相同。跨来源比较时，必须先核对指标定义和 k 的取值。
 
-## OKS 现状
+MRR 中，首个相关结果排第 1 得 1 分，排第 5 得 0.2 分。它只关注第一个相关结果，不能替代 Recall@k 对多个相关页覆盖情况的检查。
 
-`oks eval recall <dataset.yaml> --output <run.json>` 跑评测：
+v2 数据集允许标注无法回答的问题。没有相关页的题目不参与上述三个指标的平均值，而由拒答等检查指标另行衡量。结果还会报告无结果比例、禁止返回项的出现情况，以及 p50、p95 延迟。p50 是耗时中位数，p95 表示约 95% 的请求耗时不超过该值。
 
-- **输入**：YAML 数据集（query + 期望命中 slug 列表 + 可选 `topic_id`）
-- **输出**：每个 query 的召回结果 + 三指标聚合 + `--explain` 逐项分数
-- **基线**：`--goal none` 无偏基线，`--goal <slug>` 固定 goal 可复现
+## 准备数据并运行
 
-**阻塞**：OKS 无官方标注数据集——三指标要 query + 期望命中页，需人工标注。社区可自建（把常用 query + 该命中的 wiki 页标好）。在标注数据集就绪前，召回评分权重不盲调（P9 精神）——只能用 `--explain` 做定性检查。
+仓库已有 `records/experiments/eval-50.yaml` 等历史数据集。它们引用特定知识库中的页面，并不保证适用于你的个人库；运行前应确认标注的知识页在当前语料中存在。自己的数据集需要用实际问题和预期命中页进行标注。
 
-## v0.6.1 实测：OKS Triple-Layer Recall 消融实验
+最小 v1 数据集示例：
 
-v0.6.1 把三层架构（召回 fts5 node-level / 注入 Soul Boost / 衰减 Memory Curve）定名 **OKS Triple-Layer Recall**。在 50 个语义改写 case（query 不含 slug 关键词，测试同义词/改写召回，严格精确 slug 匹配）上做消融实验：
+```yaml
+schema_version: recall-case/v1
+dataset_id: my-recall-set
+version: '1.0'
+cases:
+  - case_id: case-1
+    query: 如何定位这个知识？
+    relevant: [my-evidence]
+    goal: none
+```
 
-| backend | R@1 | R@3 | R@5 | MRR | nDCG@5 | p50 延迟 |
-|---------|------|------|------|------|---------|----------|
-| **fts5（完整 Triple-Layer）** | **0.825** | **0.925** | 0.927 | **0.907** | **0.893** | 93ms |
-| native（去 Node-BM25，回 page-level 6+1） | 0.525 | 0.647 | 0.689 | 0.630 | 0.624 | 137ms |
-| fusion（fts5 + native re-rank） | 0.805 | 0.905 | 0.927 | 0.900 | 0.887 | 226ms |
+`goal` 是每道题的数据字段。省略时按 `none` 处理；要测试固定目标的影响，可以在该字段填写目标标识。`oks eval recall` 本身没有 `--goal` 参数。
 
-### 关键发现（数据驱动）
+```bash
+oks eval recall my-recall-set.yaml --output run-fts5.json --search-backend fts5
+```
 
-1. **Node-BM25 全面碾压 native 6+1**——召回层从 page-level 手写 token overlap 换成 fts5 node-level BM25：R@1 +57%（0.525→0.825）、R@3 +43%（0.647→0.925）、MRR +44%（0.630→0.907）。多词同段 BM25 高分，语义改写召回精准。
-2. **fusion re-rank 反而降精度**——native 6+1 的 memory curve / goal boost / review bonus 在召回层 re-rank 拖累（R@1 0.825→0.805，MRR 0.907→0.900）。证实 **oks 灵魂应在注入层 boost，不在召回层 re-rank**——不相关 page 高分挤掉精确命中。
-3. **fts5 还更快**——93ms vs native 137ms vs fusion 226ms。SQLite 持久化索引比实时遍历快，fusion 因双路调用最慢。
-4. **R@5 三者接近**（0.689/0.927/0.927）——fts5 优势集中在 top-1/top-3 精准排序，top-5 宽网 native 也能捞到。
+当前命令支持 `--output`、`--limit`、`--search-backend` 和 `--split`。`--limit` 默认 5，且不能小于 5，以便计算 Recall@5 和 nDCG@5。v2 数据集包含多个分组时，需要用 `--split train`、`--split validation` 或 `--split test` 指定分组。
 
-### 三层消融拆解
+输出 JSON 包含逐题命中的知识标识、指标、耗时，以及数据、知识库和配置等运行记录。当前评测命令没有 `--explain` 参数，也不在结果中保存完整的逐项评分；排查某一道题时，可另外使用 `oks recall "查询文本" --explain` 查看评分组成。
 
-| 消融 | 去掉什么 | R@1 | MRR | 证明 |
-|------|---------|------|------|------|
-| 完整 Triple-Layer | — | 0.825 | 0.907 | baseline |
-| 去 Node-BM25 | 召回层 fts5→native 6+1 | 0.525 | 0.630 | Node-BM25 是精度主力（-36%） |
-| 去 Soul Boost（fusion re-rank 误用） | 灵魂因子搬回召回层 re-rank | 0.805 | 0.900 | 灵魂在注入层才对，召回层 re-rank 是负优化 |
+## 50 题数据集的历史结果
 
-### embedding backend 对比（语义召回 connector 扩展）
+以下三份记录均生成于 **2026 年 8 月 18 日**，使用 `artboy-50-v2` 数据集，共 50 题，`limit: 5`，目标模式为 `none`。记录中的数据集哈希、知识库提交和知识库快照一致；`manifest.code_version` 均为 `0.5.14`。
 
-v0.6.2 加 embedding backend（oks-connector[embedding]，sentence-transformers
-本地 MiniLM，不调远程 API）。语义召回本应解决同义词鸿沟，实测却反直觉：
+| 后端 | Recall@1 | Recall@3 | Recall@5 | MRR | nDCG@5 | p50 延迟 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| fts5 | 0.825 | 0.925 | 0.927 | 0.907 | 0.893 | 93 ms |
+| native | 0.525 | 0.647 | 0.689 | 0.630 | 0.624 | 137 ms |
+| fusion | 0.805 | 0.905 | 0.927 | 0.900 | 0.887 | 226 ms |
 
-| backend | R@1 | R@3 | R@5 | MRR | p50ms |
-|---------|------|------|------|------|-------|
-| **fts5（Node-BM25 字面）** | **0.825** | **0.925** | 0.927 | **0.907** | 93 |
-| embedding（语义 cosine） | 0.617 | 0.737 | 0.817 | 0.733 | 18304 |
+原始文件为 `records/experiments/runs/eval-50-fts5.json`、`eval-50-native.json` 和 `eval-50-fusion.json`。表中数值按展示需要四舍五入，精确值以 JSON 为准。
 
-**为什么 embedding 反不如字面 BM25？**
+在这组记录中，FTS5 的 Recall@1 比 native 高 0.300，MRR 高约 0.277；fusion 的 Recall@1 比 FTS5 低 0.020，即 **2 个百分点**。FTS5 与 fusion 的 Recall@5 相同，native 的 Recall@5 则明显低于两者，不能说三者在前 5 项的表现接近。
 
-1. **中文术语重合高**——50-case 是语义改写但 query 与 wiki 用词高度重合（中文技术术语），BM25 字面已能命中，embedding 的语义泛化反而引入噪声（"自进化"→ auto-knowledge-distillation 而非 ai-native-strategy）。
-2. **R@5 接近**（0.817 vs 0.927）——embedding 宽网捞得到，但排序精度差。
-3. **慢 18304ms**——MiniLM CPU 每页 embed ~250ms，需 GPU 或 query embedding 缓存。
+### 这些结果不能证明什么
 
-**决策**：fts5 Node-BM25 仍是默认最优（R@1=0.825 + 93ms）。embedding 作语义鸿沟的 **fallback 补充**（fts5 miss 时走 embedding），不替代默认。语义召回的真正价值在大库 + 跨语言 + 同义词重的场景。
+这组运行比较了三个后端配置，没有分别关闭并测试类型加分、复盘加分、目标排序和记忆曲线。因此，它不是对这些独立因素逐一进行的消融实验，不能证明某一个因素导致分数上升或下降，也不能证明把某个因素放到返回结果处理阶段就能改善效果。
 
-### 决策
+当前 FTS5 返回的 `injection_boost` 只是附加标记，不参与 FTS5 重排；衰减则由维护命令单独执行。不能把 FTS5 的一行历史结果称为“完整三层系统”的效果。
 
-- 算法定名 **OKS Triple-Layer Recall = Node-BM25（召回）+ Soul Boost（注入）+ Memory Curve（衰减）**。
-- 默认 `search_backend: fts5`（R@1=82.5% 最优召回）。
-- native (6+1) 退为向后兼容召回（page-level，无 SQLite 依赖，`--search-backend native` 仍可跑）。
-- fusion 退为实验位（灵魂 re-rank 在召回层是负优化）。
+历史文件没有现行的完整 `comparison_context`，无法核实设置、参数、依赖和运行环境是否完全一致。93 ms 等耗时也是当次运行的统计值，不能承诺在其他机器或知识库上获得相同速度。
 
-复现：`oks eval recall records/experiments/eval-50.yaml --output run.json --search-backend {fts5|native|fusion}`。run json 归档于 `records/experiments/runs/`。
+## embedding 的历史记录
 
-## 评测驱动调权
+仓库也保留了 `records/experiments/runs/eval-50-embedding.json`，同样生成于 2026 年 8 月 18 日：
 
-有标注数据集后，评测驱动调分：
+| 后端 | Recall@1 | Recall@3 | Recall@5 | MRR | p50 延迟 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| embedding | 0.617 | 0.737 | 0.817 | 0.733 | 18304 ms |
 
-1. 建基线（`--goal none` + 默认权重）跑 recall@k / MRR / nDCG
-2. 调一个因子（如 type boost ×1.5→×1.8）重跑
-3. 看三指标变化——升则保留，降则回滚
-4. 逐因子迭代，每步只动一个
+这份记录与前表使用相同的数据集哈希，但代码版本为 `0.6.2`，知识库提交和快照也不同。因此，只能将它作为单独的历史结果保存，不能与前表进行受控比较，更不能据此断言向量检索普遍不如关键词检索。
 
-不靠直觉调权重——Triple-Layer 三层互相耦合，盲调一处可能拖垮全局。v0.6.1 实测已证明：召回层加 native re-rank（看似"增强"）反而降 R@1 2.4pp。
+记录没有足够的模型、设备和缓存信息，无法从总延迟推断“每页编码约需多少毫秒”，也无法确定某个具体模型就是差异的原因。
+
+当前 embedding 后端已有实现，需要相应的可选依赖和配置。`embedding_fallback` 默认关闭；开启后会在有效结果不足时尝试 embedding，若有结果就采用该组结果，否则保留原结果。具体条件见[召回引擎](recall-engine.html#其他检索后端)。
+
+## 比较方法或参数
+
+先确认参数实际参与了要测试的计算。例如，调整仅作为返回标记的 `injection_boost`，不等于修改了 FTS5 排序。
+
+一次比较可以按以下步骤进行：
+
+1. 固定数据集、知识库内容、目标模式和返回数量，保存基线结果。
+2. 只改变要检验的方法或参数，保存第二次结果。
+3. 使用 `oks eval compare` 检查记录是否可比，并明确声明变化项。
+4. 同时查看总体指标和逐题结果，检查是否有原本能找到的知识变得难以找到。
+5. 保留独立的测试问题验证改动，避免只对反复调试的题目有效。
+
+例如，在同一知识库中比较两个后端：
+
+```bash
+oks eval recall my-recall-set.yaml --output run-fts5.json --search-backend fts5
+oks eval recall my-recall-set.yaml --output run-fusion.json --search-backend fusion
+oks eval compare run-fts5.json run-fusion.json --vary backend --output comparison.json
+```
+
+`--vary` 可重复指定，支持 `code`、`backend`、`settings` 和 `parameters`。数据集、知识库快照、题目顺序或返回数量不一致时，比较命令会拒绝比较。旧记录缺少配置证据时，会标记为 `limited`，表示只能进行有限比较。
+
+即使记录匹配，系统也没有控制时钟、文件修改时间、运行依赖和外部后端状态。单次分数变化应结合这些条件解释；现有比较结果不自动构成统计显著性或因果结论。

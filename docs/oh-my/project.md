@@ -39,4 +39,4 @@ parent: Oh My OKS
 
 如果没有相关知识，Agent 应说明缺口。新的修复结果仍先整理为候选，由你决定是否补充或修订旧知识。
 
-审核操作见[审核知识](../usage/review.html)，后续使用见[召回知识](../usage/recall.html)。
+审核操作见[审核 Candidate](../usage/review.html)，后续使用见[查询与引用](../usage/recall.html)。

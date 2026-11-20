@@ -1,276 +1,169 @@
 ---
-title: 协议对象关系
+title: 协议对象与状态
 nav_order: 2
-parent: 摄入协议
+parent: 材料收录协议
 grand_parent: 参考手册
 ---
 
-# 协议对象关系
+# 协议对象与状态
 
-Agent-Native Ingest 路径涉及四个协议对象和一个产物。本文说明它们的层级关系、
-各自包含什么字段、谁负责填什么，以及它们如何被 `oks raw-commit` 验证和组装。
+本页解释 Source Envelope、Evidence Fragment、Evidence Manifest 和 Raw Bundle 的职责。字段约束以当前安装包中的 JSON Schema 为准，可以用 `oks schema show <document-kind>` 查看。
 
-## 对象层级
+## 对象关系
 
 ```mermaid
 flowchart LR
-    Source["SourceEnvelope\n1 个来源"] --> Fragment["EvidenceFragment\n1..N 个执行片段"]
-    Fragment --> Manifest["EvidenceManifest\n引用并汇总 Fragment"]
-    Manifest --> Commit["oks raw-commit\nSchema + 引用 + artifact + provenance"]
-    Commit --> Bundle["Raw Bundle v0.2\n持久化证据产物"]
+    Source["Source\n文件、URL 或文本"] --> Envelope["Source Envelope\n来源身份与策略"]
+    Envelope --> Fragment["Evidence Fragment\n一次处理尝试"]
+    Fragment --> Manifest["Evidence Manifest\n本次证据汇总"]
+    Manifest --> Commit["oks raw-commit\n结构与引用校验"]
+    Commit --> Bundle["Raw Bundle\n持久保存的材料包"]
 ```
 
-关系方向是：一个 `SourceEnvelope` 产生 N 个 `EvidenceFragment`，Agent 再把这些 Fragment 汇总进一个 `EvidenceManifest`，最后由 `oks raw-commit` 组装成一个 Raw Bundle v0.2。
+一个 Source 对应一个 Source Envelope。一次收录可以有多个 Fragment，Manifest 引用并汇总这些 Fragment。`raw-commit` 校验后生成一个 Raw Bundle。
 
-### 一张表说清楚
+## Source Envelope
 
-| 对象 | 谁创建 | 谁填充 | 关系 |
-|------|--------|--------|------|
-| **SourceEnvelope** | `oks ingest prepare` | CLI 预填充所有确定性字段 | 1 个源 → 1 个 Envelope |
-| **EvidenceFragment** | `oks ingest prepare`（骨架） | Agent 填 evidence 内容 | 1 个执行片段 → 1 个 Fragment |
-| **EvidenceManifest** | `oks ingest prepare`（骨架） | Agent 汇总所有 Fragment | 1 个源 → 1 个 Manifest，引用 N 个 Fragment |
-| **Raw Bundle v0.2** | `oks raw-commit` | CLI 组装 | 1 个 Manifest → 1 个 Bundle |
+文件位置：`manifest/source-envelope.json`
 
-## SourceEnvelope
+Source Envelope 说明来源是什么、怎样访问、何时取得，以及允许怎样处理。`oks ingest prepare` 会生成这些字段。
 
-**文件**: `manifest/source-envelope.json`
+| 字段 | 含义 |
+|---|---|
+| `source_id` | 本次来源的标识，Manifest 必须引用同一个值 |
+| `source_uri` | 文件路径、URL 或其他来源位置 |
+| `source_modality` | `text`、`web`、`pdf`、`office`、`image`、`audio` 或 `video` |
+| `access_mode` | 本地文件、公开 URL、认证来源、用户浏览器或手工提供 |
+| `captured_at` | 取得来源的 UTC 时间 |
+| `captured_by` | 执行收录的 runtime、model 和 Skill 信息 |
+| `content_hash` | 来源内容或来源标识的 SHA-256，用于完整性和去重线索 |
+| `policy` | 是否允许远程处理，以及内容敏感级别 |
 
-描述**源是什么**。全部由 CLI 预填充，Agent 不碰。
+`content_hash` 相同可以帮助发现重复来源，但不能证明两份材料来自独立渠道，也不能证明其中的说法正确。
 
-```json
-{
-  "schema_version": "oks-source-envelope/v0.1",
-  "source_id": "src-abc123",
-  "source_uri": "https://example.com/page",
-  "source_modality": "web",
-  "access_mode": "public_url",
-  "captured_at": "2026-08-07T12:00:00Z",
-  "captured_by": {"runtime": "claude-code", "model": null, "skill": "ingest"},
-  "content_hash": "sha256...",
-  "evidence_manifest_ref": "manifest-abc123",
-  "title": "Example Page",
-  "policy": {"remote_processing": "ask", "sensitivity": "internal"}
-}
-```
+## Evidence Fragment
 
-| 字段 | 含义 | 谁填 |
-|------|------|------|
-| `source_id` | 源的唯一 ID，跨 Manifest 引用 | CLI |
-| `source_modality` | 文件类型推断的 modality（text/pdf/web/image/video/audio/office） | CLI |
-| `access_mode` | 访问方式（local_file / public_url / manual） | CLI |
-| `content_hash` | 原始源内容的 SHA-256（用于去重） | CLI |
-| `policy.remote_processing` | 是否允许上传到远程服务（deny 时 Agent 只能用本地 Provider） | CLI |
+文件位置：`manifest/fragments/<fragment_id>.json`
 
-## EvidenceFragment
+一个 Fragment 记录一次 Provider、工具或人工处理尝试。多种工具处理同一来源时，应分别记录，不能把失败步骤从历史中删掉。
 
-**文件**: `manifest/fragments/<fragment_id>.json`
+### Producer
 
-描述**一个执行片段产生了什么证据**。执行者可以是注册 Provider、Agent runtime、
-临时工具或人工；骨架由 CLI 预填充，evidence 内容由 Agent 填。
-
-```json
-{
-  "schema_version": "oks-evidence-fragment/v0.1",
-  "fragment_id": "frag-abc123",
-  "source_id": "src-abc123",
-  "producer": {
-    "runtime": "oks",
-    "provider": "firecrawl",
-    "tool": "firecrawl"
-  },
-  "status": "succeeded",
-  "artifacts": [
-    {
-      "artifact_id": "art-abc123",
-      "kind": "primary_text",
-      "path": "content.md",
-      "sha256": "sha256..."
-    }
-  ],
-  "evidence": [
-    {
-      "evidence_id": "ev-abc123",
-      "artifact_id": "art-abc123",
-      "kind": "text_content",
-      "method": "html_extract",
-      "locator": {"kind": "document"},
-      "text": "<实际证据内容>",
-      "confidence": 0.9,
-      "agent_judgment": "mechanical"
-    }
-  ],
-  "modalities": {
-    "text": {"modality": "text", "status": "succeeded", "evidence_count": 1}
-  }
-}
-```
-
-### `producer` 字段 —— 你最容易踩的坑
-
-`producer` 是一个**对象**，有三个字段：
+`producer` 包含：
 
 | 字段 | 含义 | 示例 |
-|------|------|------|
-| `runtime` | 谁编排了这次执行 | `"oks"` |
-| `provider` | 能力来源的分类 | `"firecrawl"`（注册 Provider）、`"agent-runtime"`（Agent 自身）、`"runtime-tool"`（临时工具如 curl） |
-| `tool` | 具体工具名 | `"firecrawl"`（同注册 Provider ID）、`"curl"`（临时工具的实际名称） |
+|---|---|---|
+| `runtime` | 编排本次处理的运行环境 | `oks`、`codex` |
+| `provider` | 注册 Provider ID 或保留类型 | `firecrawl`、`runtime-tool`、`agent-runtime`、`human` |
+| `tool` | 实际使用的工具 | `firecrawl`、`curl`、`agent-runtime` |
 
-**关键规则**：
+实际使用 `curl` 时，Provider 应写成 `runtime-tool`，工具写成 `curl`。不能为了让记录看起来完整而填入没有运行的注册 Provider。
 
-- 注册 Provider 的输出 → `provider: "firecrawl"`, `tool: "firecrawl"`
-- Agent 自己改写的内容 → `provider: "agent-runtime"`, `tool: "agent-runtime"`
-- curl / playwright 等临时工具 → `provider: "runtime-tool"`, `tool: "curl"`
+### Fragment 状态
 
-**绝不允许**：用了 curl 抓网页但标 `provider: "firecrawl"`。这是 provenance 造假。
+| 状态 | 含义 |
+|---|---|
+| `succeeded` | 这次尝试取得了计划中的结果 |
+| `partial` | 取得了部分结果，同时保留缺失和警告 |
+| `failed` | 这次尝试失败；Fragment 不应包含伪造的 Evidence |
 
-### `agent_judgment` 字段
+Fragment 没有 `degraded`、`skipped` 或 `pending` 状态。它们属于其他层，或只是提交前骨架中的临时值。
 
-在每条 evidence record 上：
+### Artifact 与 Evidence
 
-| 值 | 含义 | 何时用 |
-|----|------|--------|
-| `mechanical` | 文本是 Provider 原始输出的确定性转换 | 仅限：字段提取、编码转换、newline 规范化、安全脱敏 |
-| `agent_observed` | 文本经过了 Agent 的语义处理 | 总结、翻译、重排、加标题、注释、合并段落 |
-| `human_supplied` | 人工提供的内容 | 用户手动粘贴或上传 |
+Artifact 是实际文件，包含 `artifact_id`、类型、相对路径和 SHA-256。Evidence Record 指向一个 Artifact，并说明证据位于哪里、怎样取得，以及文本是否经过 Agent 处理。
 
-**核心规则**：`agent_judgment: "mechanical"` + `producer.provider: "firecrawl"` 意味着文本**是** Firecrawl 的原始输出，Agent 没动过。如果你改写过了，两个都得改。
+| Evidence 字段 | 含义 |
+|---|---|
+| `evidence_id` | 证据标识 |
+| `artifact_id` | 对应 Artifact |
+| `kind` | 文本、结构、OCR、截图、转写等证据类型 |
+| `method` | 取得证据的方法 |
+| `locator` | 页码、时间戳、区域、DOM 或文档级位置 |
+| `text` | 可查询的证据文本，可以为空 |
+| `confidence` | 对这次提取质量的记录，不是来源主张的正确率 |
+| `agent_judgment` | 内容属于机械处理、Agent 处理还是人提供 |
 
-## EvidenceManifest
+`agent_judgment` 的取值：
 
-**文件**: `manifest/evidence-manifest.json`
+| 值 | 何时使用 |
+|---|---|
+| `mechanical` | 字段提取、编码转换、换行规范化或脱敏，没有语义改写 |
+| `agent_observed` | Agent 做了总结、翻译、重排、注释或合并 |
+| `human_supplied` | 内容由人直接提供 |
 
-Agent 汇总所有 Fragment 后提交的**最终证据声明**。
+Agent 改写过文本后，不能继续把它描述为某个 Provider 的原始机械输出。原始输出应保存在 `work/<provider>/output.*`，改写结果另作 Evidence。
 
-```json
-{
-  "schema_version": "oks-evidence-manifest/v0.1",
-  "manifest_id": "manifest-abc123",
-  "source_id": "src-abc123",
-  "status": "complete",
-  "fragment_refs": ["frag-abc123"],
-  "primary_artifact": {
-    "artifact_id": "art-abc123",
-    "kind": "primary_text",
-    "path": "content.md",
-    "sha256": "sha256..."
-  },
-  "evidence_records": [
-    {
-      "evidence_id": "ev-abc123",
-      "artifact_id": "art-abc123",
-      "kind": "text_content",
-      "method": "html_extract",
-      "locator": {"kind": "document"},
-      "text": "<证据内容>",
-      "confidence": 0.9,
-      "agent_judgment": "mechanical"
-    }
-  ],
-  "modalities": {
-    "text": {"modality": "text", "status": "succeeded", "evidence_count": 1}
-  },
-  "steps": [
-    {
-      "capability": "web.extract",
-      "provider": "firecrawl",
-      "status": "succeeded",
-      "reason": null
-    }
-  ],
-  "provenance": {
-    "agent": {"runtime": "claude-code", "model": "claude-opus-5", "skill": "ingest"}
-  }
-}
+## Evidence Manifest
+
+文件位置：`manifest/evidence-manifest.json`
+
+Manifest 是本次收录准备提交的证据汇总。它引用 Fragment 和 Artifact，列出实际采用的 Evidence，并记录每项处理能力的结果。
+
+### 总体状态
+
+| 状态 | 含义 |
+|---|---|
+| `complete` | Recipe 的 `complete_when` 条件已满足 |
+| `partial` | 已保存可用证据，但仍缺少 Recipe 要求的部分 |
+
+Manifest 没有 `failed`。如果所有处理尝试都失败，没有可提交的 Evidence，就不应提交 Manifest。`partial` 应在 `warnings` 中说明证据缺口，并且必须提供非 `none` 的 `failure_disposition`，说明下一步需要授权、用户操作、重试，还是已经达到当前条件下的最终结果。当前 `raw-commit` 会强制检查 `failure_disposition`；`warnings` 用于保留具体缺失信息。
+
+`complete` 不表示所有工具都成功。例如视频来源的平台字幕失败，但 ASR 已取得可用转写，仍可能满足 `subtitles_or_transcript_available`。判断依据是 Recipe 的完成条件，不是成功步骤的数量。
+
+### 步骤状态
+
+Manifest 的 `steps[]` 记录每项能力和 Provider 的实际结果：
+
+| 状态 | 含义 |
+|---|---|
+| `succeeded` | 按计划取得结果 |
+| `partial` | 取得部分结果 |
+| `degraded` | 使用了降级方法并取得结果 |
+| `failed` | 尝试失败 |
+| `skipped` | 明确跳过，并应给出原因 |
+
+步骤为 `succeeded`、`partial` 或 `degraded` 时，除 `agent-runtime` 和 `human` 外，都要在 `.oks/runs/<run_id>/work/<provider>/` 保存非空的 `output.*`。这项要求包括注册 Provider、`runtime-tool` 和 `text-read`。
+
+### Modality 状态
+
+`modalities` 按文本、图像、版面、语音或视频记录证据数量，状态可以是 `succeeded`、`partial`、`failed` 或 `skipped`。它描述某种材料形式的处理结果，不等于 Manifest 总体状态。
+
+## Raw Bundle
+
+`oks raw-commit` 通过校验后生成 Raw Bundle。典型目录如下：
+
+```text
+raw/<date>/<source>/<bundle>/
+├── raw.md
+├── bundle.json
+├── source-envelope.json
+├── evidence-manifest.json
+├── content.md
+├── evidence.jsonl
+├── quality-report.json
+├── processing-runs.jsonl
+├── source/
+├── assets/
+└── derived/
+    └── fragments/
 ```
 
-### `status` 字段
+`source/` 保存主要来源 Artifact，`derived/` 保存 OCR、截图、转写和 Fragment 快照等派生内容。`content.md` 是便于阅读和查询的正文入口，不能替代原始文件。
 
-| 值 | 含义 | 前提条件 |
-|----|------|----------|
-| `complete` | 证据充分，可以继续生成 Candidate | 所有 `complete_when` 条件满足 + work/ 文件存在 + 溯源合法 |
-| `partial` | 证据不完整，但仍可尝试生成 Candidate | 部分 required capabilities 无法满足 |
+Raw Bundle 的 `processing_status` 沿用 Manifest 的 `complete` 或 `partial`。Raw Bundle Schema 也允许 `failed`，但当前 `raw-commit` 只在存在可提交 Manifest 时组装 Bundle；整次收录失败通常应保留运行错误，而不是伪造一个成功提交的失败 Bundle。
 
-没有 `failed` 状态——如果所有 Fragment 都失败，Agent 不应该提交 Manifest。
+## `raw-commit` 检查什么
 
-### `steps[]` 字段
+CLI 会检查：
 
-记录每个 Provider 的尝试和结果：
+- JSON 是否符合对应 Schema；
+- Envelope 与 Manifest 的 `source_id` 是否一致；
+- Fragment 引用和核心 Evidence 字段是否一致；
+- Artifact 是否位于允许目录，文件是否存在，哈希是否匹配；
+- Evidence 是否引用已声明的 Artifact；
+- Locator 是否符合格式；
+- modality 的 Evidence 数量是否与实际记录一致；
+- 已执行步骤是否留下可验证的工具原始输出。
 
-```json
-{
-  "capability": "web.extract",
-  "provider": "firecrawl",
-  "status": "succeeded",
-  "reason": null
-}
-```
-
-`status` 取值：`succeeded`、`partial`、`degraded`、`failed`、`skipped`。
-
-`raw-commit` 用 `steps[]` 来判断哪些 Provider 需要 work/ 输出文件。
-
-### `complete_when` 条件
-
-来自 Recipe。最终完整性由这些条件决定，**不**由"required capabilities 成功了多少个"决定。
-
-例子：视频 Recipe 的 `complete_when: subtitles_or_transcript_available`。如果字幕提取失败但 ASR 转写成功，这个条件仍然满足——ingest 是 `complete`，不是 `partial`。
-
-### 预填充与 Agent 填充分工
-
-| 字段 | 谁填 | 说明 |
-|------|------|------|
-| `evidence_id` | CLI 预填充 | UUID |
-| `artifact_id` | CLI 预填充 | UUID，Agent 可以修改 |
-| `kind` | CLI 预填充 | 从 Recipe 的 capability 映射（如 `web.extract` → `text_content`） |
-| `method` | CLI 预填充 | 从 capability 映射（如 `web.extract` → `html_extract`） |
-| `locator` | CLI 预填充 | 默认 `{"kind": "document"}` |
-| `text` | **Agent 填** | 从 Provider 原始输出提取的实际证据内容 |
-| `confidence` | **Agent 填** | 0.0-1.0 |
-| `agent_judgment` | CLI 预填充默认值，**Agent 可以覆盖** | `mechanical` 是默认；Agent 改写过就改成 `agent_observed` |
-
-## Raw Bundle v0.2
-
-**产物**，由 `oks raw-commit` 生成。包含：
-
-```
-raw/YYYY/MM/DD/agent-capture/bundle-<hash>/
-  bundle.json           ← 组装后的 Bundle 元信息
-  source-envelope.json  ← 快照
-  evidence.jsonl        ← 所有 evidence records
-  content.md            ← 主 artifact
-```
-
-## `raw-commit` 验证流程
-
-```
-source-envelope.json  ──→ Schema 验证
-evidence-manifest.json ──→ Schema 验证
-                            ↓
-                        交叉引用检查（source_id 一致）
-                            ↓
-                        Artifact 检查（文件存在 + sha256 匹配）
-                            ↓
-                        Evidence 交叉引用（artifact_id 一致性）
-                            ↓
-                        Provenance 检查（work/<provider>/ 存在且 >0 bytes）
-                            ↓
-                        Locator 合法性检查
-                            ↓
-                        Raw Bundle 组装
-```
-
-**Provenance 检查的豁免规则**：
-
-| Provider | 需要 work/ 文件？ | 原因 |
-|----------|-------------------|------|
-| firecrawl | 是 | 注册 Provider |
-| pdf-lite | 是 | 注册 Provider |
-| rapidocr | 是 | 注册 Provider |
-| text-read | 否 | CLI 预填充的证据 |
-| agent-runtime | 否 | Agent 自身能力 |
-| runtime-tool | 否 | 临时工具，没有注册 |
-| human | 否 | 人工提供 |
-
----
-
-{% include comments.html %}
+这些检查能发现协议、文件和引用错误，不能验证来源说法、OCR 文字或 Agent 总结是否正确。Agent 仍要抽查提取结果；需要长期使用的内容仍要另建 Candidate，由人审核。

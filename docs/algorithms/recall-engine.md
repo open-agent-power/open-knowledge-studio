@@ -5,119 +5,141 @@ parent: 维护者
 nav_exclude: true
 search_exclude: true
 ---
-# 召回引擎（OKS Triple-Layer Recall）
 
-`oks recall` 是唯一召回入口。默认合并 Raw episodic 与 Wiki knowledge；`--knowledge-only` 只查 Wiki。`raw/executions/` 和 `raw/.logs/` 是 provenance，不参与召回。
+# 召回引擎
 
-## 难题背景
+召回是从知识库中查找与问题有关的内容。`oks recall` 执行一次查询，返回匹配项、来源、排序和诊断信息。它不会判断回答是否正确，也不会自行展开多轮调查；后续是否继续查询、阅读原文或采用结果，由 Agent 决定。
 
-知识库随时间增长，`wiki/` 累积成百上千页。用户或 Agent 提一个 query，如何找到最相关知识并排序？
+本文面向需要排查或修改检索行为的维护者。日常使用方法见[查找和使用知识](../usage/recall.html)。
 
-两条路：
+## 查询哪些内容
 
-- **语义召回**（embedding 相似度）——效果好，但 CLI 核心不调 AI API（P4），本地跑 embedding 模型成本高。
-- **关键词召回**（字面匹配）——轻量，但跨表述召回差（搜"design patterns"命中不了只写"architectural approaches"的页）。
+结果按来源分别返回，不能把不同来源的分数直接当作同一种指标比较。
 
-OKS 选了关键词召回，并用 **node-level BM25**（吸收 TreeSearch）在固定 50-case 数据集上达到 **R@1 = 82.5% / MRR = 0.907**（历史消融基准；不是通用 SLA）。
+| 结果字段 | 来源 | 查找方式 |
+| --- | --- | --- |
+| `knowledge` | 当前个人库的 `wiki/` | 使用所选检索后端查找知识页 |
+| `episodic` | `raw/` 和当前范围内的 `profiles/` | 先匹配关键词，再按文件新鲜度等规则排序 |
+| `team_knowledge` | 已关联的团队知识库 | 由团队库检索逻辑查找，单独返回结果和来源 |
 
-## 三层架构（v0.6.0+）
+`--knowledge-only` 会关闭 `episodic` 查询，但仍可返回已关联团队库的知识。`raw/executions/` 和 `raw/.logs/` 保存执行记录，不参与普通召回。用户和项目档案只有在显式指定相应身份或项目范围后才参与查询。
 
-召回与注入解耦——fts5 管"找得准"，oks 灵魂管"注入时优先什么"，衰减管"长期质量"：
+知识页也会经过状态和内容类型检查，例如排除已退出使用、已归档的页面，以及不属于当前查询策略的材料。普通知识检索并不以“存在人工审核时间”为统一准入条件，因此不能仅凭某页出现在结果中，就认定它已通过人工审核。应同时检查来源、状态和 `human_reviewed_at` 等字段。
 
+如果当前工作目录绑定了任务，查询还会带上该任务的约定和目标范围。这些信息用于说明本次查询的上下文，不会把搜索结果变成执行记录。
+
+## 默认后端：FTS5
+
+新实例的默认配置是 `search_backend: fts5`。FTS5 是 SQLite 提供的全文检索功能；OKS 用它建立索引，再用 BM25 计算文字匹配分数。已有实例可能配置了其他后端，应以该实例的 `settings/recall.yaml` 和本次查询的诊断信息为准。
+
+FTS5 按 Markdown 标题划分段落，并以段落为单位建立索引。这样，同一段中出现多个查询词时，可以直接参与该段的评分。索引存放在 `.oks/fts5.db`，按内容哈希更新变动的页面；索引结构版本不兼容时会重建。
+
+默认字段权重如下。它们是参与检索计算的参数，不是某条结果一定获得的分数。
+
+| 字段 | 权重 |
+| --- | ---: |
+| 标题 | 5.0 |
+| 标签 | 3.0 |
+| 正文 | 1.0 |
+| 代码 | 0.5 |
+
+如果运行环境不支持 FTS5，后端会退回 `LIKE` 文本匹配，并在诊断中报告 `actual_backends` 和 `fallback_reason`。索引中可以保存摘要，但整个召回过程仍会读取知识页，不能将其理解为完全不访问文件。
+
+## 排序、分数和返回长度
+
+一次知识查询先由后端返回命中项，再检查它们是否符合当前查询范围和状态要求。如果启用了目标上下文，命中项的 `slug` 与目标 `slug` 相同时会被排到前面。这一步改变返回顺序，不修改后端分数。
+
+返回结果中几个相近的字段含义不同：
+
+| 字段 | 含义 | 对 FTS5 排序的影响 |
+| --- | --- | --- |
+| `relevance` | 后端计算的检索分数 | 是排序依据之一 |
+| `score` | 由记忆曲线计算的页面分数 | 不直接乘入 FTS5 分数 |
+| `score_components.injection_boost` | 根据类型、复盘记录和标题计算的附加标记 | 当前实现只返回这个值，不据此重排 FTS5 结果 |
+| `rank` | 经过筛选和目标排序后的返回位置 | 表示最终次序 |
+
+`injection_boost` 的类型基数为：`anti-pattern` 取 1.5，`strategy` 取 0.8，`concept` 取 0.6，其他类型取 0.5。存在 `review.lesson` 时再乘 1.2；标题被识别为目录或概览等通用标题时再乘 0.5。这里的标记不是人工审核证明，也不代表 Agent 已经采用该页。
+
+返回长度由 `settings/recall.yaml` 中的 `inject` 参数限制。默认正文预览总预算为 4000 字符，每页上限为 200 字符。超出预算时，系统会缩短 `body_preview`；必要时只保留标题等字段，或截去超出预算的结果。这里控制的是返回文字的长度，不是知识的审核状态。
+
+## 其他检索后端
+
+| 后端 | 实现方式 | 使用时需要知道的区别 |
+| --- | --- | --- |
+| `native` | 对页面实时计算关键词和元数据分数 | 不使用 FTS5 索引，适合检查规则或复现旧结果 |
+| `fusion` | 对 FTS5 结果结合 native 分数重新排序 | 实验性方法，需要用同一评测集比较效果 |
+| `embedding` | 通过向量表示查找含义相近的内容 | 已有实现，使用前需准备相应的可选依赖和配置 |
+| `code` | 使用代码搜索连接器 | 面向代码内容的检索需求 |
+| 自定义名称 | 通过 `oks_search_backend` 扩展入口加载 | 由扩展包实现索引和搜索接口 |
+
+`fusion` 分别取最多 `2 × limit` 条 FTS5 和 native 结果，按各自的最高分归一化，再对 FTS5 命中项计算：
+
+```text
+fusion_score = 0.7 × fts5_normalized + 0.3 × native_normalized
 ```
-┌─ 召回层（fts5 node-level BM25, 默认 R@1=82.5%）──────┐
-│  每个 ## heading 段一个 FTS5 row，多词同段高分          │
-│  SQLite FTS5 + BM25 + column weights + 增量 diff       │
-└──────────────────────────────────────────────────────┘
-                          ↓ top-N hits
-┌─ 注入层（oks 灵魂 boost）──────────────────────────────┐
-│  1. goal boost 重排（goal 命中 slug 往前排）            │
-│  2. injection_boost 标注（type×1.5/0.8/0.6 + review×1.2 │
-│     + generic×0.5），不改召回顺序，供 /query + eval 可见 │
-│  3. memory curve score（store.py 独立算的 decay 分）   │
-└──────────────────────────────────────────────────────┘
-                          ↓ 注入会话
-┌─ 衰减层（store.py，独立后台）─────────────────────────┐
-│  apply_decay: type-specific λ → score → tier 分类       │
-│  hot/warm/cold/evictable，定时淘汰 stale 记忆           │
-└──────────────────────────────────────────────────────┘
+
+没有对应 native 结果时，该项的 native 分数为 0；FTS5 没有结果时，退回 native。它不是两组结果的简单合并，也不能保证比单独使用 FTS5 更好。
+
+`embedding_fallback` 默认关闭。开启后，普通知识查询的有效结果数少于 `max(1, (limit + 1) // 2)` 时，会尝试 embedding 后端。若 embedding 返回结果，就使用这组结果；若没有结果，保留原来的命中项。执行失败时会留下诊断信息。这一步是尝试另一种检索方式，不是把两种结果合并排序。
+
+后端选择优先使用本次命令显式传入的值；未指定时读取配置。兼容保留的环境变量可以覆盖配置文件，配置缺失时使用代码默认值。排查时应检查最终生效的后端，不能只看配置文件中的一行。
+
+## native 如何计算相关性
+
+native 将文字匹配和页面元数据组合为相关性分数。代码中有时称它为“6+1 因子”，这是历史分组名称，具体实现还包括 IDF 和标题词项加分。
+
+IDF 用于表示一个词在知识库中有多常见：较少见的词在匹配时通常获得更高权重。主要计算关系如下：
+
+```text
+token_overlap = 匹配词数 × 0.3 + IDF 匹配分
+base = token_overlap + 标题子串分 + 标题词项分 + 正文子串分 + 话题关联分
+typed_base = base × 类型乘数 × 通用标题乘数
+final = typed_base + 复盘判断分 + 失败结果分 + 记忆分 × 0.5 + 目标领域分 + 目标关键词分
 ```
 
-**关键洞察**（50-case 实测驱动）：oks 的"灵魂"——memory curve / goal boost / review bonus / type boost——在**召回层 re-rank 反而降精度**（fusion R@1=0.805 < fts5 R@1=0.825，不相关 page 高分挤掉精确命中）。因此**召回用 fts5 精度，灵魂在注入层 boost**。
+各项规则如下：
 
-## 双路召回
+| 项目 | 规则 |
+| --- | --- |
+| 标题词项 | 每个查询词出现在标题中，加 0.3 |
+| 完整查询子串 | 查询长度大于 3，且完整出现在标题或正文中，分别加 1.0 或 0.5 |
+| 话题关联 | 页面记录的讨论话题 ID 与本次指定 ID 一致，加 2.0 |
+| 类型乘数 | `anti-pattern` 为 1.5，`strategy` 为 0.8，`concept` 为 0.6，其他为 0.5 |
+| 通用标题 | 识别为目录或概览等通用标题时，乘 0.5 |
+| 复盘判断 | `decision_correct: false` 加 2.0 |
+| 失败结果 | `outcome: failure` 加 1.0 |
+| 记忆分 | 使用[记忆曲线](decay-system.html)计算的分数，乘 0.5 后相加 |
+| 目标领域与关键词 | 满足对应目标匹配条件时，分别加 0.8 和 0.4 |
 
-| 路径 | 来源 | 评分 |
-|------|------|------|
-| Episodic | `raw/` + `profiles/` | 关键词 + 新鲜度（`0.95^days_old`） |
-| Knowledge | `wiki/` | fts5 node-level BM25 + 注入层 oks 灵魂 boost |
+有查询条件但 `base` 为 0 时，相关性直接返回 0。页面不能仅靠高使用次数或元数据加分，就在完全没有基础匹配的情况下获得正分。上述规则属于 native，不应套用到 FTS5 的 BM25 分数上。
 
-## 可插拔 search backend
+## 原始材料如何排序
 
-Knowledge 路径的召回后端可插拔（`recall(search_backend=...)` 或 `settings/recall.yaml`）：
+`episodic` 查询先检查关键词是否匹配，再计算文件的新鲜度：
 
-- **fts5**（**默认**，CV from TreeSearch FTS5Index + markdown tree parser）：SQLite FTS5 + BM25 + column weights（title 5x > tags 3x > body 1x > code 0.5x）+ 增量 diff（content_hash）+ 持久化索引（`.oks/fts5.db`）。v0.6.0 吸收 TreeSearch 的 markdown tree parser，每个 `##` heading 段一个 FTS5 row（node-level），多词同段 BM25 高分——50-case 消融 R@1=0.825 / MRR=0.907（native page-level R@1=0.525）。schema_version 检测自动 DROP 重建旧 schema。大库（1000+ 页）比 native 遍历快。FTS5 不可用时降级 LIKE。
-- **native**（6+1 因子，向后兼容）：jieba + IDF + token overlap + substring + topic trace + type boost + review bonus + memory curve + goal boost，page-level，实时遍历，无 SQLite 依赖。50-case R@1=0.525——语义召回弱（词不匹配就失效）。v0.6.0 起不再默认，保留供小库 / 无 SQLite 环境 / 历史复现。
-- **fusion**（实验）：fts5 node-level 主召回 + native 6+1 归一化 re-rank（0.7 fts5 + 0.3 native）。50-case R@1=0.805——低于纯 fts5 R@1=0.825，证明 native re-rank 拖累。
-- **connector**：第三方包经 `entry_points(group="oks_search_backend")` 注册（embedding / 代码 ast_parser / 其他开源 search 框架），OKS 核心不改。
-
-架构决策：不假设数据少——FTS5 持久化索引是大数据标配；embedding / 代码搜索等能力以 connector 方式自由扩展替换，而非硬编码进核心。
-
-## native 6+1 因子（向后兼容的召回算分，v0.6.0 前默认）
-
-native backend 的 7 个召回信号（token overlap / substring / topic trace / type boost / review bonus / memory curve / goal boost）。v0.6.0 起召回默认 fts5，但其中**灵魂因子**（type boost / review bonus / memory curve / goal boost）搬到 fts5 注入层作 `injection_boost`，**召回算分类**（token overlap / substring / topic trace）被 fts5 BM25 取代。
-
-```
-base  = token_overlap_count × 0.3 + substring_bonus + topic_trace_bonus
-total = base × type_boost + review_bonus + memory_score × 0.5 + goal_boost
+```text
+days_old = 文件修改时间距今的整天数，最小为 0
+freshness = max(0.01, 0.95 ^ days_old)
 ```
 
-1. **词项重叠 ×0.3 + IDF 加权** — jieba 分词，稀有 term 加权（CV from TreeSearch `estimate_idf`）
-2. **子串匹配 +1.0/+0.5** — 标题/正文含 query 串
-3. **话题关联 +2.0** — discuss trace topic_id 匹配
-4. **类型乘数 ×1.5/×0.8/×0.6** — anti-pattern / strategy / concept
-5. **失败加成 +2.0/+1.0** — decision_correct=false / outcome=failure
-6. **记忆曲线 ×0.5** — memory_score（衰减系统算）
-7. **目标加成 +0.8/+0.4（可选）** — area ∈ goal domains / goal keyword
+Markdown 原始材料使用这个分数；JSONL 记录再加 0.5；范围内的档案再加 1.0。这里使用的是文件修改时间，不是事件发生时间或来源发表时间。文件较新不代表内容更正确。
 
-{: .note }
-**灵魂因子去向（v0.6.0）**：type_boost + review_bonus + generic_demotion → fts5 注入层 `injection_boost`（`score_components.injection_boost`，`--explain` 可见）；memory curve → `store.py` apply_decay 独立系统；goal_boost → fts5 注入层重排。召回算分类（token overlap / substring / topic trace）被 fts5 BM25 node-level 取代（R@1 0.825 > 0.525）。
+## 如何检查一次查询
 
-## 双层记忆架构
+```bash
+oks recall "如何定位这个知识" --explain
+```
 
-OKS 的双路召回天然是"双层记忆架构"——结构化概览常驻 + episodic 细节按需：
+检查返回项的来源、状态、`rank`、`relevance` 和 `score_components`，再查看实际后端、过滤原因和降级信息。需要比较检索方法时，使用固定数据集运行 `oks eval recall`，方法和指标见[召回评估](recall-evaluation.html)。
 
-| 层 | 来源 | 角色 |
-|----|------|------|
-| 概览（常驻候选） | `wiki/` | 结构化、人审过的稳定知识，fts5 node-level 召回 + 灵魂 boost 后顶在排序前列 |
-| 细节（按需召回） | `raw/` | episodic 原文，关键词 + 新鲜度，补 wiki 没覆盖的细节 |
+仓库保留了一组在 2026 年 8 月 18 日生成的历史结果，使用 `artboy-50-v2` 数据集，共 50 题：
 
-## 技术取舍
+| 后端 | Recall@1 | MRR |
+| --- | ---: | ---: |
+| fts5 | 0.825 | 0.907 |
+| native | 0.525 | 0.630 |
+| fusion | 0.805 | 0.900 |
 
-OKS 不学主流 RAG 的稠密嵌入 / 神经重排序，是 P4（CLI 核心不调 AI API）的直接后果：
+原始文件在 `records/experiments/runs/eval-50-*.json`。这组结果只说明当时的数据、知识库快照和配置下三种方法的表现，不能据此承诺其他知识库的准确率，也不能单独证明某一项加分规则导致效果下降。
 
-| 主流 RAG 技术 | OKS 对应 / 取舍 |
-|---------------|----------------|
-| 稠密嵌入（embedding） | 不做（核心）——要模型 + 向量索引；connector 扩展点已就位 |
-| BM25（词频饱和 + 长度归一化） | ✅ 做——fts5 backend 用 SQLite FTS5 + BM25 + node-level |
-| 混合检索 + RRF 融合 | fusion 实验位（fts5 + native re-rank），但实测低于纯 fts5 |
-| 神经重排序（跨编码器） | 不做——要 LLM 调用；oks 用 type boost + review bonus 做注入层规则 boost |
-| 上下文感知检索（LLM 补前缀） | **零成本平替**：OKS 的 frontmatter（title/area/tags）就是手工上下文前缀 |
-
-![上下文感知检索：传统分块 vs 加上下文前缀](../assets/contextual-retrieval.svg)
-
-*图源：[《深入理解 AI Agent》第3章](https://github.com/bojieli/ai-agent-book) fig3-14，Apache-2.0*
-
-## 指标
-
-`oks eval recall <dataset.yaml> --output <run.json>` 支持 recall@k / MRR / nDCG。v0.6.0 有 50-case 数据集（`records/experiments/eval-50.yaml`），三后端对比见 [召回评估](recall-evaluation.html)。
-
-`oks recall "<q>" --explain` 给每个 hit 的 `score_components`（fts5_score + injection_boost + backend + node）。
-
-## 结论
-
-fts5 node-level 是 v0.6.1+ 的默认召回（OKS Triple-Layer Recall 的 Node-BM25 层）——吸收 TreeSearch markdown tree parser，消融 R@1=0.825 / MRR=0.907，轻量、可解释、不调 AI、持久化索引。oks 灵魂（memory curve / goal boost / type boost / review bonus）分层到独立衰减系统 + 注入层 boost，不在召回层 re-rank。语义召回需 embedding（connector 扩展点已就位，待实现）。
-
-OKS 提供的是 **Recall 原语，不是 agentic search**——单次查询返回结果，不做 ReAct 多轮迭代。多轮探索由 host Agent 在宿主层做。
-
-召回是只读：查询不算使用，不推 `access_count`。`oks wiki use <slug>` 才 +1 驱动记忆曲线——记忆热度反映"真被用上"而非"被搜过几次"。
+查询不会增加 `access_count`。只有显式执行 `oks use` 或 `oks wiki use` 记录采用情况，才会增加使用次数。返回结果、记录使用和人工审核是三种不同的操作。

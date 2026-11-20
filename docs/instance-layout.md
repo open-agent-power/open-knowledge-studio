@@ -1,88 +1,114 @@
-# 实例目录与每日思考记录
+---
+title: 知识库目录与本地状态
+nav_order: 6
+parent: 工作原理
+---
 
-Studio 仍只有讨论、目标、学习三个主菜单。讨论与目标按日期切换；学习没有日期入口，面向全库。检索不等同于使用。
+# 知识库目录与本地状态
 
-```
+一个 OKS Instance 就是一个独立的知识库目录。`oks init` 会创建基础目录、默认配置和 Host 接入文件，后续命令再按需要写入材料、Candidate、知识页和记录。
+
+目录名表示内容的用途，不表示内容已经通过审核，也不表示某项操作已经执行。`wiki/` 是知识页目录，不是“全部已审核”的目录；`.agents/skills/` 等 Host 目录中出现文件，也只能说明目录中已有副本。
+
+## 目录概览
+
+下面是常见结构。部分子目录只有在相应功能运行后才会出现。
+
+```text
 knowledge/
+├── README.md                    # 本库的用途和使用前提
+├── AGENTS.md                    # Agent 在本库工作时读取的项目说明
 ├── profiles/
-│   ├── users/                 # 个人背景、偏好与边界
-│   ├── projects/              # 项目背景与约束，项目源码另存
-│   ├── agents/                # Agent 角色、能力与协作约定
-│   ├── recipes/               # 触发条件、输入、步骤和验收配方
-│   ├── goals/YYYY/MM/DD/       # 每日目标与 TODO，Markdown → 思维导图
-│   └── discuss/YYYY/MM/DD/     # 问题、人的判断、AI 理解与待确认
-├── skills/                    # 可共享的 SKILL.md、脚本与资源
-├── wiki/                      # 经人工审核的长期知识
-├── raw/                       # 原始证据
-├── drafts/                    # 待审核知识
-├── mail/                      # 协作交接
-├── settings/                  # 当前运行参数
-└── records/
-    ├── registry/terminals.jsonl
-    ├── studio/onboarding.json
-    ├── timeline/YYYY/MM/DD/
-    └── layout/migration.json
+│   ├── users/                   # 用户背景、偏好和边界
+│   ├── projects/                # 项目背景和约束，不保存项目源码
+│   ├── agents/                  # Agent 角色和协作约定
+│   ├── recipes/                 # 场景步骤和验收条件
+│   ├── goals/YYYY/MM/DD/        # 按日期保存的目标
+│   └── discuss/YYYY/MM/DD/      # 按日期保存的讨论
+├── raw/                         # 来源、原文、提取产物和处理状态
+├── drafts/                      # 等待人工审核的 Candidate
+├── wiki/                        # 知识页，审核状态以页面元数据为准
+│   └── skills/                  # 审核后的 Skill 卡片及版本信息
+├── skills/                      # 共享文件和旧版 Skill 路径的兼容目录
+├── mail/                        # Agent 间的消息和交接文件
+├── settings/                    # Recall、关联知识库等持久配置
+├── records/                     # 审核、评测、时间线、迁移等可追查记录
+├── .agents/skills/              # 某些 Host 可直接读取的项目级 Skill
+├── .claude/skills/              # 其他 Host 的项目级 Skill，按安装情况出现
+└── .oks/                        # 锁、缓存、运行工作区等本机状态
 ```
 
-`.agents/skills`、`.claude/skills` 等是宿主加载入口；程序的 `assets/skills` 是工具内置技能的发行源。它们不表示个人知识库存在第二个技能资产目录。`oh-my-*` 只是命名习惯：query、ingest、promote 等负责操作 OKS，同样有用；不以名称前缀判断是否保留。
+知识库不负责保存当前项目的全部源码和产物。项目仍放在自己的工作区，`profiles/projects/` 只记录理解项目所需的背景、约束和引用。
 
-Recipe 是场景化任务契约，可以组合多个知识和技能；Skill 是可执行、可复用的能力包。Recipe 不会因为搬目录而自动获得运行权限或被晋升为已审核 Skill。
+## Raw、Candidate 和 Wiki
 
-## 日期与修订
+这三个目录对应不同的内容阶段：
 
-目标页按天合并多个目标文件：日期为根，文件与 Markdown 层级为分支。编辑、添加子目标、完成和删除分支都写回原 Markdown。原文编辑仍保留。
+| 目录 | 保存什么 | 不能据此断定什么 |
+|---|---|---|
+| `raw/` | 来源文件、原文、附件、提取结果、Evidence Fragment 和 Evidence Manifest | 来源中的说法正确，或材料已经整理成知识 |
+| `drafts/` | Agent 根据证据整理的 Candidate | Candidate 已被接受，或已经进入 Recall |
+| `wiki/` | 可供知识查询使用的知识页 | 页面一定经过人工审核，或仍适用于当前任务 |
 
-页面提交记录准确的提交时刻、修改前后内容、内容哈希和结构变化。事务记录先 prepared，正文成功写入后才 complete；失败状态不得当作已完成操作回放。
+Candidate 通过 `oks drafts promote` 后，会生成 `status: active` 的 Wiki 页面，并写入 `human_reviewed_at` 和来源 Candidate 的信息。`oks wiki create` 直接创建的页面是 `provisional`，没有这次人工审核记录。`oks wiki unarchive` 也只把页面恢复为 `provisional`。
 
-启用 `--local-edit` 的服务每两秒观察目标与讨论文件，捕捉其他 Agent 的直接编辑。这里记录的是 observed-at，无法宣称是修改精确发生时刻；首次扫描是 baseline，不补造旧历史。服务未运行期间可能合并了多次外部编辑，无法重建未观察到的中间步骤。
+因此，判断一页知识能否使用时，需要同时检查 `status`、`human_reviewed_at`、来源和适用范围。完整规则见[知识对象与生命周期](concepts/philosophy.html)。
 
-时间轴按实际时间排序，可点选只读快照与倍速回放。回放按阶段推进并压缩长空档；逐步展开当前图谱仍是结构浏览，和历史修订回放分开。
+## Profile、Goal 和讨论
 
-## 初始化与迁移
+`profiles/` 提供任务背景，不属于 Raw 到 Wiki 的中间步骤。
 
-`oks init` 建立规范目录和 `records/studio/onboarding.json`。引导围绕讨论、目标、学习三步，状态为 not_started / in_progress / completed / skipped。跳过保留未完成步骤，不伪造完成；右上角问号可以重新打开。
+- `users/` 说明人的角色、偏好和限制。
+- `projects/` 说明项目的技术背景、约束和外部仓库位置。
+- `agents/` 说明 Agent 的角色和协作约定。运行中的 Agent 连接记录属于 `records/` 或 `.oks/`，不能只看 Profile 判断 Agent 是否在线。
+- `recipes/` 保存某类任务的输入、步骤和验收条件。Recipe 不会自行运行。
+- `goals/` 记录准备完成的事情和验收条件。
+- `discuss/` 记录问题、判断和未确定事项。
+
+编辑 Goal 或讨论只会修改相应文件。它不会自动执行目标，也不会把讨论内容变成 Wiki。
+
+## `records/` 与 `.oks/` 的区别
+
+这两个目录都会保存记录，但用途不同。
+
+`records/` 保存以后仍可能需要核对、共享或评测的数据，例如审核结果、Recall 使用记录、评测语料与结果、Studio 时间线、终端登记和目录迁移报告。默认 Instance 的 Git 配置允许跟踪这些文件，但是否提交仍取决于当前仓库的 `.gitignore` 和团队规则。
+
+`.oks/` 保存本机运行状态，例如锁文件、临时任务、收录工作区、缓存、调试数据、Skill 加载回执和本地备份。`oks init` 生成的 `.gitignore` 默认排除整个 `.oks/`。因此，只备份 Git 仓库不能恢复全部本机运行状态。
+
+不要把 `.oks/` 中出现的临时结果当作长期记录。需要留存的材料应进入 `raw/`，需要审核的提议应进入 `drafts/`，需要共享的执行或评测结果应写入对应的 `records/` 路径。
+
+## Skill 有三种位置
+
+文档中出现“Skill”时，要先确认指的是哪一层。
+
+### 随 OKS 发布的 Skill
+
+这些文件随 Python 包或源码仓库发布。`oks skills-install` 会把所选入口复制到当前知识库支持的 Host 目录；`oks skills-install --global` 会写入所选 Host 的全局目录。它们用于告诉 Agent 怎样操作 OKS，不属于用户积累的知识。
+
+### 知识库管理的 Skill
+
+`oks skills import` 会把一个 Skill 的文件快照保存到 `raw/`，并在 `drafts/` 创建 Candidate。人工审核后，Skill 卡片进入 `wiki/skills/`，其中记录版本、包哈希和来源。只有满足审核与状态要求的版本才能由 `oks skills load` 读取或加载到 Host。
+
+根目录 `skills/` 仍用于共享文件和旧版路径兼容，VFS 也通过 `oks://skills/` 展示它。文件放在这里不会自动获得审核记录，也不会自动成为可加载版本。
+
+### 供 Host 加载的 Skill 副本
+
+`.agents/skills/`、`.claude/skills/`、`.qoder/skills/` 和 `.codebuddy/skills/` 等目录由对应 Host 读取。它们是运行入口或受控副本，不是知识审核记录。`oks skills load --target ...` 只负责写入副本并记录加载信息，不会执行 Skill 中的任务；Host 还可能要求重新加载项目或会话。
+
+## 持久配置和关联信息
+
+`settings/` 保存会影响后续命令的配置。常见文件包括 Recall 参数和 `settings/sources.yaml` 中的团队库关联。修改这些文件会改变以后怎样查询或读取知识，但不会改写已有 Raw、Candidate 或 Wiki。
+
+机器级登记的知识库路径保存在用户目录下的 OKS 配置中，不在当前 Instance 里。也可以通过 `OKS_ROOT`，或在支持该参数的命令中使用 `--path` 选择其他知识库。执行写操作前，Agent 应先核对实际解析出的知识库路径。
+
+## 旧目录迁移
+
+旧版 Instance 可能使用根目录 `goal/`、`discuss/`、`skill/`，或把 Goal 和讨论文件直接放在 `profiles/` 的一级目录。可以运行：
 
 ```bash
 oks layout-migrate
 ```
 
-迁移预检重名冲突，按内容 SHA 校验，迁移结果记录到 `records/layout`。旧 goal/discuss/skill 路径可经 OKS 解析到规范位置；团队的独立知识仓库不会被这个实例迁移改写。
+迁移会先检查目标文件冲突，再移动文件，并把路径、内容 SHA 和执行状态写入 `records/layout/migration.json`。兼容读取不等于文件已经迁移；需要统一目录时，应查看迁移报告并核对实际文件。
 
-日常新建文件直接使用日期目录；旧版长期目标模板可通过上述命令归档。历史任务的签名快照保持原样，通过路径兼容读取，不重写其约定或审核结果。
-
-## 基础 Skill 与场景配方
-
-默认知识操作入口`oh-my-oks`由工具发行并安装到选定宿主的全局目录，兼容项目入口位于`.claude/skills`、`.agents/skills`等隐藏目录；不再自动放入个人`skills/`作为知识资产。团队可以在自己的`skills/`维护共享采用版本。文件视图的根、tree 和全库 find 不枚举宿主安装目录；旧 `host-skills` URI 只保留显式兼容读取。
-
-`oh-my-oks` 只含讨论与目标维护、查阅与采纳、材料入库与知识候选审核、基本状态与健康检查。Office、媒体处理、通信、宿主适配、复杂评测不放入核心入口；需要时单独调用。
-
-```bash
-oks skills-install                 # 安装或补齐最小入口，保留用户的其他 Skill
-oks skills-install --consolidate   # 将旧 OKS 绑定的 Skill 归档到 records/skill-migration
-oks skills-install --all-bundled   # 明确需要旧入口与专用能力时按需安装
-```
-
-`--force` 只覆盖本次选中的发行文件，不删除整个宿主技能目录。第三方和用户自建 Skill 不随核心合并删除。配方依然是场景资料：按当前 Goal 引用，不作为默认动作或计时器运行。
-
-目标图中，每个可编辑节点右侧的加号直接新建子分支，Enter 写回 Markdown，Esc 取消且不产生修订。日期根节点加号新建当日目标文件；历史快照不提供新增入口。
-
-
-## 保持实例精简
-
-`oks init`不复制`_meta/`、`templates/`、示例团队目标或示例配方。规范随程序维护，模板随Skill提供；已有自定义目录不自动删除。`--upgrade`刷新工具入口并补齐缺失默认配置，保留现有settings和profiles内容。团队初始化只补团队画像，不预设active目标；目标由实际讨论产生。
-
-Raw先登记来源并按任务读取，不要求逐份材料生成Wiki。Wiki承载可复用判断，Skill承载执行方法；个人/团队是归属范围，文件独立，逻辑关联。源码和输出留外部工作区，知识与必要证据回库。
-
-旧Raw情景召回仍扫描Markdown/JSONL正文；来源manifest尚不等于统一可搜索索引。低成本来源检索需独立验证覆盖、定位、时延与上下文成本，不能由目录调整宣称完成。
-
-参数页沿用现有公式下的检索算法、召回数量与阈值、向量补召回和注入预算等开放项。格式规范、目录生成、是否逐份生成Wiki不是用户调参项，不额外增加开关。材料处理依据任务需求执行；将来只有在已有实现且取舍可观测时才考虑开放新的成本参数。保留默认值即可正常使用，不要求用户先调参。
-
-
-## 跨工作区入口与对话引导
-
-`oks skills-install --global --editor codex|claude|agents`只向选定宿主安装全局oh-my-oks，不要求当前目录是知识库，不修改其他Skill；存在入口时完整保留，显式`--force`先备份再更新发行文件。其他宿主核对自身支持，不将项目适配误称全局安装。
-
-`oks onboarding status|complete|skip|reset`使用与Studio相同的三步引导记录；complete需指定discuss/goals/learning，代表教学步骤完成，不表示知识获批。个人库路径可用`--path`明确指定。
-
-
-知识库根README说明用途和实际前置要求。`oks sources inspect <目录>`在关联前读取已提交README（兼容readme.md），返回来源版本与哈希，不自动注册、安装依赖或执行命令；工作区未提交要求不冒充共享版本。根README通过团队VFS可查阅，作为reference，不进入已审核知识召回。
+个人库、团队库和工具仓库的区别见[个人库、团队库与工具仓库](knowledge-repositories.html)。备份范围见[备份与导出](connect/backup-export.html)。

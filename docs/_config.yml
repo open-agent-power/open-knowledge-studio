@@ -1,6 +1,6 @@
 remote_theme: just-the-docs/just-the-docs@v0.12.0
 title: Open Knowledge Studio
-description: 给 Agent 使用的文件化知识工作空间：保存来源、审核经验，在后续任务中查询与引用。
+description: 保存来源与证据，审核 Candidate，并在后续任务中查询个人和团队知识。
 baseurl: "/open-knowledge-studio"
 url: "https://open-agent-power.github.io"
 lang: zh-CN
