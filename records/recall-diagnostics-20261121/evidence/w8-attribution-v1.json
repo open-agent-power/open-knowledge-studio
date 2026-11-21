@@ -1,0 +1,758 @@
+{
+  "schema": "run-05-w8-attribution/v1",
+  "purpose": "independent causal attribution of the B-arm rank-1 misses, cross-checked against the measured v2.0 variant sweep",
+  "calibration_ref": "runs/w8-v2-calibration.json",
+  "sweep_ref": "runs/w8-variant-sweep-v2.json",
+  "dataset_sha256": "b685288b3f4f0a827692e3865f5c06909d2d0ad3472de20afdbf100c8688df53",
+  "corpus_manifest_sha256": "b29ec1c29dd5c0313aadf5bd4ad7c64e58fbcc126d0ff0e1eaf736cc8d912b04",
+  "predicted_fixable_by_attribution": [
+    "e1-013"
+  ],
+  "measured_fixed_b010": [
+    "e1-013"
+  ],
+  "measured_fixed_b025": [
+    "e1-013"
+  ],
+  "not_fixable_by_b_variants": [
+    "e1-015",
+    "e1-019",
+    "e1-020"
+  ],
+  "C_arm_miss_scope": {
+    "case_id": "e1-001",
+    "B_gold_rank": 1,
+    "C_gold_rank": 2,
+    "C_top1_usurper": "expense-reimbursement",
+    "out_of_scope_for_b_sweep": true,
+    "reason": "B (plain BM25) already ranks gold at 1; the product C chain (6+1-factor recall / rerank) displaces it. No b/k1 on the lexical score can explain or repair a product-side rerank."
+  },
+  "no_answer_top5_changed": {
+    "baseline_b0.75": [],
+    "b0.00": [
+      "e1-011",
+      "e1-012",
+      "e1-027",
+      "e1-028"
+    ],
+    "b0.10": [
+      "e1-027",
+      "e1-028"
+    ],
+    "b0.25": [
+      "e1-027",
+      "e1-028"
+    ],
+    "b0.50": [
+      "e1-027",
+      "e1-028"
+    ],
+    "b1.00": [
+      "e1-026",
+      "e1-028"
+    ],
+    "k1_0.5_b0.75": [
+      "e1-027",
+      "e1-028"
+    ],
+    "k1_2.0_b0.75": [
+      "e1-026"
+    ]
+  },
+  "records": [
+    {
+      "b0_top1": "refund-policy-current",
+      "b0_gold_rank": 1,
+      "self_comparison": false,
+      "case_id": "e1-013",
+      "query": "2024 年签的合同今年续费，退款按哪一版执行",
+      "gold": "refund-policy-current",
+      "top1_usurper": "customer-tier-sla",
+      "gold_is_rank1_at_baseline": false,
+      "gold_doc": {
+        "slug": "refund-policy-current",
+        "rowid": 12,
+        "doc_token_count": 294,
+        "length_norm": 1.3164295874822192,
+        "length_factor": 0.8528072168245532,
+        "idf_sum": 4.039856376938031,
+        "matched_tokens": [
+          "合同",
+          "续费",
+          "退款"
+        ],
+        "tf_gt_1": [],
+        "bm25_predicted": -3.445218673187446,
+        "bm25_sqlite": -3.445218673187446,
+        "abs_error": 0.0,
+        "parts": [
+          {
+            "token": "合同",
+            "df": 5,
+            "tf": 1,
+            "idf": 0.8209805520698303,
+            "length_norm": 1.3164295874822192,
+            "contribution": 0.7001381396777572
+          },
+          {
+            "token": "续费",
+            "df": 1,
+            "tf": 1,
+            "idf": 2.3978952727983707,
+            "length_norm": 1.3164295874822192,
+            "contribution": 2.0449423938319313
+          },
+          {
+            "token": "退款",
+            "df": 5,
+            "tf": 1,
+            "idf": 0.8209805520698303,
+            "length_norm": 1.3164295874822192,
+            "contribution": 0.7001381396777572
+          }
+        ]
+      },
+      "top1_doc": {
+        "slug": "customer-tier-sla",
+        "rowid": 5,
+        "doc_token_count": 144,
+        "length_norm": 0.7723328591749645,
+        "length_factor": 1.1417898327107359,
+        "idf_sum": 3.4665103961907064,
+        "matched_tokens": [
+          "合同",
+          "退款",
+          "执行"
+        ],
+        "tf_gt_1": [],
+        "bm25_predicted": -3.958026325356614,
+        "bm25_sqlite": -3.958026325356614,
+        "abs_error": 0.0,
+        "parts": [
+          {
+            "token": "合同",
+            "df": 5,
+            "tf": 1,
+            "idf": 0.8209805520698303,
+            "length_norm": 0.7723328591749645,
+            "contribution": 0.9373872472065791
+          },
+          {
+            "token": "退款",
+            "df": 5,
+            "tf": 1,
+            "idf": 0.8209805520698303,
+            "length_norm": 0.7723328591749645,
+            "contribution": 0.9373872472065791
+          },
+          {
+            "token": "执行",
+            "df": 2,
+            "tf": 1,
+            "idf": 1.824549292051046,
+            "length_norm": 0.7723328591749645,
+            "contribution": 2.0832518309434556
+          }
+        ]
+      },
+      "factor_comparison": {
+        "idf_sum_gold": 4.039856376938031,
+        "idf_sum_top1": 3.4665103961907064,
+        "idf_advantage_gold": 0.5733459807473249,
+        "length_factor_gold": 0.8528072168245532,
+        "length_factor_top1": 1.1417898327107359,
+        "length_factor_ratio_top1_over_gold": 1.3388604249413085
+      },
+      "token_overlap": {
+        "shared_matched_tokens": [
+          "合同",
+          "退款"
+        ],
+        "n_shared": 2,
+        "gold_only": [
+          "续费"
+        ],
+        "top1_only": [
+          "执行"
+        ]
+      },
+      "counterfactuals": {
+        "b0_scores": {
+          "refund-policy-current": -4.039856376938031,
+          "customer-tier-sla": -3.466510396190707
+        },
+        "b0_gold_wins": true,
+        "b075_scores": {
+          "refund-policy-current": -3.445218673187446,
+          "customer-tier-sla": -3.958026325356614
+        },
+        "b075_gold_wins": false,
+        "probe_b075_assertion_flips": true
+      },
+      "attribution": "length_normalisation_dominant__b_variant_applicable",
+      "measured_fixed_by_b010": true,
+      "measured_fixed_by_b025": true,
+      "measured_new_miss_by_b000": false
+    },
+    {
+      "b0_top1": "api-rate-limit",
+      "b0_gold_rank": 2,
+      "self_comparison": false,
+      "case_id": "e1-015",
+      "query": "以前那套统一缓存的做法，现在连接口响应也会一起缓存吗",
+      "gold": "cdn-cache-policy",
+      "top1_usurper": "api-rate-limit",
+      "gold_is_rank1_at_baseline": false,
+      "gold_doc": {
+        "slug": "cdn-cache-policy",
+        "rowid": 2,
+        "doc_token_count": 193,
+        "length_norm": 0.9500711237553343,
+        "length_factor": 1.0279963841327238,
+        "idf_sum": 2.395094150518659,
+        "matched_tokens": [
+          "缓存",
+          "响应"
+        ],
+        "tf_gt_1": [],
+        "bm25_predicted": -2.4621481263906193,
+        "bm25_sqlite": -2.462148126390619,
+        "abs_error": 4.440892098500626e-16,
+        "parts": [
+          {
+            "token": "缓存",
+            "df": 2,
+            "tf": 1,
+            "idf": 1.824549292051046,
+            "length_norm": 0.9500711237553343,
+            "contribution": 1.8756300749003965
+          },
+          {
+            "token": "响应",
+            "df": 6,
+            "tf": 1,
+            "idf": 0.5705448584676129,
+            "length_norm": 0.9500711237553343,
+            "contribution": 0.5865180514902227
+          }
+        ]
+      },
+      "top1_doc": {
+        "slug": "api-rate-limit",
+        "rowid": 1,
+        "doc_token_count": 152,
+        "length_norm": 0.8013513513513514,
+        "length_factor": 1.1215210801873796,
+        "idf_sum": 4.067052419934093,
+        "matched_tokens": [
+          "连接",
+          "接口",
+          "响应"
+        ],
+        "tf_gt_1": [],
+        "bm25_predicted": -4.5612850231831805,
+        "bm25_sqlite": -4.5612850231831805,
+        "abs_error": 0.0,
+        "parts": [
+          {
+            "token": "连接",
+            "df": 1,
+            "tf": 1,
+            "idf": 2.3978952727983707,
+            "length_norm": 0.8013513513513514,
+            "contribution": 2.6892900965250397
+          },
+          {
+            "token": "接口",
+            "df": 4,
+            "tf": 1,
+            "idf": 1.0986122886681098,
+            "length_norm": 0.8013513513513514,
+            "contribution": 1.2321168406941878
+          },
+          {
+            "token": "响应",
+            "df": 6,
+            "tf": 1,
+            "idf": 0.5705448584676129,
+            "length_norm": 0.8013513513513514,
+            "contribution": 0.6398780859639528
+          }
+        ]
+      },
+      "factor_comparison": {
+        "idf_sum_gold": 2.395094150518659,
+        "idf_sum_top1": 4.067052419934093,
+        "idf_advantage_gold": -1.671958269415434,
+        "length_factor_gold": 1.0279963841327238,
+        "length_factor_top1": 1.1215210801873796,
+        "length_factor_ratio_top1_over_gold": 1.0909776507954925
+      },
+      "token_overlap": {
+        "shared_matched_tokens": [
+          "响应"
+        ],
+        "n_shared": 1,
+        "gold_only": [
+          "缓存"
+        ],
+        "top1_only": [
+          "接口",
+          "连接"
+        ]
+      },
+      "counterfactuals": {
+        "b0_scores": {
+          "cdn-cache-policy": -2.395094150518659,
+          "api-rate-limit": -4.067052419934093
+        },
+        "b0_gold_wins": false,
+        "b075_scores": {
+          "cdn-cache-policy": -2.4621481263906193,
+          "api-rate-limit": -4.5612850231831805
+        },
+        "b075_gold_wins": false,
+        "probe_b075_assertion_flips": null
+      },
+      "attribution": "vocabulary_or_idf_dominant__b_variant_not_applicable",
+      "measured_fixed_by_b010": false,
+      "measured_fixed_by_b025": false,
+      "measured_new_miss_by_b000": false
+    },
+    {
+      "b0_top1": "customer-success-playbook",
+      "b0_gold_rank": 2,
+      "self_comparison": false,
+      "case_id": "e1-019",
+      "query": "SLA 没达标要申请赔偿，最晚什么时候提交，过期了还能补吗",
+      "gold": "sla-credit",
+      "top1_usurper": "customer-success-playbook",
+      "gold_is_rank1_at_baseline": false,
+      "gold_doc": {
+        "slug": "sla-credit",
+        "rowid": 15,
+        "doc_token_count": 166,
+        "length_norm": 0.8521337126600285,
+        "length_factor": 1.0877301562741761,
+        "idf_sum": 3.0905428280668836,
+        "matched_tokens": [
+          "sla",
+          "申请",
+          "提交"
+        ],
+        "tf_gt_1": [],
+        "bm25_predicted": -3.3616766333452253,
+        "bm25_sqlite": -3.3616766333452253,
+        "abs_error": 0.0,
+        "parts": [
+          {
+            "token": "sla",
+            "df": 4,
+            "tf": 1,
+            "idf": 1.0986122886681098,
+            "length_norm": 0.8521337126600285,
+            "contribution": 1.1949937164376934
+          },
+          {
+            "token": "申请",
+            "df": 3,
+            "tf": 1,
+            "idf": 1.421385680931161,
+            "length_norm": 0.8521337126600285,
+            "contribution": 1.5460840688451278
+          },
+          {
+            "token": "提交",
+            "df": 6,
+            "tf": 1,
+            "idf": 0.5705448584676129,
+            "length_norm": 0.8521337126600285,
+            "contribution": 0.6205988480624043
+          }
+        ]
+      },
+      "top1_doc": {
+        "slug": "customer-success-playbook",
+        "rowid": 4,
+        "doc_token_count": 240,
+        "length_norm": 1.1205547652916075,
+        "length_factor": 0.9383000667354244,
+        "idf_sum": 9.185616357793887,
+        "matched_tokens": [
+          "赔偿",
+          "什么",
+          "么时",
+          "时候",
+          "提交"
+        ],
+        "tf_gt_1": [],
+        "bm25_predicted": -8.61886444152401,
+        "bm25_sqlite": -8.61886444152401,
+        "abs_error": 0.0,
+        "parts": [
+          {
+            "token": "赔偿",
+            "df": 1,
+            "tf": 1,
+            "idf": 2.3978952727983707,
+            "length_norm": 1.1205547652916075,
+            "contribution": 2.24994529449127
+          },
+          {
+            "token": "什么",
+            "df": 3,
+            "tf": 1,
+            "idf": 1.421385680931161,
+            "length_norm": 1.1205547652916075,
+            "contribution": 1.333686279274485
+          },
+          {
+            "token": "么时",
+            "df": 1,
+            "tf": 1,
+            "idf": 2.3978952727983707,
+            "length_norm": 1.1205547652916075,
+            "contribution": 2.24994529449127
+          },
+          {
+            "token": "时候",
+            "df": 1,
+            "tf": 1,
+            "idf": 2.3978952727983707,
+            "length_norm": 1.1205547652916075,
+            "contribution": 2.24994529449127
+          },
+          {
+            "token": "提交",
+            "df": 6,
+            "tf": 1,
+            "idf": 0.5705448584676129,
+            "length_norm": 1.1205547652916075,
+            "contribution": 0.5353422787757145
+          }
+        ]
+      },
+      "factor_comparison": {
+        "idf_sum_gold": 3.0905428280668836,
+        "idf_sum_top1": 9.185616357793887,
+        "idf_advantage_gold": -6.095073529727003,
+        "length_factor_gold": 1.0877301562741761,
+        "length_factor_top1": 0.9383000667354244,
+        "length_factor_ratio_top1_over_gold": 0.8626220954923255
+      },
+      "token_overlap": {
+        "shared_matched_tokens": [
+          "提交"
+        ],
+        "n_shared": 1,
+        "gold_only": [
+          "sla",
+          "申请"
+        ],
+        "top1_only": [
+          "么时",
+          "什么",
+          "时候",
+          "赔偿"
+        ]
+      },
+      "counterfactuals": {
+        "b0_scores": {
+          "sla-credit": -3.0905428280668836,
+          "customer-success-playbook": -9.185616357793887
+        },
+        "b0_gold_wins": false,
+        "b075_scores": {
+          "sla-credit": -3.3616766333452253,
+          "customer-success-playbook": -8.61886444152401
+        },
+        "b075_gold_wins": false,
+        "probe_b075_assertion_flips": null
+      },
+      "attribution": "vocabulary_or_idf_dominant__b_variant_not_applicable",
+      "measured_fixed_by_b010": false,
+      "measured_fixed_by_b025": false,
+      "measured_new_miss_by_b000": false
+    },
+    {
+      "b0_top1": "customer-success-playbook",
+      "b0_gold_rank": 2,
+      "self_comparison": false,
+      "case_id": "e1-020",
+      "query": "钱付了之后多久能拿到发票，电子的什么时候推送",
+      "gold": "invoice-issuance",
+      "top1_usurper": "customer-success-playbook",
+      "gold_is_rank1_at_baseline": false,
+      "gold_doc": {
+        "slug": "invoice-issuance",
+        "rowid": 10,
+        "doc_token_count": 217,
+        "length_norm": 1.0371266002844952,
+        "length_factor": 0.9801510849726222,
+        "idf_sum": 5.321056853517526,
+        "matched_tokens": [
+          "发票",
+          "电子",
+          "推送"
+        ],
+        "tf_gt_1": [],
+        "bm25_predicted": -5.215439648176211,
+        "bm25_sqlite": -5.21543964817621,
+        "abs_error": 8.881784197001252e-16,
+        "parts": [
+          {
+            "token": "发票",
+            "df": 4,
+            "tf": 1,
+            "idf": 1.0986122886681098,
+            "length_norm": 1.0371266002844952,
+            "contribution": 1.0768060267023034
+          },
+          {
+            "token": "电子",
+            "df": 1,
+            "tf": 1,
+            "idf": 2.3978952727983707,
+            "length_norm": 1.0371266002844952,
+            "contribution": 2.3502996532840448
+          },
+          {
+            "token": "推送",
+            "df": 2,
+            "tf": 1,
+            "idf": 1.824549292051046,
+            "length_norm": 1.0371266002844952,
+            "contribution": 1.7883339681898627
+          }
+        ]
+      },
+      "top1_doc": {
+        "slug": "customer-success-playbook",
+        "rowid": 4,
+        "doc_token_count": 240,
+        "length_norm": 1.1205547652916075,
+        "length_factor": 0.9383000667354244,
+        "idf_sum": 6.2171762265279025,
+        "matched_tokens": [
+          "什么",
+          "么时",
+          "时候"
+        ],
+        "tf_gt_1": [],
+        "bm25_predicted": -5.833576868257024,
+        "bm25_sqlite": -5.833576868257024,
+        "abs_error": 0.0,
+        "parts": [
+          {
+            "token": "什么",
+            "df": 3,
+            "tf": 1,
+            "idf": 1.421385680931161,
+            "length_norm": 1.1205547652916075,
+            "contribution": 1.333686279274485
+          },
+          {
+            "token": "么时",
+            "df": 1,
+            "tf": 1,
+            "idf": 2.3978952727983707,
+            "length_norm": 1.1205547652916075,
+            "contribution": 2.24994529449127
+          },
+          {
+            "token": "时候",
+            "df": 1,
+            "tf": 1,
+            "idf": 2.3978952727983707,
+            "length_norm": 1.1205547652916075,
+            "contribution": 2.24994529449127
+          }
+        ]
+      },
+      "factor_comparison": {
+        "idf_sum_gold": 5.321056853517526,
+        "idf_sum_top1": 6.2171762265279025,
+        "idf_advantage_gold": -0.896119373010376,
+        "length_factor_gold": 0.9801510849726222,
+        "length_factor_top1": 0.9383000667354244,
+        "length_factor_ratio_top1_over_gold": 0.9573014621124796
+      },
+      "token_overlap": {
+        "shared_matched_tokens": [],
+        "n_shared": 0,
+        "gold_only": [
+          "发票",
+          "推送",
+          "电子"
+        ],
+        "top1_only": [
+          "么时",
+          "什么",
+          "时候"
+        ]
+      },
+      "counterfactuals": {
+        "b0_scores": {
+          "invoice-issuance": -5.321056853517527,
+          "customer-success-playbook": -6.2171762265279025
+        },
+        "b0_gold_wins": false,
+        "b075_scores": {
+          "invoice-issuance": -5.215439648176211,
+          "customer-success-playbook": -5.833576868257024
+        },
+        "b075_gold_wins": false,
+        "probe_b075_assertion_flips": null
+      },
+      "attribution": "vocabulary_or_idf_dominant__b_variant_not_applicable",
+      "measured_fixed_by_b010": false,
+      "measured_fixed_by_b025": false,
+      "measured_new_miss_by_b000": false
+    },
+    {
+      "b0_top1": "customer-success-playbook",
+      "b0_gold_rank": 2,
+      "self_comparison": true,
+      "case_id": "e1-004",
+      "query": "员工办完离职，账号和权限分别要在多久内处理掉",
+      "gold": "security-baseline",
+      "top1_usurper": "security-baseline",
+      "gold_is_rank1_at_baseline": true,
+      "gold_doc": {
+        "slug": "security-baseline",
+        "rowid": 14,
+        "doc_token_count": 190,
+        "length_norm": 0.9391891891891893,
+        "length_factor": 1.03430749682338,
+        "idf_sum": 4.066915525052037,
+        "matched_tokens": [
+          "离职",
+          "账号",
+          "权限"
+        ],
+        "tf_gt_1": [],
+        "bm25_predicted": -4.206441216508716,
+        "bm25_sqlite": -4.206441216508715,
+        "abs_error": 8.881784197001252e-16,
+        "parts": [
+          {
+            "token": "离职",
+            "df": 2,
+            "tf": 1,
+            "idf": 1.824549292051046,
+            "length_norm": 0.9391891891891893,
+            "contribution": 1.887145011092188
+          },
+          {
+            "token": "账号",
+            "df": 5,
+            "tf": 1,
+            "idf": 0.8209805520698303,
+            "length_norm": 0.9391891891891893,
+            "contribution": 0.8491463397520229
+          },
+          {
+            "token": "权限",
+            "df": 3,
+            "tf": 1,
+            "idf": 1.421385680931161,
+            "length_norm": 0.9391891891891893,
+            "contribution": 1.4701498656645047
+          }
+        ]
+      },
+      "top1_doc": {
+        "slug": "security-baseline",
+        "rowid": 14,
+        "doc_token_count": 190,
+        "length_norm": 0.9391891891891893,
+        "length_factor": 1.03430749682338,
+        "idf_sum": 4.066915525052037,
+        "matched_tokens": [
+          "离职",
+          "账号",
+          "权限"
+        ],
+        "tf_gt_1": [],
+        "bm25_predicted": -4.206441216508716,
+        "bm25_sqlite": -4.206441216508715,
+        "abs_error": 8.881784197001252e-16,
+        "parts": [
+          {
+            "token": "离职",
+            "df": 2,
+            "tf": 1,
+            "idf": 1.824549292051046,
+            "length_norm": 0.9391891891891893,
+            "contribution": 1.887145011092188
+          },
+          {
+            "token": "账号",
+            "df": 5,
+            "tf": 1,
+            "idf": 0.8209805520698303,
+            "length_norm": 0.9391891891891893,
+            "contribution": 0.8491463397520229
+          },
+          {
+            "token": "权限",
+            "df": 3,
+            "tf": 1,
+            "idf": 1.421385680931161,
+            "length_norm": 0.9391891891891893,
+            "contribution": 1.4701498656645047
+          }
+        ]
+      },
+      "factor_comparison": {
+        "idf_sum_gold": 4.066915525052037,
+        "idf_sum_top1": 4.066915525052037,
+        "idf_advantage_gold": 0.0,
+        "length_factor_gold": 1.03430749682338,
+        "length_factor_top1": 1.03430749682338,
+        "length_factor_ratio_top1_over_gold": 1.0
+      },
+      "token_overlap": {
+        "shared_matched_tokens": [
+          "权限",
+          "离职",
+          "账号"
+        ],
+        "n_shared": 3,
+        "gold_only": [],
+        "top1_only": []
+      },
+      "counterfactuals": {
+        "b0_scores": {
+          "security-baseline": -4.066915525052037
+        },
+        "b0_gold_wins": false,
+        "b075_scores": {
+          "security-baseline": -4.206441216508716
+        },
+        "b075_gold_wins": false,
+        "probe_b075_assertion_flips": null
+      },
+      "attribution": "vocabulary_or_idf_dominant__b_variant_not_applicable",
+      "measured_fixed_by_b010": false,
+      "measured_fixed_by_b025": false,
+      "measured_new_miss_by_b000": true
+    }
+  ],
+  "checks": {
+    "four_B_misses_decomposed": true,
+    "all_decompositions_match_sqlite": true,
+    "predicted_fix_set_equals_b010_measured": true,
+    "predicted_fix_set_equals_b025_measured": true,
+    "only_e1013_is_length_dominant": true,
+    "remaining_three_are_vocabulary_or_idf": true,
+    "b000_new_miss_is_e1004": true,
+    "b000_control_was_rank1_at_baseline": true,
+    "e1013_counterfactual_probe_discriminating": true,
+    "b000_control_gold_drops_to_rank2": true,
+    "b000_control_self_comparison_flagged": true,
+    "C_arm_miss_out_of_scope": true,
+    "subject_sha256_unchanged": true
+  },
+  "status": "pass"
+}
