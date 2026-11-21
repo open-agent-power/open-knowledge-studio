@@ -1,0 +1,669 @@
+{
+  "schema": "run-05-variant-sweep-v2/v1",
+  "purpose": "independent v2.0 (32-case) reproduction of run-02's 16-case b/k1 sweep, focused on the five surfaced rank-1 misses",
+  "note": "Offline scoring-side variants ONLY. NOT a product change, NOT written to any predictions.json, NOT merged into comparison.json. Frozen dataset/corpus/labels untouched. The product calls bm25(0, 0, w_title, w_body, ...) in cli/knowledge_studio/search/fts5.py:535; SQLite FTS5's bm25() accepts COLUMN WEIGHTS only, so k1/b are baked into the SQLite build and cannot be tuned from product SQL. These variants are a causal diagnosis, not a config patch.",
+  "calibration": {
+    "file": "runs/w8-v2-calibration.json",
+    "max_abs_error": 3.552713678800501e-15,
+    "n_scores": 303
+  },
+  "dataset_sha256": "b685288b3f4f0a827692e3865f5c06909d2d0ad3472de20afdbf100c8688df53",
+  "corpus_manifest_sha256": "b29ec1c29dd5c0313aadf5bd4ad7c64e58fbcc126d0ff0e1eaf736cc8d912b04",
+  "baseline_reference": {
+    "run": "B-bigram-v2-01",
+    "top5_exactly_reproduced_by_b0.75": true,
+    "n_cases": 32
+  },
+  "surfaced_misses": [
+    "e1-001",
+    "e1-013",
+    "e1-015",
+    "e1-019",
+    "e1-020"
+  ],
+  "miss_note": "e1-001 is a C-arm miss; B is already rank 1 on it, so a BM25 b/k1 variant can neither fix nor explain it. Only the four B-arm misses are in scope for this sweep.",
+  "variants": [
+    {
+      "label": "baseline_b0.75",
+      "params": {
+        "k1": 1.2,
+        "b": 0.75
+      },
+      "metrics": {
+        "answerable_cases": 24,
+        "recall_at_1": 0.833333,
+        "recall_at_5": 1.0,
+        "mrr": 0.916667,
+        "rank1_miss_ids": [
+          "e1-013",
+          "e1-015",
+          "e1-019",
+          "e1-020"
+        ],
+        "forbidden_in_top5_total": 0,
+        "no_answer_cases": 8,
+        "no_answer_top5_nonempty": 8
+      },
+      "five_misses": {
+        "e1-001": {
+          "gold": "refund-policy-current",
+          "gold_rank": 1,
+          "top1": "refund-policy-current",
+          "fixed": true
+        },
+        "e1-013": {
+          "gold": "refund-policy-current",
+          "gold_rank": 2,
+          "top1": "customer-tier-sla",
+          "fixed": false
+        },
+        "e1-015": {
+          "gold": "cdn-cache-policy",
+          "gold_rank": 2,
+          "top1": "api-rate-limit",
+          "fixed": false
+        },
+        "e1-019": {
+          "gold": "sla-credit",
+          "gold_rank": 2,
+          "top1": "customer-success-playbook",
+          "fixed": false
+        },
+        "e1-020": {
+          "gold": "invoice-issuance",
+          "gold_rank": 2,
+          "top1": "customer-success-playbook",
+          "fixed": false
+        }
+      },
+      "b_misses_fixed": [],
+      "new_rank1_miss_ids_vs_baseline": [],
+      "rank1_miss_ids_resolved_vs_baseline": [],
+      "top5_changed_case_ids_vs_baseline": [],
+      "top5_mismatch_vs_real_B_predictions": [],
+      "no_answer_top5_changed_case_ids": []
+    },
+    {
+      "label": "b0.00",
+      "params": {
+        "k1": 1.2,
+        "b": 0.0
+      },
+      "metrics": {
+        "answerable_cases": 24,
+        "recall_at_1": 0.833333,
+        "recall_at_5": 1.0,
+        "mrr": 0.916667,
+        "rank1_miss_ids": [
+          "e1-004",
+          "e1-015",
+          "e1-019",
+          "e1-020"
+        ],
+        "forbidden_in_top5_total": 0,
+        "no_answer_cases": 8,
+        "no_answer_top5_nonempty": 8
+      },
+      "five_misses": {
+        "e1-001": {
+          "gold": "refund-policy-current",
+          "gold_rank": 1,
+          "top1": "refund-policy-current",
+          "fixed": true
+        },
+        "e1-013": {
+          "gold": "refund-policy-current",
+          "gold_rank": 1,
+          "top1": "refund-policy-current",
+          "fixed": true
+        },
+        "e1-015": {
+          "gold": "cdn-cache-policy",
+          "gold_rank": 2,
+          "top1": "api-rate-limit",
+          "fixed": false
+        },
+        "e1-019": {
+          "gold": "sla-credit",
+          "gold_rank": 2,
+          "top1": "customer-success-playbook",
+          "fixed": false
+        },
+        "e1-020": {
+          "gold": "invoice-issuance",
+          "gold_rank": 2,
+          "top1": "customer-success-playbook",
+          "fixed": false
+        }
+      },
+      "b_misses_fixed": [
+        "e1-013"
+      ],
+      "new_rank1_miss_ids_vs_baseline": [
+        "e1-004"
+      ],
+      "rank1_miss_ids_resolved_vs_baseline": [
+        "e1-013"
+      ],
+      "top5_changed_case_ids_vs_baseline": [
+        "e1-001",
+        "e1-003",
+        "e1-004",
+        "e1-006",
+        "e1-007",
+        "e1-008",
+        "e1-011",
+        "e1-012",
+        "e1-013",
+        "e1-014",
+        "e1-015",
+        "e1-016",
+        "e1-017",
+        "e1-018",
+        "e1-027",
+        "e1-028",
+        "e1-029",
+        "e1-030",
+        "e1-031",
+        "e1-032"
+      ],
+      "top5_mismatch_vs_real_B_predictions": [
+        "e1-001",
+        "e1-003",
+        "e1-004",
+        "e1-006",
+        "e1-007",
+        "e1-008",
+        "e1-011",
+        "e1-012",
+        "e1-013",
+        "e1-014",
+        "e1-015",
+        "e1-016",
+        "e1-017",
+        "e1-018",
+        "e1-027",
+        "e1-028",
+        "e1-029",
+        "e1-030",
+        "e1-031",
+        "e1-032"
+      ],
+      "no_answer_top5_changed_case_ids": [
+        "e1-011",
+        "e1-012",
+        "e1-027",
+        "e1-028"
+      ]
+    },
+    {
+      "label": "b0.10",
+      "params": {
+        "k1": 1.2,
+        "b": 0.1
+      },
+      "metrics": {
+        "answerable_cases": 24,
+        "recall_at_1": 0.875,
+        "recall_at_5": 1.0,
+        "mrr": 0.9375,
+        "rank1_miss_ids": [
+          "e1-015",
+          "e1-019",
+          "e1-020"
+        ],
+        "forbidden_in_top5_total": 0,
+        "no_answer_cases": 8,
+        "no_answer_top5_nonempty": 8
+      },
+      "five_misses": {
+        "e1-001": {
+          "gold": "refund-policy-current",
+          "gold_rank": 1,
+          "top1": "refund-policy-current",
+          "fixed": true
+        },
+        "e1-013": {
+          "gold": "refund-policy-current",
+          "gold_rank": 1,
+          "top1": "refund-policy-current",
+          "fixed": true
+        },
+        "e1-015": {
+          "gold": "cdn-cache-policy",
+          "gold_rank": 2,
+          "top1": "api-rate-limit",
+          "fixed": false
+        },
+        "e1-019": {
+          "gold": "sla-credit",
+          "gold_rank": 2,
+          "top1": "customer-success-playbook",
+          "fixed": false
+        },
+        "e1-020": {
+          "gold": "invoice-issuance",
+          "gold_rank": 2,
+          "top1": "customer-success-playbook",
+          "fixed": false
+        }
+      },
+      "b_misses_fixed": [
+        "e1-013"
+      ],
+      "new_rank1_miss_ids_vs_baseline": [],
+      "rank1_miss_ids_resolved_vs_baseline": [
+        "e1-013"
+      ],
+      "top5_changed_case_ids_vs_baseline": [
+        "e1-006",
+        "e1-013",
+        "e1-016",
+        "e1-027",
+        "e1-028",
+        "e1-029",
+        "e1-032"
+      ],
+      "top5_mismatch_vs_real_B_predictions": [
+        "e1-006",
+        "e1-013",
+        "e1-016",
+        "e1-027",
+        "e1-028",
+        "e1-029",
+        "e1-032"
+      ],
+      "no_answer_top5_changed_case_ids": [
+        "e1-027",
+        "e1-028"
+      ]
+    },
+    {
+      "label": "b0.25",
+      "params": {
+        "k1": 1.2,
+        "b": 0.25
+      },
+      "metrics": {
+        "answerable_cases": 24,
+        "recall_at_1": 0.875,
+        "recall_at_5": 1.0,
+        "mrr": 0.9375,
+        "rank1_miss_ids": [
+          "e1-015",
+          "e1-019",
+          "e1-020"
+        ],
+        "forbidden_in_top5_total": 0,
+        "no_answer_cases": 8,
+        "no_answer_top5_nonempty": 8
+      },
+      "five_misses": {
+        "e1-001": {
+          "gold": "refund-policy-current",
+          "gold_rank": 1,
+          "top1": "refund-policy-current",
+          "fixed": true
+        },
+        "e1-013": {
+          "gold": "refund-policy-current",
+          "gold_rank": 1,
+          "top1": "refund-policy-current",
+          "fixed": true
+        },
+        "e1-015": {
+          "gold": "cdn-cache-policy",
+          "gold_rank": 2,
+          "top1": "api-rate-limit",
+          "fixed": false
+        },
+        "e1-019": {
+          "gold": "sla-credit",
+          "gold_rank": 2,
+          "top1": "customer-success-playbook",
+          "fixed": false
+        },
+        "e1-020": {
+          "gold": "invoice-issuance",
+          "gold_rank": 2,
+          "top1": "customer-success-playbook",
+          "fixed": false
+        }
+      },
+      "b_misses_fixed": [
+        "e1-013"
+      ],
+      "new_rank1_miss_ids_vs_baseline": [],
+      "rank1_miss_ids_resolved_vs_baseline": [
+        "e1-013"
+      ],
+      "top5_changed_case_ids_vs_baseline": [
+        "e1-006",
+        "e1-013",
+        "e1-016",
+        "e1-027",
+        "e1-028",
+        "e1-029",
+        "e1-032"
+      ],
+      "top5_mismatch_vs_real_B_predictions": [
+        "e1-006",
+        "e1-013",
+        "e1-016",
+        "e1-027",
+        "e1-028",
+        "e1-029",
+        "e1-032"
+      ],
+      "no_answer_top5_changed_case_ids": [
+        "e1-027",
+        "e1-028"
+      ]
+    },
+    {
+      "label": "b0.50",
+      "params": {
+        "k1": 1.2,
+        "b": 0.5
+      },
+      "metrics": {
+        "answerable_cases": 24,
+        "recall_at_1": 0.833333,
+        "recall_at_5": 1.0,
+        "mrr": 0.916667,
+        "rank1_miss_ids": [
+          "e1-013",
+          "e1-015",
+          "e1-019",
+          "e1-020"
+        ],
+        "forbidden_in_top5_total": 0,
+        "no_answer_cases": 8,
+        "no_answer_top5_nonempty": 8
+      },
+      "five_misses": {
+        "e1-001": {
+          "gold": "refund-policy-current",
+          "gold_rank": 1,
+          "top1": "refund-policy-current",
+          "fixed": true
+        },
+        "e1-013": {
+          "gold": "refund-policy-current",
+          "gold_rank": 2,
+          "top1": "customer-tier-sla",
+          "fixed": false
+        },
+        "e1-015": {
+          "gold": "cdn-cache-policy",
+          "gold_rank": 2,
+          "top1": "api-rate-limit",
+          "fixed": false
+        },
+        "e1-019": {
+          "gold": "sla-credit",
+          "gold_rank": 2,
+          "top1": "customer-success-playbook",
+          "fixed": false
+        },
+        "e1-020": {
+          "gold": "invoice-issuance",
+          "gold_rank": 2,
+          "top1": "customer-success-playbook",
+          "fixed": false
+        }
+      },
+      "b_misses_fixed": [],
+      "new_rank1_miss_ids_vs_baseline": [],
+      "rank1_miss_ids_resolved_vs_baseline": [],
+      "top5_changed_case_ids_vs_baseline": [
+        "e1-006",
+        "e1-027",
+        "e1-028",
+        "e1-029",
+        "e1-032"
+      ],
+      "top5_mismatch_vs_real_B_predictions": [
+        "e1-006",
+        "e1-027",
+        "e1-028",
+        "e1-029",
+        "e1-032"
+      ],
+      "no_answer_top5_changed_case_ids": [
+        "e1-027",
+        "e1-028"
+      ]
+    },
+    {
+      "label": "b1.00",
+      "params": {
+        "k1": 1.2,
+        "b": 1.0
+      },
+      "metrics": {
+        "answerable_cases": 24,
+        "recall_at_1": 0.833333,
+        "recall_at_5": 1.0,
+        "mrr": 0.916667,
+        "rank1_miss_ids": [
+          "e1-013",
+          "e1-015",
+          "e1-019",
+          "e1-020"
+        ],
+        "forbidden_in_top5_total": 0,
+        "no_answer_cases": 8,
+        "no_answer_top5_nonempty": 8
+      },
+      "five_misses": {
+        "e1-001": {
+          "gold": "refund-policy-current",
+          "gold_rank": 1,
+          "top1": "refund-policy-current",
+          "fixed": true
+        },
+        "e1-013": {
+          "gold": "refund-policy-current",
+          "gold_rank": 2,
+          "top1": "customer-tier-sla",
+          "fixed": false
+        },
+        "e1-015": {
+          "gold": "cdn-cache-policy",
+          "gold_rank": 2,
+          "top1": "api-rate-limit",
+          "fixed": false
+        },
+        "e1-019": {
+          "gold": "sla-credit",
+          "gold_rank": 2,
+          "top1": "customer-success-playbook",
+          "fixed": false
+        },
+        "e1-020": {
+          "gold": "invoice-issuance",
+          "gold_rank": 2,
+          "top1": "customer-success-playbook",
+          "fixed": false
+        }
+      },
+      "b_misses_fixed": [],
+      "new_rank1_miss_ids_vs_baseline": [],
+      "rank1_miss_ids_resolved_vs_baseline": [],
+      "top5_changed_case_ids_vs_baseline": [
+        "e1-014",
+        "e1-016",
+        "e1-017",
+        "e1-026",
+        "e1-028"
+      ],
+      "top5_mismatch_vs_real_B_predictions": [
+        "e1-014",
+        "e1-016",
+        "e1-017",
+        "e1-026",
+        "e1-028"
+      ],
+      "no_answer_top5_changed_case_ids": [
+        "e1-026",
+        "e1-028"
+      ]
+    },
+    {
+      "label": "k1_0.5_b0.75",
+      "params": {
+        "k1": 0.5,
+        "b": 0.75
+      },
+      "metrics": {
+        "answerable_cases": 24,
+        "recall_at_1": 0.833333,
+        "recall_at_5": 1.0,
+        "mrr": 0.916667,
+        "rank1_miss_ids": [
+          "e1-013",
+          "e1-015",
+          "e1-019",
+          "e1-020"
+        ],
+        "forbidden_in_top5_total": 0,
+        "no_answer_cases": 8,
+        "no_answer_top5_nonempty": 8
+      },
+      "five_misses": {
+        "e1-001": {
+          "gold": "refund-policy-current",
+          "gold_rank": 1,
+          "top1": "refund-policy-current",
+          "fixed": true
+        },
+        "e1-013": {
+          "gold": "refund-policy-current",
+          "gold_rank": 2,
+          "top1": "customer-tier-sla",
+          "fixed": false
+        },
+        "e1-015": {
+          "gold": "cdn-cache-policy",
+          "gold_rank": 2,
+          "top1": "api-rate-limit",
+          "fixed": false
+        },
+        "e1-019": {
+          "gold": "sla-credit",
+          "gold_rank": 2,
+          "top1": "customer-success-playbook",
+          "fixed": false
+        },
+        "e1-020": {
+          "gold": "invoice-issuance",
+          "gold_rank": 2,
+          "top1": "customer-success-playbook",
+          "fixed": false
+        }
+      },
+      "b_misses_fixed": [],
+      "new_rank1_miss_ids_vs_baseline": [],
+      "rank1_miss_ids_resolved_vs_baseline": [],
+      "top5_changed_case_ids_vs_baseline": [
+        "e1-006",
+        "e1-027",
+        "e1-028",
+        "e1-029",
+        "e1-032"
+      ],
+      "top5_mismatch_vs_real_B_predictions": [
+        "e1-006",
+        "e1-027",
+        "e1-028",
+        "e1-029",
+        "e1-032"
+      ],
+      "no_answer_top5_changed_case_ids": [
+        "e1-027",
+        "e1-028"
+      ]
+    },
+    {
+      "label": "k1_2.0_b0.75",
+      "params": {
+        "k1": 2.0,
+        "b": 0.75
+      },
+      "metrics": {
+        "answerable_cases": 24,
+        "recall_at_1": 0.833333,
+        "recall_at_5": 1.0,
+        "mrr": 0.916667,
+        "rank1_miss_ids": [
+          "e1-013",
+          "e1-015",
+          "e1-019",
+          "e1-020"
+        ],
+        "forbidden_in_top5_total": 0,
+        "no_answer_cases": 8,
+        "no_answer_top5_nonempty": 8
+      },
+      "five_misses": {
+        "e1-001": {
+          "gold": "refund-policy-current",
+          "gold_rank": 1,
+          "top1": "refund-policy-current",
+          "fixed": true
+        },
+        "e1-013": {
+          "gold": "refund-policy-current",
+          "gold_rank": 2,
+          "top1": "customer-tier-sla",
+          "fixed": false
+        },
+        "e1-015": {
+          "gold": "cdn-cache-policy",
+          "gold_rank": 2,
+          "top1": "api-rate-limit",
+          "fixed": false
+        },
+        "e1-019": {
+          "gold": "sla-credit",
+          "gold_rank": 2,
+          "top1": "customer-success-playbook",
+          "fixed": false
+        },
+        "e1-020": {
+          "gold": "invoice-issuance",
+          "gold_rank": 2,
+          "top1": "customer-success-playbook",
+          "fixed": false
+        }
+      },
+      "b_misses_fixed": [],
+      "new_rank1_miss_ids_vs_baseline": [],
+      "rank1_miss_ids_resolved_vs_baseline": [],
+      "top5_changed_case_ids_vs_baseline": [
+        "e1-014",
+        "e1-016",
+        "e1-017",
+        "e1-026"
+      ],
+      "top5_mismatch_vs_real_B_predictions": [
+        "e1-014",
+        "e1-016",
+        "e1-017",
+        "e1-026"
+      ],
+      "no_answer_top5_changed_case_ids": [
+        "e1-026"
+      ]
+    }
+  ],
+  "conclusion": {
+    "variants_fixing_all_four_B_misses": [],
+    "variants_with_new_rank1_miss": [
+      "b0.00"
+    ],
+    "best_recall_at_1": 0.875,
+    "C_arm_miss_addressable_by_b_sweep": false
+  }
+}

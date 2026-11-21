@@ -1,0 +1,186 @@
+{
+  "schema": "run-05-miss-surface/v1",
+  "source": "eval/e1-recall/runs/comparison-v2-main/comparison.json",
+  "comparison_dataset_sha256": "b685288b3f4f0a827692e3865f5c06909d2d0ad3472de20afdbf100c8688df53",
+  "n_misses": 5,
+  "distinct_case_ids": [
+    "e1-001",
+    "e1-013",
+    "e1-015",
+    "e1-019",
+    "e1-020"
+  ],
+  "per_arm_counts": {
+    "B": 4,
+    "C": 1
+  },
+  "interpretation": "All five are rank-2 gold with R@5=1 -> ranking-stage loss, not retrieval-stage loss. Four are B-only (product C chain already recovers rank 1); one is C-only (product chain displaces a rank-1 that plain BM25 got right). They are arm divergences, NOT a shared corpus defect.",
+  "misses": [
+    {
+      "case_id": "e1-013",
+      "arm": "B",
+      "query": "2024 年签的合同今年续费，退款按哪一版执行",
+      "topic_id": "e1-version",
+      "gold": "refund-policy-current",
+      "gold_rank": 2,
+      "top1_usurper": "customer-tier-sla",
+      "retrieved": [
+        "customer-tier-sla",
+        "refund-policy-current",
+        "data-export",
+        "customer-success-playbook",
+        "sla-credit"
+      ],
+      "recall_at_1": 0.0,
+      "recall_at_5": 1.0,
+      "mrr": 0.5,
+      "other_arm": "C",
+      "other_arm_retrieved": [
+        "refund-policy-current",
+        "customer-tier-sla",
+        "customer-success-playbook",
+        "data-export",
+        "customer-onboarding-checklist"
+      ],
+      "other_arm_recall_at_1": 1.0,
+      "other_arm_gold_rank": 1,
+      "forbidden": [
+        "refund-policy-v2-archive"
+      ],
+      "contested": false,
+      "classification": "B_only_miss__C_recovers_rank1"
+    },
+    {
+      "case_id": "e1-015",
+      "arm": "B",
+      "query": "以前那套统一缓存的做法，现在连接口响应也会一起缓存吗",
+      "topic_id": "e1-version",
+      "gold": "cdn-cache-policy",
+      "gold_rank": 2,
+      "top1_usurper": "api-rate-limit",
+      "retrieved": [
+        "api-rate-limit",
+        "cdn-cache-policy",
+        "customer-tier-sla",
+        "incident-postmortem",
+        "feature-flag"
+      ],
+      "recall_at_1": 0.0,
+      "recall_at_5": 1.0,
+      "mrr": 0.5,
+      "other_arm": "C",
+      "other_arm_retrieved": [
+        "cdn-cache-policy",
+        "api-rate-limit",
+        "customer-tier-sla",
+        "expense-reimbursement",
+        "oncall-escalation"
+      ],
+      "other_arm_recall_at_1": 1.0,
+      "other_arm_gold_rank": 1,
+      "forbidden": [
+        "cdn-cache-legacy"
+      ],
+      "contested": false,
+      "classification": "B_only_miss__C_recovers_rank1"
+    },
+    {
+      "case_id": "e1-019",
+      "arm": "B",
+      "query": "SLA 没达标要申请赔偿，最晚什么时候提交，过期了还能补吗",
+      "topic_id": "e1-paraphrase",
+      "gold": "sla-credit",
+      "gold_rank": 2,
+      "top1_usurper": "customer-success-playbook",
+      "retrieved": [
+        "customer-success-playbook",
+        "sla-credit",
+        "incident-postmortem",
+        "weekly-ops-sync-notes",
+        "expense-reimbursement"
+      ],
+      "recall_at_1": 0.0,
+      "recall_at_5": 1.0,
+      "mrr": 0.5,
+      "other_arm": "C",
+      "other_arm_retrieved": [
+        "sla-credit",
+        "customer-success-playbook",
+        "expense-reimbursement",
+        "api-rate-limit",
+        "customer-tier-sla"
+      ],
+      "other_arm_recall_at_1": 1.0,
+      "other_arm_gold_rank": 1,
+      "forbidden": [],
+      "contested": false,
+      "classification": "B_only_miss__C_recovers_rank1"
+    },
+    {
+      "case_id": "e1-020",
+      "arm": "B",
+      "query": "钱付了之后多久能拿到发票，电子的什么时候推送",
+      "topic_id": "e1-paraphrase",
+      "gold": "invoice-issuance",
+      "gold_rank": 2,
+      "top1_usurper": "customer-success-playbook",
+      "retrieved": [
+        "customer-success-playbook",
+        "invoice-issuance",
+        "incident-postmortem",
+        "security-baseline",
+        "sso-saml"
+      ],
+      "recall_at_1": 0.0,
+      "recall_at_5": 1.0,
+      "mrr": 0.5,
+      "other_arm": "C",
+      "other_arm_retrieved": [
+        "invoice-issuance",
+        "customer-success-playbook",
+        "incident-postmortem",
+        "security-baseline",
+        "cdn-cache-policy"
+      ],
+      "other_arm_recall_at_1": 1.0,
+      "other_arm_gold_rank": 1,
+      "forbidden": [],
+      "contested": false,
+      "classification": "B_only_miss__C_recovers_rank1"
+    },
+    {
+      "case_id": "e1-001",
+      "arm": "C",
+      "query": "退款申请都过去小半年了还能退吗，得谁签字批准",
+      "topic_id": "e1-paraphrase",
+      "gold": "refund-policy-current",
+      "gold_rank": 2,
+      "top1_usurper": "expense-reimbursement",
+      "retrieved": [
+        "expense-reimbursement",
+        "refund-policy-current",
+        "release-train",
+        "customer-onboarding-checklist",
+        "security-baseline"
+      ],
+      "recall_at_1": 0.0,
+      "recall_at_5": 1.0,
+      "mrr": 0.5,
+      "other_arm": "B",
+      "other_arm_retrieved": [
+        "refund-policy-current",
+        "expense-reimbursement",
+        "sla-credit",
+        "release-train",
+        "security-baseline"
+      ],
+      "other_arm_recall_at_1": 1.0,
+      "other_arm_gold_rank": 1,
+      "forbidden": [
+        "refund-policy-v2-archive"
+      ],
+      "contested": false,
+      "classification": "C_only_miss__B_already_rank1"
+    }
+  ]
+}

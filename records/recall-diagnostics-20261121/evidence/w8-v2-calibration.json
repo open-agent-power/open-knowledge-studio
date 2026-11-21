@@ -1,0 +1,22 @@
+{
+  "schema": "run-05-bm25-recalibration/v1",
+  "purpose": "prove the independently re-implemented BM25 model matches SQLite FTS5 bm25() on the frozen v2.0 corpus before any sweep",
+  "scope": "all 32 frozen queries, every matched document",
+  "sqlite_version": "3.50.4",
+  "k1": 1.2,
+  "b": 0.75,
+  "n_docs": 17,
+  "avgdl": 206.76470588235293,
+  "n_scores": 303,
+  "max_abs_error": 3.552713678800501e-15,
+  "mean_abs_error": 1.4024352392684991e-16,
+  "calibrated": true,
+  "threshold": 1e-06,
+  "mutation_probe": {
+    "what": "recompute with k1=1.3 instead of 1.2",
+    "max_abs_error": 0.0891467636790253,
+    "assertion_flips": true
+  },
+  "dataset_sha256": "b685288b3f4f0a827692e3865f5c06909d2d0ad3472de20afdbf100c8688df53",
+  "corpus_manifest_sha256": "b29ec1c29dd5c0313aadf5bd4ad7c64e58fbcc126d0ff0e1eaf736cc8d912b04"
+}

@@ -1,0 +1,23 @@
+{
+  "schema": "run-05-w8-verdict/v1",
+  "status": "pass",
+  "checks": {
+    "dataset_sha_matches_frozen": true,
+    "comparison_dataset_sha_matches": true,
+    "corpus_manifest_sha_matches_run01": true,
+    "document_count_17": true,
+    "calibration_under_1e-6": true,
+    "calibration_probe_discriminating": true,
+    "baseline_top5_reproduces_B_predictions": true,
+    "B_repeat_identical": true,
+    "five_misses_match_expected": true,
+    "all_five_gold_at_rank2": true,
+    "all_five_R5_equals_1": true,
+    "classification_4_B_1_C": true,
+    "all_variants_forbidden_zero": true,
+    "all_variants_no_answer_top5_nonempty_8": true,
+    "subject_sha256_unchanged": true
+  },
+  "n_checks": 15,
+  "n_true": 15
+}
